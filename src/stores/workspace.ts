@@ -371,20 +371,36 @@ export async function init() {
   }
 }
 
+// The most recent serialized state, kept current by the persistence effect so a flush (e.g.
+// on app close) writes the latest values without waiting on the debounce.
+let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+let latest = { ws: "", rec: "", ps: "" };
+let dirty = false;
+
 /** Autosave workspaces + recents (debounced) on any change. Call once, inside a root owner. */
 export function startPersistence() {
-  let timer: ReturnType<typeof setTimeout> | undefined;
   createEffect(() => {
     // Stringify inside the effect so every nested change (ratio, split, rename…) is tracked.
-    const wsJson = JSON.stringify(snapshot());
-    const recJson = JSON.stringify(app.recents);
-    const psJson = JSON.stringify(app.presets);
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      void saveState("workspaces", wsJson);
-      void saveState("recents", recJson);
-      void saveState("presets", psJson);
-    }, 400);
+    latest = {
+      ws: JSON.stringify(snapshot()),
+      rec: JSON.stringify(app.recents),
+      ps: JSON.stringify(app.presets),
+    };
+    dirty = true;
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(() => { void flushPersistence(); }, 400);
   });
-  onCleanup(() => clearTimeout(timer));
+  onCleanup(() => clearTimeout(pendingTimer));
+}
+
+/** Write the latest snapshot immediately. Call before the window closes so no debounced change is lost. */
+export async function flushPersistence(): Promise<void> {
+  clearTimeout(pendingTimer);
+  if (!dirty) return;
+  dirty = false;
+  await Promise.all([
+    saveState("workspaces", latest.ws),
+    saveState("recents", latest.rec),
+    saveState("presets", latest.ps),
+  ]);
 }
