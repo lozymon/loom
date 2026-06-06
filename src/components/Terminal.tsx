@@ -163,6 +163,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       term.options.scrollback = settings.scrollback;
     });
 
+    // Keep real keyboard focus in sync with the focus ring. When this pane becomes the
+    // workspace's focused pane (e.g. via Ctrl+Shift+arrow nav, which only moves the store's
+    // `focused`), pull DOM focus onto its xterm — otherwise typing and the *next* nav keypress
+    // would still target the previously-focused pane. Guard to the active workspace so hidden
+    // layers don't grab focus, and skip while the title/search inputs are taking input.
+    createEffect(() => {
+      if (appState.activeId === props.ws.id && isFocused() && !editing() && !finding()) {
+        term.focus();
+      }
+    });
+
     // Copy-on-select (optional): mirror any selection straight to the OS clipboard.
     term.onSelectionChange(() => {
       if (!settings.copyOnSelect) return;
