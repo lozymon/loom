@@ -11,6 +11,7 @@ import LayoutView from "./components/LayoutNode";
 import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
 import BroadcastBar from "./components/BroadcastBar";
 import { appState, init, startPersistence } from "./stores/workspace";
+import { initTheme } from "./stores/theme";
 import "./App.css";
 
 export default function App() {
@@ -18,7 +19,7 @@ export default function App() {
   const [ready, setReady] = createSignal(false);
 
   onMount(async () => {
-    await init();
+    await Promise.all([initTheme(), init()]);
     startPersistence();
     setReady(true);
   });

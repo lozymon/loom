@@ -4,6 +4,7 @@
 
 import { For } from "solid-js";
 import { appState, paneCount, switchWorkspace, closeWorkspace, saveCurrentAsPreset } from "../stores/workspace";
+import { themes, themeId, setTheme } from "../stores/theme";
 
 export default function WorkspaceRail(props: { onNew: () => void }) {
   return (
@@ -30,6 +31,13 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
           )}
         </For>
       </div>
+      <label class="rail-theme" title="Theme">
+        <span>◐</span>
+        <select value={themeId()} onChange={(e) => setTheme(e.currentTarget.value)}>
+          <For each={themes}>{(t) => <option value={t.id}>{t.name}</option>}</For>
+        </select>
+      </label>
+
       <div class="rail-foot">
         <button
           class="rail-save"

@@ -18,6 +18,7 @@ Generic first: a pane is just a real pseudo-terminal running *any* command — a
 - **Presets** — save a workspace (folder + layout + per-pane commands) and relaunch it in one click.
 - **Persistence** — workspaces, layouts, and per-pane intent are saved as JSON and respawned on launch (intent, not scrollback — terminals are ephemeral).
 - **Terminal polish** — OS clipboard copy/paste, scrollback search, clickable web links, unicode11 widths, named panes (Faye, Cleo…), and a focus ring.
+- **Themes** — light and dark out of the box plus extra palettes (Midnight, Paper), switched from the rail and remembered across restarts. Each theme styles both the app chrome and the terminals; adding one is a CSS `[data-theme]` block + a registry entry (`src/lib/theme.ts`).
 - **Plain keys pass through** — Termhaus claims only the `Ctrl+Shift` namespace ([ADR-0005](docs/adr/0005-ctrl-shift-shortcut-namespace.md)); everything else (plain `Ctrl+C` → SIGINT, arrows, function keys, `tmux`/`vim` keys) reaches the pane untouched.
 
 ## Stack

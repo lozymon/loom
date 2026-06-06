@@ -7,7 +7,7 @@
 // copy/paste through the OS clipboard, and a per-pane scrollback search overlay — all on the
 // Ctrl+Shift namespace, so plain Ctrl+C still reaches the PTY as SIGINT.
 
-import { onMount, onCleanup, createSignal, Show } from "solid-js";
+import { onMount, onCleanup, createEffect, createSignal, Show } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
@@ -20,7 +20,8 @@ import "@xterm/xterm/css/xterm.css";
 
 import { spawnPty, writePty, resizePty, killPty } from "../lib/ptyClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
-import { FONT_FAMILY, FONT_SIZE, TERMINAL_THEME } from "../lib/theme";
+import { FONT_FAMILY, FONT_SIZE } from "../lib/theme";
+import { currentTheme } from "../stores/theme";
 import type { Dir } from "../lib/layout";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
@@ -119,7 +120,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       scrollback: 5000,
       cursorBlink: true,
       allowProposedApi: true, // required by the unicode11 addon
-      theme: TERMINAL_THEME,
+      theme: currentTheme().terminal,
     });
 
     fit = new FitAddon();
@@ -137,6 +138,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       console.error("canvas renderer unavailable, using DOM renderer", e);
     }
     fit.fit();
+
+    // Restyle live when the active theme changes — every open pane reacts.
+    createEffect(() => {
+      term.options.theme = currentTheme().terminal;
+    });
 
     // App shortcuts live in the Ctrl+Shift namespace (ADR-0005). Intercept them before the
     // PTY; everything else (Ctrl+C SIGINT, arrows, fn keys) passes through untouched.
