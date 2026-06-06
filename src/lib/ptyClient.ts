@@ -28,6 +28,8 @@ export interface SpawnOpts {
   cwd?: string;
   /** Shell binary to launch; omit to use the OS `$SHELL` (then bash/sh). */
   shell?: string;
+  /** Pane display name, exported to the child as `TERMHAUS_PANE` (ADR-0007). */
+  name?: string;
 }
 
 /**
@@ -49,6 +51,7 @@ export async function spawnPty(
     command: opts.command ?? null,
     cwd: opts.cwd ?? null,
     shell: opts.shell ?? null,
+    name: opts.name ?? null,
     onOutput: output,
     onExit: exit,
   });

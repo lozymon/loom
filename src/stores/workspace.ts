@@ -192,6 +192,73 @@ export function setRatio(wsId: string, path: Path, ratio: number) {
   (setApp as (...args: unknown[]) => void)("workspaces", i, "tree", ...path, "ratio", r);
 }
 
+// ---- Inter-pane control bus support (ADR-0007) --------------------------------------
+// Name resolution + CLI-driven spawn live here, in TS, alongside the rest of the layout
+// logic. The control relay (Rust) and the frontend handler (src/lib/paneControl.ts) call
+// these; liveness itself is the pane registry's call at write time.
+
+/** One pane for a `th list`, in row-major order across all workspaces. */
+export interface PaneListing {
+  paneId: PaneId;
+  name: string;
+  workspace: string;
+  focused: boolean;
+}
+
+export function listPanes(): PaneListing[] {
+  const out: PaneListing[] = [];
+  for (const w of app.workspaces) {
+    for (const id of leafIds(w.tree)) {
+      out.push({ paneId: id, name: w.panes[id]?.title ?? `Pane ${id}`, workspace: w.name, focused: w.focused === id });
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve a pane display name to its PaneId, preferring the active workspace, then a unique
+ * match across all workspaces. A name shared by several panes is an error (the CLI surfaces
+ * it) rather than a silent pick.
+ */
+export function resolvePaneByName(name: string): { paneId: PaneId } | { error: string } {
+  const active = activeWorkspace();
+  if (active) {
+    for (const id of leafIds(active.tree)) if (active.panes[id]?.title === name) return { paneId: id };
+  }
+  const matches: PaneId[] = [];
+  for (const w of app.workspaces) for (const id of leafIds(w.tree)) if (w.panes[id]?.title === name) matches.push(id);
+  if (matches.length === 1) return { paneId: matches[0] };
+  if (matches.length === 0) return { error: `no pane named "${name}"` };
+  return { error: `"${name}" is ambiguous (${matches.length} panes share it)` };
+}
+
+/**
+ * Spawn a new pane in the active workspace running `command`, by splitting the focused leaf
+ * (same mutation the UI's split does, so the result is an ordinary persisted pane). Returns
+ * the pane's final name — the requested one if free, else a freshly allocated pool name.
+ */
+export function spawnPane(opts: { title?: string; command: string; cwd?: string }): { name: string } | { error: string } {
+  const i = wsIdxById(app.activeId);
+  if (i < 0) return { error: "no active workspace" };
+  const ws = app.workspaces[i];
+  const target = ws.focused ?? firstLeaf(ws.tree);
+  const newId = nextPaneId();
+  const taken = Object.values(ws.panes).map((p) => p.title);
+  const requested = opts.title?.trim();
+  const title = requested && !taken.includes(requested) ? requested : allocName(taken);
+  const newTree = replaceLeaf(ws.tree, target, (leaf) => ({
+    kind: "split", dir: "row", ratio: 0.5, a: leaf, b: { kind: "leaf", paneId: newId },
+  }));
+  const spec: PaneSpec = opts.cwd ? { title, command: opts.command, cwd: opts.cwd } : { title, command: opts.command };
+  batch(() => {
+    setApp("workspaces", i, "panes", newId, spec);
+    setApp("workspaces", i, "tree", newTree);
+    setApp("workspaces", i, "focused", newId);
+    setApp("workspaces", i, "zoomed", null);
+  });
+  return { name: title };
+}
+
 // ---- Workspace operations -----------------------------------------------------------
 
 function recordRecent(cwd: string, count: number) {

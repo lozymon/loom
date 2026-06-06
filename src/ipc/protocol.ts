@@ -54,7 +54,43 @@ export const Cmd = {
   resize: "pty_resize",
   kill: "pty_kill",
   cwd: "pty_cwd",
+  /** Hand a relayed inter-pane request's answer back to Rust (ADR-0007). */
+  paneCmdReply: "pane_cmd_reply",
 } as const;
+
+// ---- Inter-pane control bus (ADR-0007) -----------------------------------------------
+// A process inside a pane (e.g. the `th` CLI) sends one of these requests over the unix
+// socket; Rust relays the raw string to the webview as a `ControlEvent`; the frontend
+// (src/lib/paneControl.ts) parses it, acts, and replies. Rust never parses the protocol —
+// this module is the only place it's defined.
+
+/** The Tauri event Rust emits for each inbound request. */
+export const PANE_CMD_EVENT = "termhaus://pane-cmd";
+
+/** Event payload: an opaque request line + the id the reply must echo back. */
+export interface ControlEvent {
+  reqId: number;
+  request: string;
+}
+
+/** Requests the `th` CLI can make. `target`/`name` are pane display titles (e.g. "Cleo"). */
+export type ControlRequest =
+  | { op: "list" }
+  | { op: "send"; target: string; text: string; enter?: boolean }
+  | { op: "spawn"; command: string; name?: string; cwd?: string };
+
+/** One pane in a `list` response. */
+export interface PaneInfo {
+  name: string;
+  workspace: string;
+  focused: boolean;
+  live: boolean;
+}
+
+/** Uniform reply shape. `data` is op-specific (PaneInfo[] for list, {count}/{name}…). */
+export type ControlResponse =
+  | { ok: true; data?: unknown }
+  | { ok: false; error: string };
 
 /**
  * Child-exit code delivered over a pane's `on_exit` Channel when its process dies

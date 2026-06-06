@@ -4,6 +4,9 @@ version = "0.2.1"
 description = "A control room of live terminals — a GUI terminal multiplexer for driving fleets of CLI agents"
 authors = ["Termhaus"]
 edition = "2021"
+# Two binaries now (the app + the `th` control CLI, ADR-0007); name the app as the default
+# so `cargo run` / `tauri dev` stay unambiguous.
+default-run = "termhaus"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,6 +16,12 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "termhaus_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# The inter-pane control CLI (ADR-0007), built beside the app binary so it lands on the
+# child PATH we inject into each pane. std + serde_json only — no extra deps.
+[[bin]]
+name = "th"
+path = "src/bin/th.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -89,6 +89,7 @@ pub fn spawn(
     command: Option<String>,
     cwd: Option<String>,
     shell: Option<String>,
+    name: Option<String>,
     on_output: Channel<String>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
@@ -126,6 +127,24 @@ pub fn spawn(
     }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+
+    // Inter-pane control bus discovery (ADR-0007): tell the child where the socket is, what
+    // its own pane is called (so an agent can address panes relative to itself), and make the
+    // `th` CLI directly invokable by exposing its path and prepending its dir to PATH.
+    cmd.env(
+        "TERMHAUS_SOCK",
+        crate::control::socket_path().to_string_lossy().into_owned(),
+    );
+    if let Some(name) = name.as_deref().filter(|n| !n.is_empty()) {
+        cmd.env("TERMHAUS_PANE", name);
+    }
+    if let Some(cli) = crate::control::cli_path() {
+        cmd.env("TERMHAUS_CLI", cli.to_string_lossy().into_owned());
+        if let Some(dir) = cli.parent().map(|d| d.to_string_lossy().into_owned()) {
+            let path = std::env::var("PATH").unwrap_or_default();
+            cmd.env("PATH", format!("{dir}:{path}"));
+        }
+    }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     // A killer we can store in the Pane to terminate the child from `kill`, while the

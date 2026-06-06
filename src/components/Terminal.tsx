@@ -65,8 +65,10 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           cols: term.cols,
           rows: term.rows,
           command: spec()?.command,
-          cwd: props.ws.cwd || settings.defaultCwd || undefined,
+          // Per-pane cwd wins (e.g. a `th spawn --cwd …` pane), then the workspace folder.
+          cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
           shell: settings.defaultShell || undefined,
+          name: spec()?.title,
         },
         (bytes) => term.write(bytes),
         (code) => {

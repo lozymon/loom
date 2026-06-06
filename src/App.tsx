@@ -16,6 +16,7 @@ import GitPanel from "./components/GitPanel";
 import { appState, init, startPersistence, flushPersistence } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings } from "./stores/settings";
+import { initPaneControl } from "./lib/paneControl";
 import "./App.css";
 
 export default function App() {
@@ -29,6 +30,11 @@ export default function App() {
     startPersistence();
     setReady(true);
   });
+
+  // Listen for inter-pane control requests (the `th` CLI → Rust relay → here). Registered in
+  // the component body (not the async onMount) so onCleanup keeps its owner context.
+  const unlistenCtrl = initPaneControl();
+  onCleanup(() => { void unlistenCtrl.then((u) => u()); });
 
   // Ctrl+Shift+T from a focused pane (ADR-0005) opens the new-workspace wizard.
   const openWizard = () => setWizardOpen(true);

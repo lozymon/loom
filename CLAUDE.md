@@ -37,6 +37,8 @@ These cross-cutting rules shape nearly every file. Read them before touching the
 
 **Shared types in one module.** `PaneId`, `PaneSpec`, `LayoutNode`, `Workspace`, and command names live in `src/ipc/protocol.ts`; Rust command signatures mirror it.
 
+**Inter-pane control bus = Rust socket relay, routing in TS** (ADR-0007). A process *inside* a pane (e.g. a `claude` CLI) can drive other panes via the `th` CLI → a unix socket at `$TERMHAUS_SOCK`. Rust is a **pure relay**: it forwards the raw request string to the webview as a `termhaus://pane-cmd` event and writes back whatever the frontend replies via `pane_cmd_reply` — it never parses the protocol. All routing (name→pane resolution, writes through the pane registry, `spawn` layout mutation) stays in TS, per the no-product-logic-in-Rust rule. Each PTY child gets `TERMHAUS_SOCK`/`TERMHAUS_PANE`/`TERMHAUS_CLI` injected and the CLI dir prepended to `PATH`. This is an **inbound command channel**, distinct from ADR-0001's opacity rule (which forbids parsing pane *output* — still rejected).
+
 ## Files to create (see PLAN.md for the full list)
 
 - `src-tauri/src/pty.rs` — `PtyManager`: spawn, reader-thread + coalescing flush, write/resize/kill, child reaping.
@@ -47,6 +49,7 @@ These cross-cutting rules shape nearly every file. Read them before touching the
 - `src/components/Terminal.tsx` / `LayoutNode.tsx` / `WorkspaceRail.tsx` / `NewWorkspaceWizard.tsx` / `BroadcastBar.tsx`.
 - `src/stores/workspace.ts` — normalized store: Workspaces (rail), trees, panes, focus/zoom, broadcast selection.
 - `src-tauri/tauri.conf.json` — packaging (.deb/AppImage, WebKitGTK dep).
+- `src-tauri/src/control.rs` + `src-tauri/src/bin/th.rs` — inter-pane control bus: socket relay + the `th` CLI (ADR-0007). Frontend half: `src/lib/paneControl.ts`.
 
 ## Highest risk — prove before building further
 
