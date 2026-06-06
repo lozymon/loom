@@ -257,19 +257,26 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
     // Refit + tell the PTY whenever the box resizes (split, drag, zoom, window). Skip when
     // hidden (zoom) — a 0-size box would compute nonsense cols/rows.
-    let raf = 0;
+    //
+    // fit.fit() reflows xterm's whole scrollback to the new column count — too heavy to run
+    // every frame of a gutter drag (that's the resize stutter). The CSS box already tracks
+    // the pointer 1:1, so we debounce the reflow: it fires once movement settles (~100ms),
+    // keeping discrete resizes (split/zoom/window) imperceptibly delayed while a live drag
+    // stays smooth.
+    let settle = 0;
+    const refit = () => {
+      if (container.clientWidth === 0 || container.clientHeight === 0) return;
+      fit.fit();
+      if (handle !== null) void resizePty(handle, term.cols, term.rows);
+    };
     const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (container.clientWidth === 0 || container.clientHeight === 0) return;
-        fit.fit();
-        if (handle !== null) void resizePty(handle, term.cols, term.rows);
-      });
+      clearTimeout(settle);
+      settle = window.setTimeout(refit, 100);
     });
     ro.observe(container);
 
     onCleanup(() => {
-      cancelAnimationFrame(raf);
+      clearTimeout(settle);
       ro.disconnect();
       unregisterPane(props.paneId);
       if (handle !== null) void killPty(handle);
