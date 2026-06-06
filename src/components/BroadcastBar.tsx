@@ -15,6 +15,7 @@ import {
   setBroadcastSelecting,
 } from "../stores/workspace";
 import { countLive, writeToPanes } from "../lib/paneRegistry";
+import { settings } from "../stores/settings";
 
 export default function BroadcastBar() {
   const [text, setText] = createSignal("");
@@ -34,7 +35,7 @@ export default function BroadcastBar() {
   function send() {
     const ids = targets();
     if (ids.length === 0) return;
-    const n = writeToPanes(ids, text() + "\r");
+    const n = writeToPanes(ids, text() + (settings.broadcastNewline ? "\r" : ""));
     setText("");
     showFlash(`sent to ${n} pane${n === 1 ? "" : "s"}`);
   }

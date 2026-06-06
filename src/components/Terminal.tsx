@@ -20,8 +20,8 @@ import "@xterm/xterm/css/xterm.css";
 
 import { spawnPty, writePty, resizePty, killPty } from "../lib/ptyClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
-import { FONT_FAMILY, FONT_SIZE } from "../lib/theme";
 import { currentTheme } from "../stores/theme";
+import { settings } from "../stores/settings";
 import type { Dir } from "../lib/layout";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
@@ -64,7 +64,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     setDead(null);
     try {
       handle = await spawnPty(
-        { cols: term.cols, rows: term.rows, command: spec()?.command, cwd: props.ws.cwd },
+        {
+          cols: term.cols,
+          rows: term.rows,
+          command: spec()?.command,
+          cwd: props.ws.cwd || settings.defaultCwd || undefined,
+          shell: settings.defaultShell || undefined,
+        },
         (bytes) => term.write(bytes),
         (code) => {
           handle = null;
@@ -115,10 +121,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
   onMount(async () => {
     term = new Terminal({
-      fontFamily: FONT_FAMILY,
-      fontSize: FONT_SIZE,
-      scrollback: 5000,
-      cursorBlink: true,
+      fontFamily: settings.fontFamily,
+      fontSize: settings.fontSize,
+      scrollback: settings.scrollback,
+      cursorStyle: settings.cursorStyle,
+      cursorBlink: settings.cursorBlink,
       allowProposedApi: true, // required by the unicode11 addon
       theme: currentTheme().terminal,
     });
@@ -142,6 +149,34 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     // Restyle live when the active theme changes — every open pane reacts.
     createEffect(() => {
       term.options.theme = currentTheme().terminal;
+    });
+
+    // Live-apply appearance settings. Font changes alter the cell size, so refit + tell the
+    // PTY its new cols/rows; cursor/scrollback are pure xterm option flips.
+    createEffect(() => {
+      term.options.fontFamily = settings.fontFamily;
+      term.options.fontSize = settings.fontSize;
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        fit.fit();
+        if (handle !== null) void resizePty(handle, term.cols, term.rows);
+      }
+    });
+    createEffect(() => {
+      term.options.cursorStyle = settings.cursorStyle;
+      term.options.cursorBlink = settings.cursorBlink;
+      term.options.scrollback = settings.scrollback;
+    });
+
+    // Copy-on-select (optional): mirror any selection straight to the OS clipboard.
+    term.onSelectionChange(() => {
+      if (!settings.copyOnSelect) return;
+      const sel = term.getSelection();
+      if (sel) void writeText(sel).catch((e) => console.error("clipboard write failed", e));
+    });
+
+    // Middle-click paste (optional, classic X11 behaviour) — paste into the PTY.
+    container.addEventListener("auxclick", (e) => {
+      if (e.button === 1 && settings.middleClickPaste) { e.preventDefault(); void pasteClipboard(); }
     });
 
     // App shortcuts live in the Ctrl+Shift namespace (ADR-0005). Intercept them before the

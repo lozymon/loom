@@ -22,10 +22,12 @@ function b64ToBytes(b64: string): Uint8Array {
 export interface SpawnOpts {
   cols: number;
   rows: number;
-  /** Run `$SHELL -lc "<command>"`; omit for a plain interactive login shell. */
+  /** Run `<shell> -lc "<command>"`; omit for a plain interactive login shell. */
   command?: string;
   /** Working directory; falls back to $HOME if missing. */
   cwd?: string;
+  /** Shell binary to launch; omit to use the OS `$SHELL` (then bash/sh). */
+  shell?: string;
 }
 
 /**
@@ -46,6 +48,7 @@ export async function spawnPty(
     rows: opts.rows,
     command: opts.command ?? null,
     cwd: opts.cwd ?? null,
+    shell: opts.shell ?? null,
     onOutput: output,
     onExit: exit,
   });

@@ -12,6 +12,8 @@ import type { LayoutNode, PaneId, PaneSpec, Workspace } from "../ipc/protocol";
 import { allocName, buildBalancedTree } from "../lib/grid";
 import { neighbor, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
+import { countLive } from "../lib/paneRegistry";
+import { settings } from "./settings";
 
 /**
  * A workspace plus its ephemeral UI state (focus/zoom/broadcast — not persisted).
@@ -169,6 +171,10 @@ export function closePane(paneId: PaneId) {
   const ws = app.workspaces[i];
   const next = removeLeaf(ws.tree, paneId);
   if (next === null) return; // never leave a workspace with zero panes
+  // Guard against closing a pane whose process is still alive (Settings → confirm close).
+  if (settings.confirmClose && countLive([paneId]) > 0) {
+    if (!window.confirm(`Close "${ws.panes[paneId]?.title}"? Its process is still running.`)) return;
+  }
   batch(() => {
     setApp("workspaces", i, "tree", next);
     setApp("workspaces", i, "panes", paneId, undefined as unknown as PaneSpec);
@@ -220,6 +226,12 @@ export function switchWorkspaceRelative(delta: number) {
 export function closeWorkspace(id: string) {
   const i = wsIdxById(id);
   if (i < 0 || app.workspaces.length === 1) return; // keep at least one workspace
+  if (settings.confirmClose) {
+    const live = countLive(leafIds(app.workspaces[i].tree));
+    if (live > 0 && !window.confirm(
+      `Close "${app.workspaces[i].name}"? ${live} running terminal${live === 1 ? "" : "s"} will be killed.`,
+    )) return;
+  }
   const remaining = app.workspaces.filter((w) => w.id !== id);
   batch(() => {
     setApp("workspaces", remaining);

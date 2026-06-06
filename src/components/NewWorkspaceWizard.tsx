@@ -6,6 +6,7 @@
 import { createSignal, For, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createWorkspace, deletePreset, launchPreset, presets, recents } from "../stores/workspace";
+import { settings } from "../stores/settings";
 
 const PRESETS = [1, 2, 4, 6, 8, 10, 12];
 
@@ -17,7 +18,7 @@ function basename(path: string): string {
 
 export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   const [step, setStep] = createSignal(1);
-  const [cwd, setCwd] = createSignal("");
+  const [cwd, setCwd] = createSignal(settings.defaultCwd);
   const [count, setCount] = createSignal(4);
   const [commands, setCommands] = createSignal<string[]>([]);
 

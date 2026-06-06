@@ -53,10 +53,16 @@ impl PtyManager {
     }
 }
 
-/// Pick the user's shell. Prefers `$SHELL` (set in any normal session); when it is unset
-/// or names a missing binary — possible for a bare desktop-launcher start (M6) — fall back
-/// to `/bin/bash`, then `/bin/sh`, which exist on every Linux target we support.
-fn resolve_shell() -> String {
+/// Pick the shell to launch. An explicit `pref` (the Settings "default shell") wins when it
+/// names an existing binary; otherwise prefer `$SHELL` (set in any normal session); when that
+/// is unset or names a missing binary — possible for a bare desktop-launcher start (M6) —
+/// fall back to `/bin/bash`, then `/bin/sh`, which exist on every Linux target we support.
+fn resolve_shell(pref: Option<&str>) -> String {
+    if let Some(p) = pref.map(str::trim).filter(|p| !p.is_empty()) {
+        if std::path::Path::new(p).exists() {
+            return p.to_string();
+        }
+    }
     if let Ok(sh) = std::env::var("SHELL") {
         if !sh.is_empty() && std::path::Path::new(&sh).exists() {
             return sh;
@@ -70,14 +76,16 @@ fn resolve_shell() -> String {
     "/bin/sh".to_string()
 }
 
-/// Spawn a login-interactive `$SHELL` in a fresh PTY and start streaming its output.
+/// Spawn a login-interactive shell in a fresh PTY and start streaming its output.
 /// Returns the new PaneId. See ADR-0004 for why we launch via the login shell.
+#[allow(clippy::too_many_arguments)] // mirrors the IPC spawn payload (cols/rows/cmd/cwd/shell/channels)
 pub fn spawn(
     mgr: &PtyManager,
     cols: u16,
     rows: u16,
     command: Option<String>,
     cwd: Option<String>,
+    shell: Option<String>,
     on_output: Channel<String>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
@@ -97,7 +105,7 @@ pub fn spawn(
     // Dead pane rather than failing the spawn. See ADR-0004. The `-l` is also what fixes
     // PATH when Termhaus is started from a desktop launcher (M6): a bundled launch inherits
     // only the session env, so the login shell must re-source the profile.
-    let shell = resolve_shell();
+    let shell = resolve_shell(shell.as_deref());
     let mut cmd = CommandBuilder::new(&shell);
     cmd.arg("-l");
     if let Some(c) = command.as_deref().filter(|c| !c.trim().is_empty()) {

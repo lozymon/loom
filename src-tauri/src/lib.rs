@@ -6,16 +6,18 @@ use tauri::ipc::Channel;
 use tauri::State;
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // a flat IPC payload mirrors the JS spawn call 1:1
 fn pty_spawn(
     mgr: State<PtyManager>,
     cols: u16,
     rows: u16,
     command: Option<String>,
     cwd: Option<String>,
+    shell: Option<String>,
     on_output: Channel<String>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
-    pty::spawn(&mgr, cols, rows, command, cwd, on_output, on_exit)
+    pty::spawn(&mgr, cols, rows, command, cwd, shell, on_output, on_exit)
 }
 
 #[tauri::command]

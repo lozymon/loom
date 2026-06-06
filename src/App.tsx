@@ -10,16 +10,19 @@ import WorkspaceRail from "./components/WorkspaceRail";
 import LayoutView from "./components/LayoutNode";
 import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
 import BroadcastBar from "./components/BroadcastBar";
+import Settings from "./components/Settings";
 import { appState, init, startPersistence } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
+import { initSettings } from "./stores/settings";
 import "./App.css";
 
 export default function App() {
   const [wizardOpen, setWizardOpen] = createSignal(false);
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
 
   onMount(async () => {
-    await Promise.all([initTheme(), init()]);
+    await Promise.all([initTheme(), initSettings(), init()]);
     startPersistence();
     setReady(true);
   });
@@ -31,7 +34,7 @@ export default function App() {
 
   return (
     <div class="shell">
-      <WorkspaceRail onNew={() => setWizardOpen(true)} />
+      <WorkspaceRail onNew={() => setWizardOpen(true)} onSettings={() => setSettingsOpen(true)} />
       <div class="stage">
         <div class="stage-grid">
           <Show when={ready()}>
@@ -50,6 +53,9 @@ export default function App() {
       </div>
       <Show when={wizardOpen()}>
         <NewWorkspaceWizard onClose={() => setWizardOpen(false)} />
+      </Show>
+      <Show when={settingsOpen()}>
+        <Settings onClose={() => setSettingsOpen(false)} />
       </Show>
     </div>
   );
