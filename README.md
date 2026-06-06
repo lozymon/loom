@@ -1,7 +1,104 @@
-# Tauri + Solid + Typescript
+# Termhaus
 
-This template should help get you started developing with Tauri, Solid and Typescript in Vite.
+**A Linux-first desktop control room of real terminals** — a GUI terminal multiplexer (think a graphical tmux / Terminator) that runs many PTYs at once in resizable split grids and a left workspace rail. It's tuned for driving fleets of CLI agents: the headline trick is **broadcast input** — type once and send it to many panes at the same time.
 
-## Recommended IDE Setup
+Generic first: a pane is just a real pseudo-terminal running *any* command — a shell, `claude`, a dev server, `tail -f`, `vim`. Termhaus never parses what a pane prints ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)); agents are simply the most interesting thing you can run in one.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+> Status: all milestones **M0–M6** complete. See [PLAN.md](PLAN.md) for the milestone-by-milestone build log and [docs/adr/](docs/adr/) for the architecture decisions.
+
+## Features
+
+- **Many real PTYs**, one OS process each — the kernel isolates panes for free; a flood in one (`yes`, a big `cat`) can't lock the UI or starve the others.
+- **Split-grid layout** — a binary split tree per workspace: split any pane right/down, drag the gutters to resize, close to collapse and promote the sibling. Zoom a pane to fullscreen and back.
+- **Workspace rail** — group panes into workspaces on a left rail; switching keeps hidden workspaces' terminals alive.
+- **New-workspace wizard** — pick a working folder (with Recents) → tap a grid preset (1/2/4/6/8/10/12 terminals) → optionally set a per-pane launch command → go.
+- **Broadcast input** — send a line to every live pane in the current workspace, or a hand-picked subset. Spawn 12 panes, broadcast one prompt to all.
+- **Presets** — save a workspace (folder + layout + per-pane commands) and relaunch it in one click.
+- **Persistence** — workspaces, layouts, and per-pane intent are saved as JSON and respawned on launch (intent, not scrollback — terminals are ephemeral).
+- **Terminal polish** — OS clipboard copy/paste, scrollback search, clickable web links, unicode11 widths, named panes (Faye, Cleo…), and a focus ring.
+- **Plain keys pass through** — Termhaus claims only the `Ctrl+Shift` namespace ([ADR-0005](docs/adr/0005-ctrl-shift-shortcut-namespace.md)); everything else (plain `Ctrl+C` → SIGINT, arrows, function keys, `tmux`/`vim` keys) reaches the pane untouched.
+
+## Stack
+
+| Layer | Choice |
+|------|--------|
+| Shell / windowing | [Tauri 2](https://tauri.app) (Rust + WebKitGTK webview) |
+| Frontend | [SolidJS](https://solidjs.com) + [Vite](https://vitejs.dev) + TypeScript |
+| Terminal rendering | [`@xterm/xterm`](https://xtermjs.org) 5.x (canvas renderer — [ADR-0006](docs/adr/0006-canvas-renderer-not-webgl.md)) |
+| PTYs | [`portable-pty`](https://crates.io/crates/portable-pty) (Rust) |
+
+## Keyboard shortcuts
+
+All app shortcuts live in the `Ctrl+Shift` namespace; nothing else is intercepted.
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+C` / `V` | Copy selection / paste (plain `Ctrl+C` stays SIGINT) |
+| `Ctrl+Shift+F` | Find in scrollback (`Enter` next, `Shift+Enter` prev, `Esc` close) |
+| `Ctrl+Shift+D` / `E` | Split right / split down |
+| `Ctrl+Shift+W` | Close pane |
+| `Ctrl+Shift+Enter` | Zoom pane to fullscreen / restore |
+| `Ctrl+Shift+←↑↓→` | Move focus to the adjacent pane |
+| `Ctrl+Shift+PageUp` / `PageDown` | Previous / next workspace |
+| `Ctrl+Shift+T` | New workspace (opens the wizard) |
+
+You can also double-click a pane's title to rename it.
+
+## Getting started
+
+### Prerequisites
+
+- **Node** 22+ (developed on v24) and **Rust** 1.77+ (developed on 1.96)
+- Linux (developed on Linux Mint 22.3 / Ubuntu 24.04 base). The Tauri/WebKitGTK system libraries:
+
+  ```bash
+  sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+    libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+  ```
+
+### Develop
+
+```bash
+npm install
+npm run tauri dev      # opens the window; starts Vite + the Rust shell
+```
+
+### Build a package
+
+```bash
+npm run tauri build    # release binary + bundles (.deb, AppImage)
+```
+
+Artifacts land in `src-tauri/target/release/bundle/` (e.g. `deb/Termhaus_<version>_amd64.deb`). The `.deb` declares its WebKitGTK/GTK runtime deps automatically. The AppImage bundler downloads helper tools from GitHub on first run, so it needs network access.
+
+## Project structure
+
+```
+src/                         SolidJS frontend (all UX + state)
+  components/                Terminal, LayoutNode, WorkspaceRail, NewWorkspaceWizard, BroadcastBar
+  stores/workspace.ts        normalized store: workspaces, trees, panes, focus/zoom, broadcast, presets
+  lib/                       grid (balanced tree + names), layout (geometry + neighbour),
+                             ptyClient, paneRegistry, persist, theme
+  ipc/protocol.ts            shared types: PaneId, PaneSpec, LayoutNode, Workspace, command names
+src-tauri/src/               Rust shell (PTY engine + OS concerns)
+  pty.rs                     PtyManager: spawn, reader/flusher coalescing, write/resize/kill, reaping
+  lib.rs                     Tauri command handlers + Channel wiring (the frontend contract)
+  workspace.rs               schema-agnostic JSON state load/save
+docs/adr/                    architecture decision records
+PLAN.md                      the milestone-by-milestone build plan + status
+```
+
+## Architecture notes
+
+A few decisions shape most of the code:
+
+- **One `PtyManager`, N PTYs** — Rust owns a map of pane id → PTY master + child + reader thread. Product logic (layout, focus, broadcast routing) stays in TypeScript; Rust only does PTY/OS work.
+- **Output = raw-byte Tauri `Channel`, input = cheap commands** — PTY output streams as bytes over a `Channel`, never per-line JSON. Keystrokes go back as `pty_write` ([ADR-0003](docs/adr/0003-output-transport-channel-first-websocket-fallback.md)).
+- **Coalesce output or WebKitGTK locks up** — each reader thread buffers and flushes on a ~16ms tick or a 64KB threshold (bounded back-pressure, not byte-dropping), so a flood can't stall the main thread.
+- **Flat, PaneId-keyed render layer** — the split tree is flattened into absolutely-positioned panes rather than a recursive flex tree, so splitting or closing never remounts a pane's `<Terminal>` and its PTY survives.
+- **Login shells** — every pane runs `$SHELL -l(c)` so PATH / rc files / version managers load, even when launched from a desktop entry ([ADR-0004](docs/adr/0004-launch-via-login-interactive-shell.md)).
+- **Persist intent, not scrollback** — on restart the trees rebuild and each pane re-runs its command in its cwd.
+
+## License
+
+MIT
