@@ -9,6 +9,7 @@
 import { createStore } from "solid-js/store";
 import { FONT_FAMILY, FONT_SIZE } from "../lib/theme";
 import { loadState, saveState } from "../lib/persist";
+import { DEFAULT_KEYBINDINGS, type ActionId, type Keybindings } from "../lib/keybindings";
 
 const STORE_KEY = "settings";
 
@@ -35,6 +36,9 @@ export interface Settings {
   // ---- Broadcast ----
   /** Append Enter (carriage return) to each broadcast message so it runs immediately. */
   broadcastNewline: boolean;
+  // ---- Keyboard ----
+  /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */
+  keybindings: Keybindings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -49,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultCwd: "",
   confirmClose: true,
   broadcastNewline: true,
+  keybindings: { ...DEFAULT_KEYBINDINGS },
 };
 
 const [settings, setStore] = createStore<Settings>({ ...DEFAULT_SETTINGS });
@@ -68,7 +73,25 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
 
 /** Restore every setting to its default and persist. */
 export function resetSettings() {
-  setStore({ ...DEFAULT_SETTINGS });
+  setStore({ ...DEFAULT_SETTINGS, keybindings: { ...DEFAULT_KEYBINDINGS } });
+  persist();
+}
+
+/** Rebind one action to a new final key (the Ctrl+Shift prefix is fixed). */
+export function setKeybinding(action: ActionId, key: string) {
+  setStore("keybindings", action, key.toLowerCase());
+  persist();
+}
+
+/** Restore one action to its default key. */
+export function resetKeybinding(action: ActionId) {
+  setStore("keybindings", action, DEFAULT_KEYBINDINGS[action]);
+  persist();
+}
+
+/** Restore every shortcut to its default. */
+export function resetKeybindings() {
+  setStore("keybindings", { ...DEFAULT_KEYBINDINGS });
   persist();
 }
 
@@ -83,6 +106,9 @@ export async function initSettings() {
       for (const k of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) {
         if (saved[k] !== undefined) (merged as unknown as Record<string, unknown>)[k] = saved[k];
       }
+      // Deep-merge keybindings over defaults so actions added in a later version still get a
+      // key when an older blob is loaded (and stray actions in the blob are dropped).
+      merged.keybindings = { ...DEFAULT_KEYBINDINGS, ...(saved.keybindings ?? {}) };
       setStore(merged);
     }
   } catch (e) {

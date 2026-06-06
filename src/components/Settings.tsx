@@ -3,18 +3,76 @@
 // `settings` store fields. Every control writes straight to its store, which persists and —
 // for terminal-shaping fields — restyles open panes live, so there is no Save/Apply step.
 
-import { For, onCleanup, onMount } from "solid-js";
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import { themes, themeId, setTheme } from "../stores/theme";
-import { settings, setSetting, resetSettings, type CursorStyle } from "../stores/settings";
+import {
+  settings,
+  setSetting,
+  resetSettings,
+  setKeybinding,
+  resetKeybinding,
+  resetKeybindings,
+  type CursorStyle,
+} from "../stores/settings";
+import { ACTIONS, formatBinding, isModifierKey, type ActionId } from "../lib/keybindings";
 
 const CURSORS: CursorStyle[] = ["block", "bar", "underline"];
 
+type TabId = "appearance" | "terminal" | "keys";
+const TABS: { id: TabId; label: string }[] = [
+  { id: "appearance", label: "Appearance" },
+  { id: "terminal", label: "Terminal" },
+  { id: "keys", label: "Key bindings" },
+];
+
+// Actions grouped (in declaration order) for the keybinding list's subheadings.
+const KB_GROUPS = [...new Set(ACTIONS.map((a) => a.group))].map((name) => ({
+  name,
+  actions: ACTIONS.filter((a) => a.group === name),
+}));
+
 export default function Settings(props: { onClose: () => void }) {
-  // Esc closes the modal from anywhere (the panel itself isn't focus-trapped).
-  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") props.onClose(); };
+  const [tab, setTab] = createSignal<TabId>("appearance");
+  // The action currently waiting for a new key combo (null = not capturing).
+  const [capturing, setCapturing] = createSignal<ActionId | null>(null);
+
+  // Esc closes the modal from anywhere (the panel itself isn't focus-trapped) — but not
+  // while capturing a shortcut, where the capture handler swallows Esc to cancel instead.
+  const onKey = (e: KeyboardEvent) => {
+    if (capturing()) return;
+    if (e.key === "Escape") props.onClose();
+  };
   onMount(() => window.addEventListener("keydown", onKey));
   onCleanup(() => window.removeEventListener("keydown", onKey));
+
+  // While capturing, grab the next Ctrl+Shift+<key> combo and rebind. Runs in the capture
+  // phase + stops propagation so it pre-empts the modal's Esc-to-close and any pane handler.
+  const onCapture = (e: KeyboardEvent) => {
+    const action = capturing();
+    if (!action) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") { setCapturing(null); return; }
+    if (isModifierKey(e.key)) return; // wait for a real key
+    if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return; // must stay in the namespace
+    setKeybinding(action, e.key);
+    setCapturing(null);
+  };
+  onMount(() => window.addEventListener("keydown", onCapture, true));
+  onCleanup(() => window.removeEventListener("keydown", onCapture, true));
+
+  // Actions whose key collides with another action's — flagged so the user can fix them.
+  const conflicts = createMemo(() => {
+    const byKey = new Map<string, ActionId[]>();
+    for (const a of ACTIONS) {
+      const k = settings.keybindings[a.id];
+      byKey.set(k, [...(byKey.get(k) ?? []), a.id]);
+    }
+    const out = new Set<ActionId>();
+    for (const ids of byKey.values()) if (ids.length > 1) ids.forEach((id) => out.add(id));
+    return out;
+  });
 
   async function browseDefaultCwd() {
     const picked = await open({ directory: true, title: "Default working folder" });
@@ -29,7 +87,22 @@ export default function Settings(props: { onClose: () => void }) {
           <button class="settings-x" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
         </header>
 
+        <nav class="settings-tabs">
+          <For each={TABS}>
+            {(t) => (
+              <button
+                class="settings-tab"
+                classList={{ on: tab() === t.id }}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </button>
+            )}
+          </For>
+        </nav>
+
         <div class="settings-body">
+          <Show when={tab() === "appearance"}>
           {/* ---- Theme ---- */}
           <section class="settings-section">
             <h3>Theme</h3>
@@ -110,7 +183,9 @@ export default function Settings(props: { onClose: () => void }) {
               />
             </label>
           </section>
+          </Show>
 
+          <Show when={tab() === "terminal"}>
           {/* ---- Terminal behaviour ---- */}
           <section class="settings-section">
             <h3>Terminal behaviour</h3>
@@ -179,6 +254,59 @@ export default function Settings(props: { onClose: () => void }) {
               <span class="settings-label">Broadcast presses Enter <span class="muted">— append a newline so the message runs</span></span>
             </label>
           </section>
+          </Show>
+
+          <Show when={tab() === "keys"}>
+          {/* ---- Key bindings ---- */}
+          <section class="settings-section">
+            <div class="settings-row">
+              <p class="settings-hint muted" style={{ margin: "0", flex: "1 1 auto" }}>
+                Every app shortcut lives in the Ctrl+Shift namespace so plain keys still reach the
+                terminal. Click a shortcut, then press the new Ctrl+Shift combination (Esc cancels).
+              </p>
+              <button class="settings-btn" onClick={() => { setCapturing(null); resetKeybindings(); }}>
+                Reset shortcuts
+              </button>
+            </div>
+            <For each={KB_GROUPS}>
+              {(group) => (
+                <>
+                  <h4 class="kb-group">{group.name}</h4>
+                  <For each={group.actions}>
+                    {(a) => {
+                      const isDefault = () =>
+                        settings.keybindings[a.id] === a.defaultKey;
+                      return (
+                        <div class="settings-row">
+                          <span class="settings-label">{a.label}</span>
+                          <button
+                            class="kb-key"
+                            classList={{
+                              capturing: capturing() === a.id,
+                              conflict: conflicts().has(a.id),
+                            }}
+                            title={conflicts().has(a.id) ? "Conflicts with another shortcut" : "Click to rebind"}
+                            onClick={() => setCapturing(capturing() === a.id ? null : a.id)}
+                          >
+                            {capturing() === a.id ? "press keys…" : formatBinding(settings.keybindings[a.id])}
+                          </button>
+                          <button
+                            class="kb-reset"
+                            title="Reset to default"
+                            disabled={isDefault()}
+                            onClick={() => resetKeybinding(a.id)}
+                          >
+                            ⟳
+                          </button>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </>
+              )}
+            </For>
+          </section>
+          </Show>
         </div>
 
         <footer class="settings-foot">

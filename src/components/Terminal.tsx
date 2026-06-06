@@ -22,7 +22,7 @@ import { spawnPty, writePty, resizePty, killPty } from "../lib/ptyClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
-import type { Dir } from "../lib/layout";
+import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
   appState,
@@ -36,10 +36,6 @@ import {
   switchWorkspaceRelative,
   type WorkspaceUI,
 } from "../stores/workspace";
-
-const ARROW_DIR: Record<string, Dir> = {
-  arrowleft: "left", arrowright: "right", arrowup: "up", arrowdown: "down",
-};
 
 export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI }) {
   let container!: HTMLDivElement;
@@ -180,24 +176,31 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     });
 
     // App shortcuts live in the Ctrl+Shift namespace (ADR-0005). Intercept them before the
-    // PTY; everything else (Ctrl+C SIGINT, arrows, fn keys) passes through untouched.
+    // PTY; everything else (Ctrl+C SIGINT, arrows, fn keys) passes through untouched. The
+    // final key of each combo is user-configurable — look it up in the live bindings map.
+    const ACTIONS: Record<ActionId, () => void> = {
+      "focus-up": () => focusDir(props.paneId, "up"),
+      "focus-down": () => focusDir(props.paneId, "down"),
+      "focus-left": () => focusDir(props.paneId, "left"),
+      "focus-right": () => focusDir(props.paneId, "right"),
+      "split-right": () => splitPane(props.paneId, "row"),
+      "split-down": () => splitPane(props.paneId, "col"),
+      "close-pane": () => closePane(props.paneId),
+      "toggle-zoom": () => toggleZoom(props.paneId),
+      "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
+      "prev-workspace": () => switchWorkspaceRelative(-1),
+      "next-workspace": () => switchWorkspaceRelative(1),
+      "copy": () => void copySelection(), // no selection → no-op
+      "paste": () => void pasteClipboard(),
+      "search": () => openSearch(),
+    };
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey) return true;
-      const key = e.key.toLowerCase();
-      if (key in ARROW_DIR) { focusDir(props.paneId, ARROW_DIR[key]); return false; }
-      switch (key) {
-        case "c": void copySelection(); return false; // copy selection (no selection → no-op)
-        case "v": void pasteClipboard(); return false;
-        case "f": openSearch(); return false;
-        case "d": splitPane(props.paneId, "row"); return false; // split right
-        case "e": splitPane(props.paneId, "col"); return false; // split down
-        case "w": closePane(props.paneId); return false;
-        case "enter": toggleZoom(props.paneId); return false;
-        case "t": window.dispatchEvent(new CustomEvent("termhaus:new-workspace")); return false;
-        case "pageup": switchWorkspaceRelative(-1); return false;
-        case "pagedown": switchWorkspaceRelative(1); return false;
-        default: return true;
-      }
+      if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return true;
+      if (isModifierKey(e.key)) return true;
+      const action = actionForKey(settings.keybindings, e.key);
+      if (!action) return true;
+      ACTIONS[action]();
+      return false;
     });
 
     term.onData((data) => {
