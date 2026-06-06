@@ -12,7 +12,10 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 fn config_path(app: &AppHandle, key: &str) -> Result<PathBuf, String> {
-    if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+    if !key
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
         return Err(format!("invalid state key: {key}"));
     }
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;

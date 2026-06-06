@@ -1,5 +1,7 @@
 # Termhaus
 
+[![CI](https://github.com/lozymon/termhaus/actions/workflows/ci.yml/badge.svg)](https://github.com/lozymon/termhaus/actions/workflows/ci.yml)
+
 **A Linux-first desktop control room of real terminals** — a GUI terminal multiplexer (think a graphical tmux / Terminator) that runs many PTYs at once in resizable split grids and a left workspace rail. It's tuned for driving fleets of CLI agents: the headline trick is **broadcast input** — type once and send it to many panes at the same time.
 
 Generic first: a pane is just a real pseudo-terminal running *any* command — a shell, `claude`, a dev server, `tail -f`, `vim`. Termhaus never parses what a pane prints ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)); agents are simply the most interesting thing you can run in one.

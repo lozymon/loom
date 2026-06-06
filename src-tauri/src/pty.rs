@@ -163,12 +163,10 @@ pub fn spawn(
     std::thread::spawn(move || {
         let engine = base64::engine::general_purpose::STANDARD;
         let mut acc: Vec<u8> = Vec::with_capacity(FRAME_MAX);
-        loop {
-            // Block until the first byte of the next frame (or idle/disconnect).
-            match rx.recv() {
-                Ok(chunk) => acc.extend_from_slice(&chunk),
-                Err(_) => break, // reader gone — child exited
-            }
+        // Block until the first byte of the next frame; `recv` erroring means the reader
+        // is gone (child exited), which ends the loop and falls through to reaping.
+        while let Ok(first) = rx.recv() {
+            acc.extend_from_slice(&first);
             let frame_start = Instant::now();
             // Greedily coalesce whatever is already queued, up to the per-frame cap.
             // Leaving the rest in `rx` is deliberate: a full channel blocks the reader.
@@ -196,10 +194,14 @@ pub fn spawn(
         panes.lock().unwrap().remove(&id);
     });
 
-    mgr.panes
-        .lock()
-        .unwrap()
-        .insert(id, Pane { master, writer, killer });
+    mgr.panes.lock().unwrap().insert(
+        id,
+        Pane {
+            master,
+            writer,
+            killer,
+        },
+    );
     Ok(id)
 }
 
