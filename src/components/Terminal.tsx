@@ -112,6 +112,14 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     }
   }
 
+  // Launch the Claude CLI in this pane's shell. The shell is already sitting in the
+  // terminal's current directory, so a bare `claude` runs in exactly that cwd.
+  function launchClaude() {
+    if (handle === null) return;
+    void writePty(handle, "claude\n");
+    term.focus();
+  }
+
   // ---- Search overlay ----------------------------------------------------------------
   const SEARCH_OPTS = {
     decorations: {
@@ -307,6 +315,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           />
         </Show>
         <span class="pane-controls">
+          <button title="Launch Claude here" onClick={launchClaude}>✦</button>
           <button title="Find (Ctrl+Shift+F)" onClick={openSearch}>⌕</button>
           <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")}>▥</button>
           <button title="Split down (Ctrl+Shift+E)" onClick={() => splitPane(props.paneId, "col")}>▤</button>
