@@ -5,8 +5,9 @@
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { activeWorkspace } from "../stores/workspace";
-import { paneCwd } from "../lib/paneRegistry";
+import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
 import {
+  formatDiffSelection,
   gitDiff,
   gitStatus,
   parseUnifiedDiff,
@@ -58,6 +59,92 @@ export default function GitPanel(props: { onClose: () => void }) {
   const [rows, setRows] = createSignal<DiffRow[]>([]);
   const [diffError, setDiffError] = createSignal<string | null>(null);
 
+  // ---- line selection → send-to-terminal ----
+  // Selection is a contiguous row range [anchor, head]; drag or shift-click extends it.
+  const [anchor, setAnchor] = createSignal<number | null>(null);
+  const [head, setHead] = createSignal<number | null>(null);
+  const [instruction, setInstruction] = createSignal("");
+  const [submitOnSend, setSubmitOnSend] = createSignal(true);
+  const [flash, setFlash] = createSignal<string | null>(null);
+  let dragging = false;
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const selRange = createMemo(() => {
+    const a = anchor();
+    const h = head();
+    if (a == null || h == null) return null;
+    return { lo: Math.min(a, h), hi: Math.max(a, h) };
+  });
+  const isRowSel = (i: number) => {
+    const r = selRange();
+    return !!r && i >= r.lo && i <= r.hi;
+  };
+  const selectedIndices = createMemo<number[]>(() => {
+    const r = selRange();
+    if (!r) return [];
+    const rs = rows();
+    const out: number[] = [];
+    for (let i = r.lo; i <= r.hi; i++) if (rs[i]?.kind === "pair") out.push(i);
+    return out;
+  });
+  /** The reconstructed diff slice for the current selection (null when nothing selected). */
+  const selMeta = createMemo(() => {
+    const idx = selectedIndices();
+    return idx.length ? formatDiffSelection(rows(), idx) : null;
+  });
+  const rangeStr = (s: { start: number; end: number }) =>
+    s.start === s.end ? `${s.start}` : `${s.start}-${s.end}`;
+
+  const focusedId = () => ws?.focused ?? null;
+  const targetLive = () => {
+    const id = focusedId();
+    return id != null && countLive([id]) > 0;
+  };
+
+  function clearSelection() {
+    setAnchor(null);
+    setHead(null);
+  }
+  function rowDown(i: number, e: MouseEvent) {
+    e.preventDefault(); // suppress native text drag-select; we own the gesture
+    if (e.shiftKey && anchor() != null) setHead(i);
+    else { setAnchor(i); setHead(i); }
+    dragging = true;
+  }
+  const rowEnter = (i: number) => { if (dragging) setHead(i); };
+  const endDrag = () => { dragging = false; };
+  onMount(() => window.addEventListener("mouseup", endDrag));
+  onCleanup(() => window.removeEventListener("mouseup", endDrag));
+
+  function showFlash(msg: string) {
+    clearTimeout(flashTimer);
+    setFlash(msg);
+    flashTimer = setTimeout(() => setFlash(null), 2200);
+  }
+
+  /** Send the selected diff lines (+ optional instruction) into the focused pane's PTY. */
+  function sendToTerminal() {
+    const id = focusedId();
+    const sel = selMeta();
+    if (id == null || !sel) return;
+    const path = selected()?.path ?? "";
+    const instr = instruction().trim();
+    let body = `${path}:${rangeStr(sel)}\n\`\`\`diff\n${sel.text}\n\`\`\``;
+    if (instr) body += `\n${instr}`;
+    // Bracketed paste so the multi-line block lands as one paste (not line-by-line Enters);
+    // an optional trailing CR submits it so the agent acts on it immediately.
+    const payload = `\x1b[200~${body}\x1b[201~` + (submitOnSend() ? "\r" : "");
+    const n = writeToPanes([id], payload);
+    if (n > 0) {
+      // Sent — close the panel so the focused terminal (and the agent acting on it) is visible.
+      clearSelection();
+      setInstruction("");
+      props.onClose();
+    } else {
+      showFlash("no live terminal focused");
+    }
+  }
+
   const staged = createMemo(() => status()?.files.filter((f) => f.staged) ?? []);
   const changes = createMemo(() => status()?.files.filter((f) => f.unstaged || f.untracked) ?? []);
 
@@ -71,6 +158,7 @@ export default function GitPanel(props: { onClose: () => void }) {
     setSelected(sel);
     setRows([]);
     setDiffError(null);
+    clearSelection();
     try {
       const text = await gitDiff(cwd(), file.path, stagedView, file.untracked && !stagedView);
       setRows(parseUnifiedDiff(text));
@@ -191,7 +279,10 @@ export default function GitPanel(props: { onClose: () => void }) {
               when={selected()}
               fallback={<div class="git-empty">{status()?.isRepo ? "Select a file to view its diff." : ""}</div>}
             >
-              <div class="git-diff-path">{selected()!.path}</div>
+              <div class="git-diff-path">
+                <span>{selected()!.path}</span>
+                <span class="git-diff-hint">drag to select lines → send to terminal</span>
+              </div>
               <Show when={diffError()}>
                 <div class="git-empty">{diffError()}</div>
               </Show>
@@ -200,20 +291,79 @@ export default function GitPanel(props: { onClose: () => void }) {
               </Show>
               <div class="git-diff-grid">
                 <For each={rows()}>
-                  {(row) =>
+                  {(row, i) =>
                     row.kind === "hunk" ? (
                       <div class="git-hunk">{row.header}</div>
                     ) : (
                       <>
-                        <div class="git-ln" classList={{ [row.left.kind]: true }}>{row.left.no ?? ""}</div>
-                        <div class="git-code" classList={{ [row.left.kind]: true }}>{row.left.text}</div>
-                        <div class="git-ln" classList={{ [row.right.kind]: true }}>{row.right.no ?? ""}</div>
-                        <div class="git-code" classList={{ [row.right.kind]: true }}>{row.right.text}</div>
+                        <div
+                          class="git-ln"
+                          classList={{ [row.left.kind]: true, sel: isRowSel(i()) }}
+                          onMouseDown={(e) => rowDown(i(), e)}
+                          onMouseEnter={() => rowEnter(i())}
+                        >{row.left.no ?? ""}</div>
+                        <div
+                          class="git-code"
+                          classList={{ [row.left.kind]: true, sel: isRowSel(i()) }}
+                          onMouseDown={(e) => rowDown(i(), e)}
+                          onMouseEnter={() => rowEnter(i())}
+                        >{row.left.text}</div>
+                        <div
+                          class="git-ln"
+                          classList={{ [row.right.kind]: true, sel: isRowSel(i()) }}
+                          onMouseDown={(e) => rowDown(i(), e)}
+                          onMouseEnter={() => rowEnter(i())}
+                        >{row.right.no ?? ""}</div>
+                        <div
+                          class="git-code"
+                          classList={{ [row.right.kind]: true, sel: isRowSel(i()) }}
+                          onMouseDown={(e) => rowDown(i(), e)}
+                          onMouseEnter={() => rowEnter(i())}
+                        >{row.right.text}</div>
                       </>
                     )
                   }
                 </For>
               </div>
+
+              <Show when={selMeta()}>
+                <div class="git-send">
+                  <span class="git-send-info">
+                    {selMeta()!.count} line{selMeta()!.count === 1 ? "" : "s"}
+                    <span class="git-send-loc"> · {selected()!.path}:{rangeStr(selMeta()!)}</span>
+                  </span>
+                  <input
+                    class="git-send-input"
+                    placeholder="Add an instruction for the agent… (optional)"
+                    value={instruction()}
+                    onInput={(e) => setInstruction(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); sendToTerminal(); }
+                      else if (e.key === "Escape") { e.stopPropagation(); clearSelection(); }
+                    }}
+                  />
+                  <label class="git-send-enter" title="Press Enter in the terminal after pasting (submit)">
+                    <input
+                      type="checkbox"
+                      checked={submitOnSend()}
+                      onChange={(e) => setSubmitOnSend(e.currentTarget.checked)}
+                    />
+                    submit
+                  </label>
+                  <button
+                    class="git-send-btn primary"
+                    disabled={!targetLive()}
+                    title={targetLive() ? "Send to the focused terminal" : "No live terminal is focused"}
+                    onClick={sendToTerminal}
+                  >
+                    Send to terminal ▸
+                  </button>
+                  <button class="git-send-clear" title="Clear selection (Esc)" onClick={clearSelection}>✕</button>
+                  <Show when={flash()}>
+                    <span class="git-send-flash">{flash()}</span>
+                  </Show>
+                </div>
+              </Show>
             </Show>
           </section>
         </div>

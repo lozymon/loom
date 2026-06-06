@@ -130,3 +130,43 @@ export function parseUnifiedDiff(diff: string): DiffRow[] {
 
   return rows;
 }
+
+/** A reconstructed slice of a diff, ready to send into a terminal. */
+export interface DiffSelection {
+  /** The selected lines as unified-diff text (`+`/`-`/` ` prefixed), no trailing newline. */
+  text: string;
+  /** 1-based line range in the file (new-side where available, else old-side). */
+  start: number;
+  end: number;
+  /** Number of diff lines emitted (a paired replace contributes both its `-` and `+`). */
+  count: number;
+}
+
+/**
+ * Rebuild raw unified-diff text for the given `rows` at `indices` (a contiguous user
+ * selection; non-pair rows are ignored). A paired replace row emits both its `-old` and
+ * `+new`; the line range prefers new-side numbers, falling back to old-side for pure deletes.
+ */
+export function formatDiffSelection(rows: DiffRow[], indices: number[]): DiffSelection {
+  const lines: string[] = [];
+  const nums: number[] = [];
+  for (const i of indices) {
+    const row = rows[i];
+    if (!row || row.kind !== "pair") continue;
+    const { left, right } = row;
+    if (left.kind === "ctx") {
+      lines.push(" " + left.text);
+    } else {
+      if (left.kind === "del") lines.push("-" + left.text);
+      if (right.kind === "add") lines.push("+" + right.text);
+    }
+    if (right.no != null) nums.push(right.no);
+    else if (left.no != null) nums.push(left.no);
+  }
+  return {
+    text: lines.join("\n"),
+    start: nums.length ? Math.min(...nums) : 0,
+    end: nums.length ? Math.max(...nums) : 0,
+    count: lines.length,
+  };
+}
