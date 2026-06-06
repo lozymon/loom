@@ -1,3 +1,4 @@
+mod capture;
 mod pty;
 mod workspace;
 
@@ -47,6 +48,7 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            capture::capture_region,
             workspace::state_save,
             workspace::state_load,
         ])

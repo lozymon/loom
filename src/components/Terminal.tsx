@@ -19,6 +19,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 
 import { spawnPty, writePty, resizePty, killPty } from "../lib/ptyClient";
+import { captureRegion } from "../lib/capture";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
@@ -93,6 +94,21 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       if (text && handle !== null) void writePty(handle, text);
     } catch (e) {
       console.error("clipboard read failed", e);
+    }
+  }
+
+  // Capture a screen region → PNG, then type its path into this pane (with a trailing space,
+  // no Enter) so it lands in the prompt — e.g. a Claude Code message referencing the image.
+  async function captureToPane() {
+    try {
+      const path = await captureRegion();
+      if (path && handle !== null) {
+        await writePty(handle, `${path} `);
+        term.focus();
+      }
+    } catch (e) {
+      // A cancelled selection or a missing screenshot tool both land here — log, don't disrupt.
+      console.error("region capture failed", e);
     }
   }
 
@@ -204,6 +220,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "copy": () => void copySelection(), // no selection → no-op
       "paste": () => void pasteClipboard(),
       "search": () => openSearch(),
+      "capture-region": () => void captureToPane(),
     };
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return true;

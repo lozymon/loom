@@ -19,14 +19,15 @@ export type ActionId =
   | "next-workspace"
   | "copy"
   | "paste"
-  | "search";
+  | "search"
+  | "capture-region";
 
 export interface ActionDef {
   id: ActionId;
   /** Human label shown in the Settings list. */
   label: string;
   /** Section the action is grouped under in the Settings list. */
-  group: "Focus" | "Panes" | "Workspaces" | "Clipboard & search";
+  group: "Focus" | "Panes" | "Workspaces" | "Clipboard & search" | "Capture";
   /** Default final key (lowercased `KeyboardEvent.key`). */
   defaultKey: string;
 }
@@ -47,6 +48,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "copy", label: "Copy selection", group: "Clipboard & search", defaultKey: "c" },
   { id: "paste", label: "Paste", group: "Clipboard & search", defaultKey: "v" },
   { id: "search", label: "Find in scrollback", group: "Clipboard & search", defaultKey: "f" },
+  { id: "capture-region", label: "Snapshot region → focused pane", group: "Capture", defaultKey: "s" },
 ];
 
 /** A map from every action to its bound final key. */
