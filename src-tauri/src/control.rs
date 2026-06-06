@@ -85,11 +85,23 @@ pub fn cli_path() -> Option<PathBuf> {
     cand.exists().then_some(cand)
 }
 
-/// Bind the socket and start accepting on a background thread. A stale socket from a crash is
-/// unlinked first; if the bind still fails (e.g. a second instance) we log and return — the
-/// app runs fine without the bus rather than refusing to launch.
+/// Bind the socket and start accepting on a background thread.
+///
+/// The path is fixed and shared, so we must distinguish a *stale* socket (left by a crashed
+/// instance — safe to remove) from a *live* one (another running instance — must not clobber).
+/// Probing with `connect` answers this: a refused connection means the file is orphaned, so we
+/// unlink and bind; a successful connection means another instance owns the bus, so we bow out
+/// rather than steal its path and orphan its listener (the bug that left a dead socket behind).
 pub fn start(app: AppHandle, pending: Arc<PendingReplies>) {
     let path = socket_path();
+    if UnixStream::connect(&path).is_ok() {
+        eprintln!(
+            "termhaus: another instance already owns the control socket at {}; bus disabled here",
+            path.display()
+        );
+        return;
+    }
+    // No live listener answered — any file here is stale; clear it before binding.
     let _ = std::fs::remove_file(&path);
     let listener = match UnixListener::bind(&path) {
         Ok(l) => l,
