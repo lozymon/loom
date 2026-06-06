@@ -5,7 +5,7 @@
 import { For } from "solid-js";
 import { appState, paneCount, switchWorkspace, closeWorkspace, saveCurrentAsPreset } from "../stores/workspace";
 
-export default function WorkspaceRail(props: { onNew: () => void; onSettings: () => void }) {
+export default function WorkspaceRail(props: { onNew: () => void; onSettings: () => void; onGit: () => void }) {
   return (
     <nav class="rail">
       <div class="rail-list">
@@ -30,6 +30,9 @@ export default function WorkspaceRail(props: { onNew: () => void; onSettings: ()
           )}
         </For>
       </div>
+      <button class="rail-settings" title="Source control (Ctrl+Shift+G)" onClick={() => props.onGit()}>
+        ⎇ Source control
+      </button>
       <button class="rail-settings" title="Settings" onClick={() => props.onSettings()}>
         ⚙ Settings
       </button>

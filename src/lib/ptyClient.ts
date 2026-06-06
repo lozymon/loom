@@ -68,3 +68,8 @@ export function resizePty(handle: PtyHandle, cols: number, rows: number): Promis
 export function killPty(handle: PtyHandle): Promise<void> {
   return invoke(Cmd.kill, { id: handle });
 }
+
+/** The shell's live working directory (`/proc/<pid>/cwd`), or null if unavailable. */
+export function cwdPty(handle: PtyHandle): Promise<string | null> {
+  return invoke<string | null>(Cmd.cwd, { id: handle });
+}

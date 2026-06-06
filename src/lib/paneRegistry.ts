@@ -13,6 +13,8 @@ export interface PaneEntry {
   write: (data: string) => void;
   /** Whether the PTY is currently live (spawned, not yet exited). */
   isLive: () => boolean;
+  /** The shell's live working directory, or null if dead/unavailable (Source Control). */
+  cwd: () => Promise<string | null>;
 }
 
 const registry = new Map<PaneId, PaneEntry>();
@@ -33,6 +35,12 @@ export function countLive(ids: Iterable<PaneId>): number {
     if (entry?.isLive()) n++;
   }
   return n;
+}
+
+/** The live working directory of pane `id`, or null if it isn't registered/live. */
+export function paneCwd(id: PaneId): Promise<string | null> {
+  const entry = registry.get(id);
+  return entry ? entry.cwd() : Promise.resolve(null);
 }
 
 /** Write `data` to every live pane in `ids`; returns how many actually received it. */

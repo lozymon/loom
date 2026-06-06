@@ -12,6 +12,7 @@ import LayoutView from "./components/LayoutNode";
 import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
 import BroadcastBar from "./components/BroadcastBar";
 import Settings from "./components/Settings";
+import GitPanel from "./components/GitPanel";
 import { appState, init, startPersistence, flushPersistence } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings } from "./stores/settings";
@@ -20,6 +21,7 @@ import "./App.css";
 export default function App() {
   const [wizardOpen, setWizardOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [gitOpen, setGitOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
 
   onMount(async () => {
@@ -33,6 +35,11 @@ export default function App() {
   window.addEventListener("termhaus:new-workspace", openWizard);
   onCleanup(() => window.removeEventListener("termhaus:new-workspace", openWizard));
 
+  // Ctrl+Shift+G from a focused pane opens the Source Control (git diff) panel.
+  const openGit = () => setGitOpen(true);
+  window.addEventListener("termhaus:source-control", openGit);
+  onCleanup(() => window.removeEventListener("termhaus:source-control", openGit));
+
   // Flush any debounced state, then close. preventDefault() must run synchronously so the
   // window waits for us; we destroy it ourselves once the final save resolves.
   const unlistenClose = getCurrentWindow().onCloseRequested(async (event) => {
@@ -43,7 +50,11 @@ export default function App() {
 
   return (
     <div class="shell">
-      <WorkspaceRail onNew={() => setWizardOpen(true)} onSettings={() => setSettingsOpen(true)} />
+      <WorkspaceRail
+        onNew={() => setWizardOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
+        onGit={() => setGitOpen(true)}
+      />
       <div class="stage">
         <div class="stage-grid">
           <Show when={ready()}>
@@ -65,6 +76,9 @@ export default function App() {
       </Show>
       <Show when={settingsOpen()}>
         <Settings onClose={() => setSettingsOpen(false)} />
+      </Show>
+      <Show when={gitOpen()}>
+        <GitPanel onClose={() => setGitOpen(false)} />
       </Show>
     </div>
   );

@@ -42,6 +42,9 @@ struct Pane {
     // Lets `kill` terminate the child from the command thread even though the `Child`
     // itself lives in (and is reaped by) the reader/flusher thread.
     killer: Box<dyn ChildKiller + Send + Sync>,
+    // The shell child's OS pid, so the Source Control panel can read its live cwd from
+    // `/proc/<pid>/cwd` (see `cwd` below). `None` if the platform didn't report one.
+    pid: Option<u32>,
 }
 
 impl PtyManager {
@@ -128,6 +131,9 @@ pub fn spawn(
     // A killer we can store in the Pane to terminate the child from `kill`, while the
     // `Child` itself moves into the reaper thread below for `wait()`.
     let killer = child.clone_killer();
+    // Grab the pid before the `Child` moves into the reaper thread — used to read the
+    // shell's live cwd for the Source Control panel.
+    let pid = child.process_id();
     // Close our handle to the slave so EOF propagates when the child exits.
     drop(pair.slave);
 
@@ -208,9 +214,34 @@ pub fn spawn(
             master,
             writer,
             killer,
+            pid,
         },
     );
     Ok(id)
+}
+
+/// Best-effort current working directory of a pane's shell, read from `/proc/<pid>/cwd`.
+/// This is the one place Termhaus inspects a pane's live process state — used only for the
+/// explicit Source Control action to scope `git` to where the focused terminal actually is
+/// (see ADR-0001's "live cwd" carve-out). Returns `None` (not an error) when the pid is
+/// unknown or the link can't be read — e.g. the child already exited — so callers fall back.
+#[cfg(unix)]
+pub fn cwd(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
+    let pid = match mgr.panes.lock().unwrap().get(&id) {
+        Some(p) => p.pid,
+        None => return Ok(None),
+    };
+    let Some(pid) = pid else { return Ok(None) };
+    match std::fs::read_link(format!("/proc/{pid}/cwd")) {
+        Ok(path) => Ok(Some(path.to_string_lossy().into_owned())),
+        Err(_) => Ok(None),
+    }
+}
+
+/// Non-Unix stub: no `/proc`, so the panel falls back to the workspace folder (see M7).
+#[cfg(not(unix))]
+pub fn cwd(_mgr: &PtyManager, _id: u32) -> Result<Option<String>, String> {
+    Ok(None)
 }
 
 /// Forward keystrokes (UTF-8) from the webview into the pane's PTY.

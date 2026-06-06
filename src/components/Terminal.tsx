@@ -18,7 +18,7 @@ import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 
-import { spawnPty, writePty, resizePty, killPty } from "../lib/ptyClient";
+import { spawnPty, writePty, resizePty, killPty, cwdPty } from "../lib/ptyClient";
 import { captureRegion } from "../lib/capture";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { currentTheme } from "../stores/theme";
@@ -215,6 +215,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "close-pane": () => closePane(props.paneId),
       "toggle-zoom": () => toggleZoom(props.paneId),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
+      "source-control": () => window.dispatchEvent(new CustomEvent("termhaus:source-control")),
       "prev-workspace": () => switchWorkspaceRelative(-1),
       "next-workspace": () => switchWorkspaceRelative(1),
       "copy": () => void copySelection(), // no selection → no-op
@@ -241,6 +242,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     registerPane(props.paneId, {
       write: (data) => { if (handle !== null) void writePty(handle, data); },
       isLive: () => handle !== null,
+      cwd: () => (handle !== null ? cwdPty(handle) : Promise.resolve(null)),
     });
 
     // Refit + tell the PTY whenever the box resizes (split, drag, zoom, window). Skip when

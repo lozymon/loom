@@ -53,6 +53,7 @@ export const Cmd = {
   write: "pty_write",
   resize: "pty_resize",
   kill: "pty_kill",
+  cwd: "pty_cwd",
 } as const;
 
 /**

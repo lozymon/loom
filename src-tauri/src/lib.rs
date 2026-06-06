@@ -1,4 +1,5 @@
 mod capture;
+mod git;
 mod pty;
 mod workspace;
 
@@ -36,6 +37,11 @@ fn pty_kill(mgr: State<PtyManager>, id: u32) -> Result<(), String> {
     pty::kill(&mgr, id)
 }
 
+#[tauri::command]
+fn pty_cwd(mgr: State<PtyManager>, id: u32) -> Result<Option<String>, String> {
+    pty::cwd(&mgr, id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -48,7 +54,10 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            pty_cwd,
             capture::capture_region,
+            git::git_status,
+            git::git_diff,
             workspace::state_save,
             workspace::state_load,
         ])
