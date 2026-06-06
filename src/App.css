@@ -1,0 +1,650 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: #1a1b1e;
+  overflow: hidden;
+}
+
+.app {
+  height: 100vh;
+  width: 100vw;
+}
+
+/* M3 shell: left rail | stage of workspace layers. */
+.shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Holds the workspace layers; the broadcast bar docks below it. */
+.stage-grid {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Each workspace renders into its own filling layer; only the active is shown. */
+.ws-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---- Workspace rail ---- */
+.rail {
+  display: flex;
+  flex-direction: column;
+  width: 168px;
+  flex: 0 0 168px;
+  background: #161719;
+  border-right: 1px solid #2a2b2e;
+  padding: 6px;
+  box-sizing: border-box;
+  gap: 6px;
+}
+
+.rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.rail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font: 12px ui-monospace, monospace;
+  color: #c8c8c8;
+  background: #1f2023;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rail-item:hover {
+  background: #26272b;
+}
+
+.rail-item.active {
+  background: #2a2d36;
+  color: #e6e6e6;
+  box-shadow: inset 0 0 0 1px #5b8cff;
+}
+
+.rail-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-badge {
+  font-size: 10px;
+  color: #9a9a9a;
+  background: #2f3034;
+  border-radius: 8px;
+  padding: 1px 6px;
+}
+
+.rail-close {
+  color: #7a7a7a;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 11px;
+}
+
+.rail-close:hover {
+  color: #ff7a7a;
+}
+
+.rail-foot {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.rail-save {
+  flex: 1 1 auto;
+  font: 11px ui-monospace, monospace;
+  color: #c8c8c8;
+  background: #1f2023;
+  border: 1px solid #2a2b2e;
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.rail-save:hover {
+  background: #26272b;
+  color: #e6e6e6;
+}
+
+.rail-new {
+  font-size: 18px;
+  line-height: 1;
+  color: #c8c8c8;
+  background: #1f2023;
+  border: 1px solid #2a2b2e;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.rail-new:hover {
+  background: #26272b;
+  color: #e6e6e6;
+}
+
+/* ---- Broadcast bar ---- */
+.bcast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  height: 38px;
+  padding: 0 10px;
+  background: #161719;
+  border-top: 1px solid #2a2b2e;
+  font: 12px ui-monospace, monospace;
+}
+
+.bcast.selecting {
+  background: #1d1a14;
+  border-top-color: #c79a3a;
+}
+
+.bcast-label {
+  color: #9a9a9a;
+  white-space: nowrap;
+}
+
+.bcast.selecting .bcast-label {
+  color: #e0b85a;
+}
+
+.bcast-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: #e6e6e6;
+  background: #1a1b1e;
+  border: 1px solid #3a3b40;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.bcast-input:focus {
+  outline: none;
+  border-color: #5b8cff;
+}
+
+.bcast button {
+  font: inherit;
+  color: #e6e6e6;
+  background: #2f3034;
+  border: 1px solid #3a3b40;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bcast button:hover {
+  background: #3a3b40;
+}
+
+.bcast button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.bcast-scope.on {
+  background: #c79a3a;
+  border-color: #c79a3a;
+  color: #1a1b1e;
+}
+
+.bcast-send.primary {
+  background: #3a5bdc;
+  border-color: #3a5bdc;
+}
+
+.bcast-send.primary:hover:not(:disabled) {
+  background: #4a6bec;
+}
+
+.bcast-reach {
+  color: #7a7a7a;
+  white-space: nowrap;
+}
+
+.bcast-reach.subset {
+  color: #e0b85a;
+}
+
+.bcast-flash {
+  color: #6bd06b;
+  white-space: nowrap;
+}
+
+/* ---- Per-pane broadcast targeting ---- */
+.bcast-toggle {
+  font: 12px ui-monospace, monospace;
+  line-height: 1;
+  color: #9a9a9a;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.bcast-toggle.on {
+  color: #e0b85a;
+}
+
+.pane.bcast-target {
+  border-color: #c79a3a;
+  box-shadow: inset 0 0 0 1px #c79a3a;
+}
+
+.pane.bcast-target .pane-title {
+  background: #2e2a1c;
+}
+
+/* ---- New-workspace wizard ---- */
+.wizard-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.wizard {
+  width: 540px;
+  max-width: 90vw;
+  background: #1f2023;
+  border: 1px solid #3a3b40;
+  border-radius: 10px;
+  color: #e6e6e6;
+  font: 13px ui-monospace, monospace;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.wizard-steps {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #2a2b2e;
+  color: #7a7a7a;
+}
+
+.wizard-steps .on {
+  color: #5b8cff;
+  font-weight: 600;
+}
+
+.wizard-body {
+  padding: 16px;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wizard-label {
+  color: #9a9a9a;
+  font-size: 11px;
+}
+
+.wizard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wizard-input {
+  flex: 1 1 auto;
+  font: inherit;
+  color: #e6e6e6;
+  background: #161719;
+  border: 1px solid #3a3b40;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.wizard button {
+  font: inherit;
+  color: #e6e6e6;
+  background: #2f3034;
+  border: 1px solid #3a3b40;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.wizard button:hover {
+  background: #3a3b40;
+}
+
+.wizard button.primary {
+  background: #3a5bdc;
+  border-color: #3a5bdc;
+}
+
+.wizard button.primary:hover {
+  background: #4a6bec;
+}
+
+.wizard-recents {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wizard-recent {
+  display: flex !important;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.muted {
+  color: #7a7a7a;
+  font-size: 11px;
+}
+
+.wizard-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wizard-tile {
+  width: 52px;
+  height: 52px;
+  font-size: 16px !important;
+}
+
+.wizard-tile.on {
+  background: #3a5bdc !important;
+  border-color: #3a5bdc !important;
+}
+
+.wizard-cmds {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.wizard-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #2a2b2e;
+}
+
+.wizard-foot .spacer {
+  flex: 1 1 auto;
+}
+
+/* The flat layer that holds absolutely-positioned panes + gutters (lib/layout). */
+.layout-root {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  background: #2a2b2e; /* shows through as gutter seams */
+}
+
+/* One positioned cell per leaf; inset by 1px so neighbours read as separate tiles. */
+.leaf-box {
+  position: absolute;
+  padding: 1px;
+  box-sizing: border-box;
+}
+
+/* The pane chrome: title bar above, terminal below. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #1a1b1e;
+  border: 1px solid #2a2b2e;
+  border-radius: 4px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.pane.focused {
+  border-color: #5b8cff;
+  box-shadow: inset 0 0 0 1px #5b8cff;
+}
+
+.pane-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 6px;
+  font: 11px ui-monospace, monospace;
+  color: #c8c8c8;
+  background: #232428;
+  border-bottom: 1px solid #2a2b2e;
+  user-select: none;
+  flex: 0 0 auto;
+}
+
+.pane.focused .pane-title {
+  color: #e6e6e6;
+  background: #2a2d36;
+}
+
+.pane-name {
+  font-weight: 600;
+  cursor: text;
+}
+
+.pane-name-edit {
+  font: inherit;
+  font-weight: 600;
+  color: #e6e6e6;
+  background: #1a1b1e;
+  border: 1px solid #5b8cff;
+  border-radius: 3px;
+  padding: 0 4px;
+  width: 9ch;
+}
+
+.pane-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.pane-controls button {
+  font: 12px ui-monospace, monospace;
+  line-height: 1;
+  color: #9a9a9a;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.pane-controls button:hover {
+  color: #e6e6e6;
+  background: #3a3b40;
+}
+
+/* Terminal area fills the rest of the pane; positions the dead overlay. */
+.pane-term-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.terminal-pane {
+  height: 100%;
+  width: 100%;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.terminal-pane .xterm,
+.terminal-pane .xterm-viewport,
+.terminal-pane .xterm-screen {
+  height: 100% !important;
+}
+
+/* Draggable seams between splits, drawn on top of the pane boundary. */
+.gutter {
+  position: absolute;
+  z-index: 5;
+}
+
+.gutter-row {
+  width: 6px;
+  transform: translateX(-3px); /* centre on the seam */
+  cursor: col-resize;
+}
+
+.gutter-col {
+  height: 6px;
+  transform: translateY(-3px);
+  cursor: row-resize;
+}
+
+.gutter:hover {
+  background: rgba(91, 140, 255, 0.4);
+}
+
+/* Shown when a pane's child has exited; offers a respawn. */
+.pane-dead {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  font: 12px ui-monospace, monospace;
+  color: #e6e6e6;
+  background: rgba(40, 41, 46, 0.95);
+  border: 1px solid #3a3b40;
+  border-radius: 6px;
+}
+
+.pane-dead button {
+  font: inherit;
+  color: #e6e6e6;
+  background: #3a3b40;
+  border: 1px solid #4a4b50;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.pane-dead button:hover {
+  background: #4a4b50;
+}
+
+/* ---- Per-pane search overlay (Ctrl+Shift+F) ---- */
+.pane-search {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(31, 32, 35, 0.97);
+  border: 1px solid #3a3b40;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.pane-search-input {
+  font: 12px ui-monospace, monospace;
+  color: #e6e6e6;
+  background: #161719;
+  border: 1px solid #3a3b40;
+  border-radius: 4px;
+  padding: 3px 6px;
+  width: 18ch;
+}
+
+.pane-search-input:focus {
+  outline: none;
+  border-color: #5b8cff;
+}
+
+.pane-search button {
+  font: 12px ui-monospace, monospace;
+  line-height: 1;
+  color: #c8c8c8;
+  background: #2f3034;
+  border: 1px solid #3a3b40;
+  border-radius: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.pane-search button:hover {
+  background: #3a3b40;
+  color: #e6e6e6;
+}
+
+/* ---- Wizard presets (one-click relaunch) ---- */
+.wizard-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wizard-preset {
+  display: flex;
+  gap: 4px;
+}
+
+.wizard-preset-go {
+  flex: 1 1 auto;
+  display: flex !important;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.wizard-preset-del {
+  flex: 0 0 auto;
+  color: #9a9a9a !important;
+}
+
+.wizard-preset-del:hover {
+  color: #ff7a7a !important;
+}

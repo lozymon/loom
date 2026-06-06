@@ -1,0 +1,14 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Rust / Tauri build artifacts are ignored in src-tauri/.gitignore (/target, /gen)
+
+# Local machine-only Claude Code settings
+.claude/settings.local.json
+
+# OS / editor cruft
+.DS_Store
+*.log
