@@ -14,8 +14,11 @@ Generic first: a pane is just a real pseudo-terminal running *any* command — a
 - **Split-grid layout** — a binary split tree per workspace: split any pane right/down, drag the gutters to resize, close to collapse and promote the sibling. Zoom a pane to fullscreen and back.
 - **Workspace rail** — group panes into workspaces on a left rail; switching keeps hidden workspaces' terminals alive.
 - **New-workspace wizard** — pick a working folder (with Recents) → tap a grid preset (1/2/4/6/8/10/12 terminals) → optionally set a per-pane launch command → go.
-- **Broadcast input** — send a line to every live pane in the current workspace, or a hand-picked subset. Spawn 12 panes, broadcast one prompt to all.
-- **Inter-pane control bus** — a process *inside* a pane (e.g. a `claude` CLI) can drive the others with the bundled `th` command: `th list`, `th send <pane> <text…>`, `th spawn <command…>`. One agent can kick off and prompt another, without Termhaus ever parsing pane output ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
+- **Broadcast input** — send a line to every live pane in the current workspace, or a hand-picked subset (click panes, or filter by a name pattern like `Cl*`). Recall recent messages with ↑/↓, save reusable snippets, and optionally stagger sends so a fleet doesn't hit an API all at once. Spawn 12 panes, broadcast one prompt to all.
+- **Pane attention signals** — a per-pane status dot shows when a pane is running a command, produced output you haven't looked at, or rang the bell — so you can tell at a glance which of a fleet of agents needs you. Hidden workspaces flag activity on the rail. (Metadata only — pane output is never parsed; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).)
+- **Command palette** (`Ctrl+Shift+P`) — fuzzy-search every action plus jump-to-pane-by-name across all workspaces.
+- **Inter-pane control bus** — a process *inside* a pane (e.g. a `claude` CLI) can drive the others with the bundled `th` command: `th list`, `th send`, `th spawn`, `th read` (capture another pane's scrollback), `th broadcast`, and `th focus`. One agent can kick off, prompt, and read back from another, without Termhaus ever parsing pane output ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
+- **Drag to rearrange** — grab a pane's title-bar grip and drop it on another to swap their grid positions (the terminals keep running).
 - **Presets** — save a workspace (folder + layout + per-pane commands) and relaunch it in one click.
 - **Persistence** — workspaces, layouts, and per-pane intent are saved as JSON and respawned on launch (intent, not scrollback — terminals are ephemeral).
 - **Source Control panel** — a VS Code-style git diff viewer (`Ctrl+Shift+G` or the rail's ⎇ button), scoped to the focused terminal's live working directory. Browse Staged / Changes, read unified diffs side-by-side, and send selected diff lines straight to the focused pane (read-only — no stage/commit yet).
@@ -49,6 +52,7 @@ All app shortcuts live in the `Ctrl+Shift` namespace; nothing else is intercepte
 | `Ctrl+Shift+←↑↓→` | Move focus to the adjacent pane |
 | `Ctrl+Shift+PageUp` / `PageDown` | Previous / next workspace |
 | `Ctrl+Shift+T` | New workspace (opens the wizard) |
+| `Ctrl+Shift+P` | Command palette (fuzzy actions + jump to pane) |
 | `Ctrl+Shift+S` | Snapshot a screen region → focused pane |
 | `Ctrl+Shift+G` | Open Source Control (git diff viewer) |
 
@@ -64,6 +68,9 @@ th send Cleo claude "investigate the auth bug"   # type into pane "Cleo" + press
 th send Cleo --no-enter ls                # type without the trailing newline
 echo "$PROMPT" | th send Cleo             # no text arg → reads stdin
 th spawn --name Cleo --cwd /repo claude   # open a NEW pane running a command
+th read Cleo -n 100                        # capture Cleo's last 100 scrollback lines
+th broadcast "run the tests"              # send to every live pane in the active workspace
+th focus Cleo                              # switch to Cleo's workspace and focus it
 ```
 
 It works over a per-user unix socket (`$XDG_RUNTIME_DIR/termhaus.sock`, mode 0600): Rust is a pure relay, all routing/naming/spawn logic lives in the frontend, and pane *output* is never parsed — this is an inbound command channel, distinct from the opacity rule ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md) / [ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
