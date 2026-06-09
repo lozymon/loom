@@ -130,7 +130,9 @@ pub fn start(app: AppHandle, pending: Arc<PendingReplies>) {
 /// response line the frontend produces. Errors and timeouts become an `ok:false` response so
 /// `th` never hangs a pane.
 fn handle_conn(stream: UnixStream, app: AppHandle, pending: Arc<PendingReplies>) {
-    let Ok(read_half) = stream.try_clone() else { return };
+    let Ok(read_half) = stream.try_clone() else {
+        return;
+    };
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
     if reader.read_line(&mut line).is_err() {

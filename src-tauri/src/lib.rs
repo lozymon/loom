@@ -24,7 +24,9 @@ fn pty_spawn(
     on_output: Channel<String>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
-    pty::spawn(&mgr, cols, rows, command, cwd, shell, name, on_output, on_exit)
+    pty::spawn(
+        &mgr, cols, rows, command, cwd, shell, name, on_output, on_exit,
+    )
 }
 
 #[tauri::command]

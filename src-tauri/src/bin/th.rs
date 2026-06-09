@@ -114,7 +114,9 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(obj)
         }
 
-        other => Err(format!("unknown command '{other}' (try: list, send, spawn)")),
+        other => Err(format!(
+            "unknown command '{other}' (try: list, send, spawn)"
+        )),
     }
 }
 
@@ -130,8 +132,8 @@ fn read_stdin() -> Result<String, String> {
 fn send(req: &Value) -> Result<Value, String> {
     let path = env::var("TERMHAUS_SOCK")
         .map_err(|_| "TERMHAUS_SOCK not set — run this inside a Termhaus pane".to_string())?;
-    let stream = UnixStream::connect(&path)
-        .map_err(|e| format!("cannot reach Termhaus at {path}: {e}"))?;
+    let stream =
+        UnixStream::connect(&path).map_err(|e| format!("cannot reach Termhaus at {path}: {e}"))?;
     let mut w = &stream;
     let line = serde_json::to_string(req).map_err(|e| e.to_string())?;
     w.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
@@ -149,7 +151,10 @@ fn send(req: &Value) -> Result<Value, String> {
 
 fn handle_response(op: &str, resp: &Value) {
     if resp.get("ok").and_then(Value::as_bool) != Some(true) {
-        let err = resp.get("error").and_then(Value::as_str).unwrap_or("unknown error");
+        let err = resp
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown error");
         eprintln!("th: {err}");
         exit(1);
     }
@@ -157,11 +162,17 @@ fn handle_response(op: &str, resp: &Value) {
     match op {
         "list" => print_list(data),
         "send" => {
-            let n = data.and_then(|d| d.get("count")).and_then(Value::as_u64).unwrap_or(0);
+            let n = data
+                .and_then(|d| d.get("count"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
             println!("sent to {n} pane{}", if n == 1 { "" } else { "s" });
         }
         "spawn" => {
-            let name = data.and_then(|d| d.get("name")).and_then(Value::as_str).unwrap_or("?");
+            let name = data
+                .and_then(|d| d.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
             println!("spawned pane '{name}'");
         }
         _ => {}

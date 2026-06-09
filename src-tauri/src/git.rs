@@ -152,7 +152,12 @@ pub fn git_branch(cwd: String) -> Result<Option<String>, String> {
 /// `staged` selects index-vs-HEAD (`--cached`) over worktree-vs-index; `untracked` files have
 /// no index entry, so they're diffed against `/dev/null` to render the whole file as additions.
 #[tauri::command]
-pub fn git_diff(cwd: String, path: String, staged: bool, untracked: bool) -> Result<String, String> {
+pub fn git_diff(
+    cwd: String,
+    path: String,
+    staged: bool,
+    untracked: bool,
+) -> Result<String, String> {
     let (ok, root_out, err) = git(&cwd, &["rev-parse", "--show-toplevel"])?;
     if !ok {
         return Err(err);

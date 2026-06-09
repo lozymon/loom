@@ -37,7 +37,8 @@ pub fn capture_region() -> Result<String, String> {
             if out.stdout.is_empty() {
                 return Err("capture cancelled".into());
             }
-            std::fs::write(&path, &out.stdout).map_err(|e| format!("failed to save snapshot: {e}"))?;
+            std::fs::write(&path, &out.stdout)
+                .map_err(|e| format!("failed to save snapshot: {e}"))?;
             return Ok(path.to_string_lossy().into_owned());
         }
         // Only fall through when flameshot isn't installed; surface other errors.
@@ -75,7 +76,12 @@ pub fn capture_region() -> Result<String, String> {
                 return Err("capture cancelled".into());
             }
             let geom = String::from_utf8_lossy(&sel.stdout).trim().to_string();
-            match Command::new("grim").arg("-g").arg(&geom).arg(&path).status() {
+            match Command::new("grim")
+                .arg("-g")
+                .arg(&geom)
+                .arg(&path)
+                .status()
+            {
                 Ok(status) if status.success() && path.exists() => {
                     return Ok(path.to_string_lossy().into_owned());
                 }
