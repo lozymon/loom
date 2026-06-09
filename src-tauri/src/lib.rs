@@ -65,6 +65,7 @@ pub fn run() {
             control::pane_cmd_reply,
             capture::capture_region,
             git::git_status,
+            git::git_branch,
             git::git_diff,
             workspace::state_save,
             workspace::state_load,

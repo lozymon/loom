@@ -122,6 +122,32 @@ pub fn git_status(cwd: String) -> Result<GitStatus, String> {
     })
 }
 
+/// Current branch of the repo containing `cwd` — for the pane title bar. Deliberately
+/// lightweight: a single `rev-parse`, none of `git_status`'s porcelain scan, since this is
+/// polled per visible pane. Returns `None` when `cwd` isn't in a repo (or git is missing) —
+/// a normal "no badge" state, not an error. A detached HEAD reports as `(<short-sha>)`.
+#[tauri::command]
+pub fn git_branch(cwd: String) -> Result<Option<String>, String> {
+    let (ok, out, _) = git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    if !ok {
+        return Ok(None);
+    }
+    let branch = out.trim().to_string();
+    if branch.is_empty() {
+        return Ok(None);
+    }
+    if branch == "HEAD" {
+        // Detached HEAD — surface the short commit instead of the literal "HEAD".
+        if let (true, sha, _) = git(&cwd, &["rev-parse", "--short", "HEAD"])? {
+            let sha = sha.trim();
+            if !sha.is_empty() {
+                return Ok(Some(format!("({sha})")));
+            }
+        }
+    }
+    Ok(Some(branch))
+}
+
 /// Return the unified diff text for one `path` (repo-root-relative, from `git_status`).
 /// `staged` selects index-vs-HEAD (`--cached`) over worktree-vs-index; `untracked` files have
 /// no index entry, so they're diffed against `/dev/null` to render the whole file as additions.

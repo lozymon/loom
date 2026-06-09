@@ -16,9 +16,11 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { homeDir } from "@tauri-apps/api/path";
 import "@xterm/xterm/css/xterm.css";
 
 import { spawnPty, writePty, resizePty, killPty, cwdPty } from "../lib/ptyClient";
+import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { currentTheme } from "../stores/theme";
@@ -38,6 +40,18 @@ import {
   type WorkspaceUI,
 } from "../stores/workspace";
 
+// Resolved once and cached: collapse a leading $HOME to "~" in the title-bar path. Resolves
+// async; until it lands paths show in full, and the next poll picks up the abbreviation.
+let homePrefix: string | null = null;
+void homeDir().then((h) => { homePrefix = h.replace(/\/+$/, ""); }).catch(() => {});
+
+function prettyCwd(dir: string): string {
+  if (homePrefix && (dir === homePrefix || dir.startsWith(homePrefix + "/"))) {
+    return "~" + dir.slice(homePrefix.length);
+  }
+  return dir;
+}
+
 export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI }) {
   let container!: HTMLDivElement;
   let term!: Terminal;
@@ -50,6 +64,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const [editing, setEditing] = createSignal(false);
   const [finding, setFinding] = createSignal(false);
   const [query, setQuery] = createSignal("");
+  // Live shell location for the title bar: cwd (via /proc, ADR-0001's carve-out) + git branch.
+  const [cwd, setCwd] = createSignal<string | null>(null);
+  const [branch, setBranch] = createSignal<string | null>(null);
 
   const spec = () => props.ws.panes[props.paneId];
   const isFocused = () => props.ws.focused === props.paneId;
@@ -122,6 +139,19 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     term.focus();
   }
 
+  // ---- Title-bar location (cwd + git branch) -----------------------------------------
+  // Panes are opaque (ADR-0001) — we can't watch the shell's output for `cd`, so we poll
+  // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
+  // `git rev-parse` per tick, only while this pane's workspace is visible.
+  async function refreshLoc() {
+    if (handle === null) { setCwd(null); setBranch(null); return; }
+    let dir: string | null = null;
+    try { dir = await cwdPty(handle); } catch { return; }
+    setCwd(dir);
+    if (!dir) { setBranch(null); return; }
+    try { setBranch(await gitBranch(dir)); } catch { setBranch(null); }
+  }
+
   // ---- Search overlay ----------------------------------------------------------------
   const SEARCH_OPTS = {
     decorations: {
@@ -187,6 +217,16 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       term.options.cursorStyle = settings.cursorStyle;
       term.options.cursorBlink = settings.cursorBlink;
       term.options.scrollback = settings.scrollback;
+    });
+
+    // Poll the cwd/branch only while this workspace is on screen — hidden layers don't burn
+    // /proc reads or git calls (CLAUDE.md: throttle hidden Workspaces). The effect re-runs on
+    // activeId changes, tearing down the old interval first via onCleanup.
+    createEffect(() => {
+      if (appState.activeId !== props.ws.id) return;
+      void refreshLoc();
+      const t = setInterval(() => void refreshLoc(), 2000);
+      onCleanup(() => clearInterval(t));
     });
 
     // Keep real keyboard focus in sync with the focus ring. When this pane becomes the
@@ -326,6 +366,16 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
               else if (e.key === "Escape") setEditing(false);
             }}
           />
+        </Show>
+        <Show when={cwd()}>
+          <span class="pane-loc">
+            {/* Leading U+200E (LRM): anchors the path as LTR so left-side ellipsis (direction:
+                rtl) doesn't fling the neutral "~/" to the right end. */}
+            <span class="pane-cwd" title={cwd() ?? ""}>{"\u200e" + prettyCwd(cwd()!)}</span>
+            <Show when={branch()}>
+              <span class="pane-branch" title={`git branch: ${branch()}`}>⎇ {branch()}</span>
+            </Show>
+          </span>
         </Show>
         <span class="pane-controls">
           <button title="Launch Claude here" onClick={launchClaude}>✦</button>

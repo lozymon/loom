@@ -639,9 +639,40 @@ body,
   width: 9ch;
 }
 
+/* Live location badge: cwd (left-truncated) + git branch, between the name and controls. */
+.pane-loc {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 8px;
+  overflow: hidden;
+  font-weight: 400;
+}
+
+.pane-cwd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Ellipsize from the left so the deepest folder (the part that matters) stays on screen. */
+  direction: rtl;
+  text-align: left;
+  color: var(--fg-muted);
+}
+
+.pane-branch {
+  flex: 0 0 auto;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 .pane-controls {
   display: flex;
   gap: 2px;
+  flex: 0 0 auto;
 }
 
 .pane-controls button {

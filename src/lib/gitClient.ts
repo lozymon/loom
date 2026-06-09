@@ -28,6 +28,10 @@ export interface GitStatus {
 export const gitStatus = (cwd: string): Promise<GitStatus> =>
   invoke<GitStatus>("git_status", { cwd });
 
+/** Just the current branch for `cwd` (see Rust `git_branch`); null outside a repo. */
+export const gitBranch = (cwd: string): Promise<string | null> =>
+  invoke<string | null>("git_branch", { cwd });
+
 export const gitDiff = (
   cwd: string,
   path: string,
