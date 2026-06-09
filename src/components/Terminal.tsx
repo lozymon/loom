@@ -238,6 +238,10 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       if (isModifierKey(e.key)) return true;
       const action = actionForKey(settings.keybindings, e.key);
       if (!action) return true;
+      // Stop the webview's native handling too. WebKitGTK treats Ctrl+Shift+V / Ctrl+Shift+C
+      // as clipboard shortcuts: without preventDefault it would *also* paste into the textarea
+      // (firing xterm's onData) on top of our pasteClipboard(), doubling the input.
+      e.preventDefault();
       ACTIONS[action]();
       return false;
     });
