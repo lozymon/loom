@@ -126,7 +126,15 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         term.focus();
       }
     } catch (e) {
-      // A cancelled selection or a missing screenshot tool both land here — log, don't disrupt.
+      // A cancelled selection or a missing screenshot tool both land here. A missing tool is
+      // otherwise invisible (it looks like a dead shortcut), so for that case type a harmless
+      // shell comment into the pane as an install hint; the user can run it (a no-op) or clear
+      // it. Cancellation stays silent. The marker substring is set in capture.rs.
+      const msg = String((e as { message?: string })?.message ?? e);
+      if (msg.includes("no screenshot tool") && handle !== null) {
+        await writePty(handle, "# Termhaus: screenshot tool not found — install flameshot or gnome-screenshot ");
+        term.focus();
+      }
       console.error("region capture failed", e);
     }
   }

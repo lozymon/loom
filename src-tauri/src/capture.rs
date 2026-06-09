@@ -3,9 +3,11 @@
 // that path into the focused pane (so a CLI agent like Claude Code can read the image). This
 // is an OS concern, so it lives in Rust (CLAUDE.md: OS/syscalls in Rust, UX/state in TS).
 //
-// Linux-first (X11/Wayland). Prefers flameshot (a region selector that streams raw PNG to
-// stdout, so we own the filename), falling back to gnome-screenshot's area mode. A user who
-// cancels the selection produces no file → we report it as a benign "cancelled" error.
+// Linux-first (X11/Wayland). Tries, in order: flameshot (a region selector that streams raw
+// PNG to stdout, so we own the filename) → gnome-screenshot's area mode → grim+slurp (the
+// wlroots-Wayland combo). A user who cancels the selection produces no file → we report it as
+// a benign "cancelled" error; if none of the tools is installed we return a "no screenshot
+// tool" error the frontend turns into an install hint.
 
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -55,11 +57,40 @@ pub fn capture_region() -> Result<String, String> {
             if !status.success() || !path.exists() {
                 return Err("capture cancelled".into());
             }
-            Ok(path.to_string_lossy().into_owned())
+            return Ok(path.to_string_lossy().into_owned());
         }
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            Err("no screenshot tool found — install flameshot or gnome-screenshot".into())
+        // Only fall through when gnome-screenshot isn't installed; surface other errors.
+        Err(e) if e.kind() != ErrorKind::NotFound => {
+            return Err(format!("failed to launch gnome-screenshot: {e}"));
         }
-        Err(e) => Err(format!("failed to launch gnome-screenshot: {e}")),
+        Err(_) => {}
     }
+
+    // grim + slurp: the wlroots-Wayland combo (Sway, Hyprland). `slurp` drags out a region
+    // geometry, `grim -g` crops to it and writes our file. Does not cover GNOME/KDE Wayland,
+    // which don't implement wlr-screencopy — those need gnome-screenshot/spectacle above.
+    match Command::new("slurp").output() {
+        Ok(sel) => {
+            if !sel.status.success() || sel.stdout.is_empty() {
+                return Err("capture cancelled".into());
+            }
+            let geom = String::from_utf8_lossy(&sel.stdout).trim().to_string();
+            match Command::new("grim").arg("-g").arg(&geom).arg(&path).status() {
+                Ok(status) if status.success() && path.exists() => {
+                    return Ok(path.to_string_lossy().into_owned());
+                }
+                Ok(_) => return Err("capture cancelled".into()),
+                Err(e) => return Err(format!("failed to launch grim: {e}")),
+            }
+        }
+        // slurp missing → no tool at all; fall through to the final error.
+        Err(e) if e.kind() != ErrorKind::NotFound => {
+            return Err(format!("failed to launch slurp: {e}"));
+        }
+        Err(_) => {}
+    }
+
+    // The marker substring "no screenshot tool" is matched by the frontend (Terminal.tsx) to
+    // show an install hint in the pane — keep it stable if you reword this.
+    Err("no screenshot tool found — install flameshot, gnome-screenshot, or grim+slurp".into())
 }
