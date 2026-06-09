@@ -39,12 +39,15 @@ export default function Settings(props: { onClose: () => void }) {
 
   // Esc closes the modal from anywhere (the panel itself isn't focus-trapped) — but not
   // while capturing a shortcut, where the capture handler swallows Esc to cancel instead.
+  // Capture phase: while a terminal has focus, xterm stops propagation of Escape (it sends
+  // \x1b to the PTY), so a bubble-phase window listener wouldn't fire until you click off the
+  // pane. The capture handler below (onCapture) runs first and short-circuits while binding.
   const onKey = (e: KeyboardEvent) => {
     if (capturing()) return;
     if (e.key === "Escape") props.onClose();
   };
-  onMount(() => window.addEventListener("keydown", onKey));
-  onCleanup(() => window.removeEventListener("keydown", onKey));
+  onMount(() => window.addEventListener("keydown", onKey, true));
+  onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
   // While capturing, grab the next Ctrl+Shift+<key> combo and rebind. Runs in the capture
   // phase + stops propagation so it pre-empts the modal's Esc-to-close and any pane handler.

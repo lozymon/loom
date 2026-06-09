@@ -3,7 +3,7 @@
 //  2. Layout — a grid-preset tile (1/2/4/6/8/10/12) → buildBalancedTree(n) on launch.
 //  3. Agents — optional per-pane launch command; "Open without AI" = all plain shells.
 
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createWorkspace, deletePreset, launchPreset, presets, recents } from "../stores/workspace";
 import { settings } from "../stores/settings";
@@ -42,6 +42,16 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     const p = presets().find((x) => x.id === id);
     if (p) { launchPreset(p); props.onClose(); }
   }
+
+  // Esc closes the wizard from anywhere (the panel isn't focus-trapped), matching Settings
+  // and GitPanel. Capture phase: while a terminal has focus, xterm stops propagation of
+  // Escape (it sends \x1b to the PTY), so a bubble-phase listener wouldn't fire until you
+  // click off the pane.
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") props.onClose();
+  };
+  onMount(() => window.addEventListener("keydown", onKey, true));
+  onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
   return (
     <div class="wizard-backdrop" onClick={() => props.onClose()}>

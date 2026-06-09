@@ -198,11 +198,14 @@ export default function GitPanel(props: { onClose: () => void }) {
 
   onMount(refresh);
 
+  // Capture phase: while a terminal has focus, xterm stops propagation of Escape (it sends
+  // \x1b to the PTY), so a bubble-phase window listener never fires until you click off the
+  // pane. Capturing intercepts Escape before xterm can swallow it.
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") props.onClose();
   };
-  onMount(() => window.addEventListener("keydown", onKey));
-  onCleanup(() => window.removeEventListener("keydown", onKey));
+  onMount(() => window.addEventListener("keydown", onKey, true));
+  onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
   const fileRow = (file: GitFile, stagedView: boolean) => {
     const { dir, base } = splitPath(file.path);
