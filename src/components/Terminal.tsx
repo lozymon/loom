@@ -229,6 +229,22 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       onCleanup(() => clearInterval(t));
     });
 
+    // Repaint when this workspace is shown again. Hidden workspaces are display:none'd, and the
+    // canvas renderer under WebKitGTK leaves a blank surface behind — so after a workspace
+    // switch the terminal looks black until a click forces a redraw. On becoming active, wait
+    // one frame for display:block to land (so the box has real dimensions), re-fit (it may have
+    // been resized while hidden), then force a full refresh.
+    createEffect(() => {
+      if (appState.activeId !== props.ws.id) return;
+      const raf = requestAnimationFrame(() => {
+        if (container.clientWidth === 0 || container.clientHeight === 0) return;
+        fit.fit();
+        if (handle !== null) void resizePty(handle, term.cols, term.rows);
+        term.refresh(0, term.rows - 1);
+      });
+      onCleanup(() => cancelAnimationFrame(raf));
+    });
+
     // Keep real keyboard focus in sync with the focus ring. When this pane becomes the
     // workspace's focused pane (e.g. via Ctrl+Shift+arrow nav, which only moves the store's
     // `focused`), pull DOM focus onto its xterm — otherwise typing and the *next* nav keypress
@@ -312,6 +328,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
       fit.fit();
       if (handle !== null) void resizePty(handle, term.cols, term.rows);
+      // Force a repaint too: a box going from hidden→shown (un-zoom, window restore) keeps a
+      // blank canvas under WebKitGTK until xterm redraws it.
+      term.refresh(0, term.rows - 1);
     };
     const ro = new ResizeObserver(() => {
       clearTimeout(settle);
