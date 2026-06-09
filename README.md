@@ -29,6 +29,26 @@ Generic first: a pane is just a real pseudo-terminal running *any* command — a
 - **Themes** — light and dark out of the box plus extra palettes (Midnight, Paper), switched from the rail and remembered across restarts. Each theme styles both the app chrome and the terminals; adding one is a CSS `[data-theme]` block + a registry entry (`src/lib/theme.ts`).
 - **Plain keys pass through** — Termhaus claims only the `Ctrl+Shift` namespace ([ADR-0005](docs/adr/0005-ctrl-shift-shortcut-namespace.md)); everything else (plain `Ctrl+C` → SIGINT, arrows, function keys, `tmux`/`vim` keys) reaches the pane untouched.
 
+## AI agents — bring your own CLI
+
+A pane is just a real terminal, so any agent that ships a **command-line tool** runs in Termhaus today with no integration work — launch it from the wizard's per-pane command, type it into a shell, or `th spawn` it. There's no standard API and Termhaus doesn't need one: it never parses pane output ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)), so a CLI agent is just a command.
+
+Known to work because they're terminal-native:
+
+| Agent | Command |
+|---|---|
+| Claude Code | `claude` |
+| OpenAI Codex CLI | `codex` |
+| Google Gemini CLI | `gemini` |
+| GitHub Copilot CLI | `copilot` (or `gh copilot`) |
+| Amazon Q Developer | `q chat` |
+| Aider (model-agnostic) | `aider` |
+| Cursor (headless) | `cursor-agent` |
+
+Run a fleet of them side by side, **broadcast** one prompt to all, and let one agent drive the others over the `th` control bus. When a pane is launched as one of these, its title bar shows a small **agent badge** so you can tell at a glance which terminal is running which assistant. (Derived from the pane's launch command — still no output parsing; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).) The wizard's Agents step has a quick-fill dropdown for the same list.
+
+**Not a fit:** editor-only assistants that live inside VS Code / JetBrains (the classic Copilot autocomplete, Cline, Continue, Windsurf) — they speak an editor-extension protocol, not a terminal, so there's no command to host. Raw HTTP model APIs likewise aren't supported directly; run a CLI that wraps them (e.g. Aider) instead of building a chat client into a pane.
+
 ## Stack
 
 | Layer | Choice |

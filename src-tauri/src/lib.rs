@@ -55,6 +55,11 @@ fn pty_busy(mgr: State<PtyManager>, id: u32) -> Result<Option<bool>, String> {
     pty::busy(&mgr, id)
 }
 
+#[tauri::command]
+fn pty_foreground(mgr: State<PtyManager>, id: u32) -> Result<Option<String>, String> {
+    pty::foreground(&mgr, id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pending = Arc::new(PendingReplies::new());
@@ -71,6 +76,7 @@ pub fn run() {
             pty_kill,
             pty_cwd,
             pty_busy,
+            pty_foreground,
             control::pane_cmd_reply,
             capture::capture_region,
             git::git_status,

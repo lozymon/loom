@@ -19,7 +19,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { homeDir } from "@tauri-apps/api/path";
 import "@xterm/xterm/css/xterm.css";
 
-import { spawnPty, writePty, resizePty, killPty, cwdPty, busyPty } from "../lib/ptyClient";
+import { spawnPty, writePty, resizePty, killPty, cwdPty, busyPty, foregroundPty } from "../lib/ptyClient";
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
@@ -28,6 +28,7 @@ import { activity, noteUnseen, noteBell, setBusy, seePane, forgetPane } from "..
 import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
 import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
+import { detectAgent } from "../lib/agents";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
   appState,
@@ -71,8 +72,15 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // Live shell location for the title bar: cwd (via /proc, ADR-0001's carve-out) + git branch.
   const [cwd, setCwd] = createSignal<string | null>(null);
   const [branch, setBranch] = createSignal<string | null>(null);
+  // The live foreground command in this pane (polled from /proc), or null at the prompt.
+  const [foreground, setForeground] = createSignal<string | null>(null);
 
   const spec = () => props.ws.panes[props.paneId];
+  // Which AI agent (if any) this pane is running — drives the title-bar badge. Prefer the live
+  // foreground process (catches `claude` launched via the ✦ button or typed by hand), and fall
+  // back to the launch command (covers the gap before the first /proc poll). Both are metadata,
+  // never pane output (opacity-safe; see agents.ts + ADR-0001).
+  const agent = () => detectAgent(foreground()) ?? detectAgent(spec()?.command);
   const isFocused = () => props.ws.focused === props.paneId;
   const inBroadcast = () => props.ws.broadcast.includes(props.paneId);
   /** Is the user actually looking at this pane right now? (active workspace + focused) */
@@ -108,6 +116,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         (code) => {
           handle = null;
           setBusy(props.paneId, null);
+          setForeground(null);
           term.write(`\r\n\x1b[2m[process exited: ${code}]\x1b[0m\r\n`);
           setDead(code);
         },
@@ -170,9 +179,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
-    if (handle === null) { setCwd(null); setBranch(null); setBusy(props.paneId, null); return; }
+    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); return; }
     // Busy state (running a command vs. at the prompt) — a cheap foreground-pgrp read.
     try { setBusy(props.paneId, await busyPty(handle)); } catch { /* leave last value */ }
+    // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.
+    try { setForeground(await foregroundPty(handle)); } catch { /* leave last value */ }
     let dir: string | null = null;
     try { dir = await cwdPty(handle); } catch { return; }
     setCwd(dir);
@@ -460,6 +471,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
             act()?.busy === true ? "Running a command" : "Idle"
           }
         />
+        <Show when={agent()}>
+          {(a) => (
+            <span
+              class="pane-agent"
+              style={{ "--agent-color": a().color }}
+              title={`Running ${a().label}`}
+            >
+              {a().icon}
+            </span>
+          )}
+        </Show>
         <Show
           when={editing()}
           fallback={

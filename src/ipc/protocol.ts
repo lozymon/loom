@@ -55,6 +55,7 @@ export const Cmd = {
   kill: "pty_kill",
   cwd: "pty_cwd",
   busy: "pty_busy",
+  foreground: "pty_foreground",
   /** Hand a relayed inter-pane request's answer back to Rust (ADR-0007). */
   paneCmdReply: "pane_cmd_reply",
 } as const;

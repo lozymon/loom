@@ -317,6 +317,54 @@ pub fn busy(_mgr: &PtyManager, _id: u32) -> Result<Option<bool>, String> {
     Ok(None)
 }
 
+/// The command line of the pane's foreground process group leader — what's actually running
+/// in the terminal right now (e.g. `claude`), regardless of how it was launched (wizard spec,
+/// the ✦ button, or typed by hand). Lets the frontend badge a pane by its live agent.
+///
+/// Same mechanism and opacity stance as `busy`: we read the foreground pgrp leader (kernel
+/// process state) and its `/proc/<pid>/cmdline` (argv, NUL-joined → space-joined) — process
+/// metadata, never pane output (ADR-0001 carve-out, same as `cwd`). Returns `None` when the
+/// shell itself is in the foreground (at the prompt, leader == shell pid → no command running)
+/// or when the leader/cmdline is unavailable.
+#[cfg(unix)]
+pub fn foreground(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
+    let panes = mgr.panes.lock().unwrap();
+    let Some(pane) = panes.get(&id) else {
+        return Ok(None);
+    };
+    let Some(pid) = pane.pid else {
+        return Ok(None);
+    };
+    let Some(leader) = pane.master.process_group_leader() else {
+        return Ok(None);
+    };
+    // At the prompt the shell is its own foreground leader — nothing is "running".
+    if leader == pid as i32 {
+        return Ok(None);
+    }
+    let raw = match std::fs::read(format!("/proc/{leader}/cmdline")) {
+        Ok(b) => b,
+        Err(_) => return Ok(None),
+    };
+    // cmdline is NUL-separated argv; join with spaces and trim the trailing NUL.
+    let cmd: String = String::from_utf8_lossy(&raw)
+        .split('\0')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if cmd.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(cmd))
+    }
+}
+
+/// Non-Unix stub: no `/proc`, so foreground detection is unavailable (see M7).
+#[cfg(not(unix))]
+pub fn foreground(_mgr: &PtyManager, _id: u32) -> Result<Option<String>, String> {
+    Ok(None)
+}
+
 /// Forward keystrokes (UTF-8) from the webview into the pane's PTY.
 pub fn write(mgr: &PtyManager, id: u32, data: &str) -> Result<(), String> {
     let mut panes = mgr.panes.lock().unwrap();

@@ -681,25 +681,27 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 24px;
-  padding: 0 6px;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px 0 8px;
   font: 11px ui-monospace, monospace;
   color: var(--fg-dim);
-  background: var(--title-bg);
+  background: linear-gradient(var(--title-bg), color-mix(in srgb, var(--title-bg) 92%, #000));
   border-bottom: 1px solid var(--border);
   user-select: none;
   flex: 0 0 auto;
+  transition: color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
 
 .pane.focused .pane-title {
   color: var(--fg);
   background: var(--surface-active);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 /* Drag handle: pick up the pane and drop it on another to swap their grid positions. */
 .pane-grip {
   flex: 0 0 auto;
-  margin-right: 4px;
   color: var(--fg-faint);
   cursor: grab;
   line-height: 1;
@@ -719,12 +721,18 @@ body,
   flex: 0 0 auto;
   width: 7px;
   height: 7px;
-  margin-right: 6px;
   border-radius: 50%;
   background: var(--border);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
-.pane-status.busy { background: #5fb96b; }
-.pane-status.unseen { background: var(--accent); }
+.pane-status.busy {
+  background: #5fb96b;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #5fb96b 25%, transparent);
+}
+.pane-status.unseen {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
 .pane-status.bell {
   background: #e0b85a;
   animation: th-pulse 1s ease-in-out infinite;
@@ -734,9 +742,30 @@ body,
   50% { opacity: 0.5; box-shadow: 0 0 0 3px #e0b85a00; }
 }
 
+/* AI-agent badge: a small coloured pill identifying the agent running in a pane. */
+.pane-agent {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--agent-color, var(--accent));
+  background: color-mix(in srgb, var(--agent-color, var(--accent)) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent-color, var(--accent)) 40%, transparent);
+}
+
 .pane-name {
+  flex: 0 0 auto;
   font-weight: 600;
   cursor: text;
+  letter-spacing: 0.01em;
 }
 
 .pane-name-edit {
@@ -757,7 +786,7 @@ body,
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin: 0 8px;
+  margin-left: 2px;
   overflow: hidden;
   font-weight: 400;
 }
@@ -782,24 +811,48 @@ body,
 
 .pane-controls {
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 1px;
   flex: 0 0 auto;
+  /* Controls fade back until you hover the title bar — keeps the bar calm at rest. */
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+
+.pane-title:hover .pane-controls,
+.pane.focused .pane-controls {
+  opacity: 1;
 }
 
 .pane-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   font: 12px ui-monospace, monospace;
   line-height: 1;
   color: var(--fg-muted);
   background: transparent;
   border: none;
-  border-radius: 3px;
-  padding: 2px 4px;
+  border-radius: 4px;
   cursor: pointer;
+  transition: color 0.1s ease, background 0.1s ease;
 }
 
 .pane-controls button:hover {
   color: var(--fg);
   background: var(--control-hover);
+}
+
+.pane-controls button:active {
+  transform: translateY(0.5px);
+}
+
+/* The close button (last control) turns red on hover — it's the one destructive action. */
+.pane-controls button:last-child:hover {
+  color: #fff;
+  background: #d9534f;
 }
 
 /* Terminal area fills the rest of the pane; positions the dead overlay. */

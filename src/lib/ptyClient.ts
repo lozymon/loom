@@ -88,3 +88,13 @@ export function cwdPty(handle: PtyHandle): Promise<string | null> {
 export function busyPty(handle: PtyHandle): Promise<boolean | null> {
   return invoke<boolean | null>(Cmd.busy, { id: handle });
 }
+
+/**
+ * The command line of the pane's live foreground process (e.g. `claude`), or null when the
+ * shell itself is at the prompt / it's unavailable. Read from the foreground process group's
+ * `/proc/<pid>/cmdline` — metadata, not pane output (ADR-0001 carve-out, like {@link cwdPty}).
+ * Used to badge a pane by the AI agent actually running in it, however it was launched.
+ */
+export function foregroundPty(handle: PtyHandle): Promise<string | null> {
+  return invoke<string | null>(Cmd.foreground, { id: handle });
+}

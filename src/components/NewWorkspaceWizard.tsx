@@ -7,6 +7,7 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createWorkspace, deletePreset, launchPreset, presets, recents } from "../stores/workspace";
 import { settings } from "../stores/settings";
+import { AGENTS } from "../lib/agents";
 
 const PRESETS = [1, 2, 4, 6, 8, 10, 12];
 
@@ -138,7 +139,21 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                       value={commands()[i()] ?? ""}
                       onInput={(e) => setCommands((c) => { const n = [...c]; n[i()] = e.currentTarget.value; return n; })}
                     />
-                    <button onClick={() => setCommands((c) => { const n = [...c]; n[i()] = "claude"; return n; })}>claude</button>
+                    <select
+                      class="wizard-agent"
+                      title="Quick-fill an AI agent command"
+                      value=""
+                      onChange={(e) => {
+                        const cmd = e.currentTarget.value;
+                        e.currentTarget.value = "";
+                        if (cmd) setCommands((c) => { const n = [...c]; n[i()] = cmd; return n; });
+                      }}
+                    >
+                      <option value="">+ agent</option>
+                      <For each={AGENTS}>
+                        {(a) => <option value={a.command}>{a.label}</option>}
+                      </For>
+                    </select>
                   </div>
                 )}
               </For>
