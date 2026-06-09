@@ -1,7 +1,15 @@
 name: CI
 
-# Lint, typecheck, and build Termhaus on Linux — the only supported target
+# Lint, typecheck, test, and build Termhaus on Linux — the only supported target
 # (the stack is locked to WebKitGTK; macOS/Windows are out of scope for now).
+#
+# Three independent jobs run in parallel for faster feedback:
+#   • frontend  — typecheck + unit tests (node only; no apt/Rust, so it's quick)
+#   • rust-lint — rustfmt + clippy
+#   • build     — full release build + .deb bundle
+# rust-lint and build each compile the Rust tree (clippy in the dev profile, the
+# bundle in release — they don't share artifacts anyway), so running them as
+# separate jobs costs a little extra runner time but roughly halves wall-clock.
 on:
   push:
     branches: [main]
@@ -16,8 +24,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  frontend:
+    name: Frontend (typecheck + tests)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+  rust-lint:
+    name: Rust lint (fmt + clippy)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # clippy compiles the Tauri app, which links WebKitGTK — so it needs the dev libs.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential curl wget file \
+            libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: rust-lint
+
+      - name: Rustfmt
+        working-directory: src-tauri
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
   build:
-    name: Lint, typecheck & build (Linux)
+    name: Build (.deb bundle)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -39,30 +103,15 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: build
 
       - name: Install npm dependencies
         run: npm ci
-
-      - name: Typecheck (frontend)
-        run: npx tsc --noEmit
-
-      - name: Unit tests (frontend)
-        run: npm test
-
-      - name: Rustfmt
-        working-directory: src-tauri
-        run: cargo fmt --all --check
-
-      - name: Clippy
-        working-directory: src-tauri
-        run: cargo clippy --all-targets --all-features -- -D warnings
 
       # Full release build + .deb bundle (also runs the Vite build via
       # beforeBuildCommand). Skips AppImage to avoid its build-time downloads.
