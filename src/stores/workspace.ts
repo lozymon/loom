@@ -10,7 +10,8 @@ import { batch, createEffect, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { LayoutNode, PaneId, PaneSpec, Workspace } from "../ipc/protocol";
 import { allocName, buildBalancedTree } from "../lib/grid";
-import { neighbor, type Dir, type Path } from "../lib/layout";
+import { matchesPattern } from "../lib/matching";
+import { neighbor, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
 import { countLive } from "../lib/paneRegistry";
 import { settings } from "./settings";
@@ -184,6 +185,14 @@ export function closePane(paneId: PaneId) {
   });
 }
 
+/** Swap two panes' grid positions (drag-to-rearrange). Only swaps within one workspace. */
+export function swapPanes(a: PaneId, b: PaneId) {
+  if (a === b) return;
+  const i = wsIdxByPane(a);
+  if (i < 0 || !(b in app.workspaces[i].panes)) return;
+  setApp("workspaces", i, "tree", (t) => swapLeaves(t, a, b));
+}
+
 export function setRatio(wsId: string, path: Path, ratio: number) {
   const i = wsIdxById(wsId);
   if (i < 0) return;
@@ -230,6 +239,37 @@ export function resolvePaneByName(name: string): { paneId: PaneId } | { error: s
   if (matches.length === 1) return { paneId: matches[0] };
   if (matches.length === 0) return { error: `no pane named "${name}"` };
   return { error: `"${name}" is ambiguous (${matches.length} panes share it)` };
+}
+
+/** A workspace looked up by display name, preferring the active one (`th broadcast --workspace`). */
+export function workspaceByName(name: string): WorkspaceUI | undefined {
+  const active = activeWorkspace();
+  if (active && active.name === name) return active;
+  return app.workspaces.find((w) => w.name === name);
+}
+
+/** Switch to a pane's workspace and focus it (used by `th focus` and the command palette). */
+export function revealPane(paneId: PaneId) {
+  const i = wsIdxByPane(paneId);
+  if (i < 0) return;
+  batch(() => {
+    setApp("activeId", app.workspaces[i].id);
+    setApp("workspaces", i, "focused", paneId);
+    setApp("workspaces", i, "zoomed", null);
+  });
+}
+
+/**
+ * Reveal a pane by name: switch to its workspace and focus it (`th focus`). Returns the pane's
+ * name on success. Resolution reuses {@link resolvePaneByName} (active-workspace-preferring).
+ */
+export function revealPaneByName(name: string): { name: string } | { error: string } {
+  const r = resolvePaneByName(name);
+  if ("error" in r) return r;
+  const i = wsIdxByPane(r.paneId);
+  if (i < 0) return { error: `no pane named "${name}"` };
+  revealPane(r.paneId);
+  return { name: app.workspaces[i].panes[r.paneId]?.title ?? name };
 }
 
 /**
@@ -328,6 +368,21 @@ export function toggleBroadcastTarget(paneId: PaneId) {
 export function clearBroadcastTargets() {
   const i = wsIdxById(app.activeId);
   if (i >= 0) setApp("workspaces", i, "broadcast", []);
+}
+
+/**
+ * Set the active workspace's broadcast subset to every pane whose name matches `pattern` (a
+ * glob like `Cl*` or a plain substring; see lib/matching). An empty pattern clears the subset
+ * (→ all live panes). Returns how many panes matched.
+ */
+export function setBroadcastByPattern(pattern: string): number {
+  const i = wsIdxById(app.activeId);
+  if (i < 0) return 0;
+  const ws = app.workspaces[i];
+  if (!pattern.trim()) { setApp("workspaces", i, "broadcast", []); return leafIds(ws.tree).length; }
+  const ids = leafIds(ws.tree).filter((id) => matchesPattern(ws.panes[id]?.title ?? "", pattern));
+  setApp("workspaces", i, "broadcast", ids);
+  return ids.length;
 }
 
 /**

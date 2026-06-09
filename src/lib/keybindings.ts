@@ -17,6 +17,7 @@ export type ActionId =
   | "new-workspace"
   | "prev-workspace"
   | "next-workspace"
+  | "command-palette"
   | "source-control"
   | "copy"
   | "paste"
@@ -28,7 +29,7 @@ export interface ActionDef {
   /** Human label shown in the Settings list. */
   label: string;
   /** Section the action is grouped under in the Settings list. */
-  group: "Focus" | "Panes" | "Workspaces" | "Clipboard & search" | "Capture" | "Git";
+  group: "Focus" | "Panes" | "Workspaces" | "Clipboard & search" | "Capture" | "Git" | "General";
   /** Default final key (lowercased `KeyboardEvent.key`). */
   defaultKey: string;
 }
@@ -46,6 +47,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "new-workspace", label: "New workspace", group: "Workspaces", defaultKey: "t" },
   { id: "prev-workspace", label: "Previous workspace", group: "Workspaces", defaultKey: "pageup" },
   { id: "next-workspace", label: "Next workspace", group: "Workspaces", defaultKey: "pagedown" },
+  { id: "command-palette", label: "Command palette", group: "General", defaultKey: "p" },
   { id: "copy", label: "Copy selection", group: "Clipboard & search", defaultKey: "c" },
   { id: "paste", label: "Paste", group: "Clipboard & search", defaultKey: "v" },
   { id: "search", label: "Find in scrollback", group: "Clipboard & search", defaultKey: "f" },

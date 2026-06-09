@@ -7,8 +7,16 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Cmd, PANE_CMD_EVENT, type ControlEvent, type ControlRequest, type ControlResponse } from "../ipc/protocol";
-import { countLive, writeToPanes } from "./paneRegistry";
-import { listPanes, resolvePaneByName, spawnPane } from "../stores/workspace";
+import { countLive, readPane, writeToPanes } from "./paneRegistry";
+import {
+  activeWorkspace,
+  broadcastTargets,
+  listPanes,
+  resolvePaneByName,
+  revealPaneByName,
+  spawnPane,
+  workspaceByName,
+} from "../stores/workspace";
 
 /** Subscribe to relayed requests. Call once at startup; returns the unlisten fn. */
 export async function initPaneControl(): Promise<() => void> {
@@ -51,6 +59,29 @@ function dispatch(req: ControlRequest): ControlResponse {
       const command = (req.command ?? "").trim();
       if (!command) return { ok: false, error: "spawn needs a command" };
       const r = spawnPane({ title: req.name, command, cwd: req.cwd });
+      if ("error" in r) return { ok: false, error: r.error };
+      return { ok: true, data: { name: r.name } };
+    }
+
+    case "read": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      const lines = Math.max(1, Math.min(req.lines ?? 50, 2000));
+      const text = readPane(r.paneId, lines);
+      if (text === null) return { ok: false, error: `pane "${req.target}" is not available` };
+      return { ok: true, data: { text } };
+    }
+
+    case "broadcast": {
+      const ws = req.workspace ? workspaceByName(req.workspace) : activeWorkspace();
+      if (!ws) return { ok: false, error: `no workspace named "${req.workspace}"` };
+      const text = (req.text ?? "") + (req.enter === false ? "" : "\r");
+      const n = writeToPanes(broadcastTargets(ws), text);
+      return { ok: true, data: { count: n } };
+    }
+
+    case "focus": {
+      const r = revealPaneByName(req.target);
       if ("error" in r) return { ok: false, error: r.error };
       return { ok: true, data: { name: r.name } };
     }

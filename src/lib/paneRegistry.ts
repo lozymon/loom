@@ -15,6 +15,8 @@ export interface PaneEntry {
   isLive: () => boolean;
   /** The shell's live working directory, or null if dead/unavailable (Source Control). */
   cwd: () => Promise<string | null>;
+  /** The last `lines` rows of the pane's scrollback as plain text (`th read`). */
+  read: (lines: number) => string;
 }
 
 const registry = new Map<PaneId, PaneEntry>();
@@ -41,6 +43,12 @@ export function countLive(ids: Iterable<PaneId>): number {
 export function paneCwd(id: PaneId): Promise<string | null> {
   const entry = registry.get(id);
   return entry ? entry.cwd() : Promise.resolve(null);
+}
+
+/** The last `lines` rows of pane `id`'s scrollback, or null if it isn't registered. */
+export function readPane(id: PaneId, lines: number): string | null {
+  const entry = registry.get(id);
+  return entry ? entry.read(lines) : null;
 }
 
 /** Write `data` to every live pane in `ids`; returns how many actually received it. */

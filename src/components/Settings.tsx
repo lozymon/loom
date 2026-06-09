@@ -256,6 +256,35 @@ export default function Settings(props: { onClose: () => void }) {
               />
               <span class="settings-label">Broadcast presses Enter <span class="muted">— append a newline so the message runs</span></span>
             </label>
+            <label class="settings-row">
+              <span class="settings-label">Broadcast stagger <span class="muted">— delay between panes (0 = all at once)</span></span>
+              <span class="settings-range">
+                <input
+                  class="settings-input narrow"
+                  type="number"
+                  min="0"
+                  max="10000"
+                  step="50"
+                  value={settings.broadcastStaggerMs}
+                  onChange={(e) => setSetting("broadcastStaggerMs", Math.max(0, e.currentTarget.valueAsNumber || 0))}
+                />
+                <span class="settings-val">ms</span>
+              </span>
+            </label>
+          </section>
+
+          {/* ---- Session logging ---- */}
+          <section class="settings-section">
+            <h3>Session logging</h3>
+            <label class="settings-row toggle">
+              <input
+                type="checkbox"
+                checked={settings.sessionLogging}
+                onChange={(e) => setSetting("sessionLogging", e.currentTarget.checked)}
+              />
+              <span class="settings-label">Log pane output to disk <span class="muted">— append each pane's raw output under the app's logs/ folder</span></span>
+            </label>
+            <p class="settings-hint muted">Applies to terminals you open from now on. Useful for reviewing what a fleet of agents did; files can grow large.</p>
           </section>
           </Show>
 

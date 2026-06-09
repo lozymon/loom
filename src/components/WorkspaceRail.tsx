@@ -2,8 +2,9 @@
 // + close ✕), the active one highlighted; a + at the bottom opens the new-workspace flow.
 // Switching keeps hidden workspaces' PTYs alive; closing removes a workspace (PTYs die).
 
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { appState, paneCount, switchWorkspace, closeWorkspace, saveCurrentAsPreset } from "../stores/workspace";
+import { anyAttention } from "../stores/activity";
 
 export default function WorkspaceRail(props: { onNew: () => void; onSettings: () => void; onGit: () => void }) {
   return (
@@ -17,6 +18,11 @@ export default function WorkspaceRail(props: { onNew: () => void; onSettings: ()
               onClick={() => switchWorkspace(ws.id)}
               title={ws.cwd || ws.name}
             >
+              {/* Attention dot for hidden workspaces — a pane there rang the bell or produced
+                  output you haven't seen. The active workspace shows per-pane dots instead. */}
+              <Show when={ws.id !== appState.activeId && anyAttention(Object.keys(ws.panes).map(Number))}>
+                <span class="rail-attn" title="Activity in this workspace" />
+              </Show>
               <span class="rail-name">{ws.name}</span>
               <span class="rail-badge">{paneCount(ws)}</span>
               <button

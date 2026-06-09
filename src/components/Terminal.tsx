@@ -19,10 +19,12 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { homeDir } from "@tauri-apps/api/path";
 import "@xterm/xterm/css/xterm.css";
 
-import { spawnPty, writePty, resizePty, killPty, cwdPty } from "../lib/ptyClient";
+import { spawnPty, writePty, resizePty, killPty, cwdPty, busyPty } from "../lib/ptyClient";
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
+import { sessionLogPath } from "../lib/sessionLog";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
+import { activity, noteUnseen, noteBell, setBusy, seePane, forgetPane } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
 import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
@@ -37,6 +39,7 @@ import {
   renamePane,
   toggleBroadcastTarget,
   switchWorkspaceRelative,
+  swapPanes,
   type WorkspaceUI,
 } from "../stores/workspace";
 
@@ -64,6 +67,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const [editing, setEditing] = createSignal(false);
   const [finding, setFinding] = createSignal(false);
   const [query, setQuery] = createSignal("");
+  const [dragOver, setDragOver] = createSignal(false);
   // Live shell location for the title bar: cwd (via /proc, ADR-0001's carve-out) + git branch.
   const [cwd, setCwd] = createSignal<string | null>(null);
   const [branch, setBranch] = createSignal<string | null>(null);
@@ -71,11 +75,18 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const spec = () => props.ws.panes[props.paneId];
   const isFocused = () => props.ws.focused === props.paneId;
   const inBroadcast = () => props.ws.broadcast.includes(props.paneId);
+  /** Is the user actually looking at this pane right now? (active workspace + focused) */
+  const looking = () => appState.activeId === props.ws.id && isFocused();
+  const act = () => activity[props.paneId];
 
   /** Spawn a fresh PTY and bind it to this pane's xterm. Used for first run and respawn. */
   async function start() {
     if (handle !== null) return;
     setDead(null);
+    // Resolve the opt-in session-log path (same file across respawns; null if logging off).
+    const logPath = settings.sessionLogging
+      ? (await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId)) ?? undefined
+      : undefined;
     try {
       handle = await spawnPty(
         {
@@ -86,10 +97,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
           shell: settings.defaultShell || undefined,
           name: spec()?.title,
+          logPath,
         },
-        (bytes) => term.write(bytes),
+        (bytes) => {
+          term.write(bytes);
+          // Output in a pane you're not looking at → an "unseen activity" signal (ADR-0001:
+          // we react to the *fact* of output, never its content).
+          if (!looking()) noteUnseen(props.paneId);
+        },
         (code) => {
           handle = null;
+          setBusy(props.paneId, null);
           term.write(`\r\n\x1b[2m[process exited: ${code}]\x1b[0m\r\n`);
           setDead(code);
         },
@@ -152,7 +170,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
-    if (handle === null) { setCwd(null); setBranch(null); return; }
+    if (handle === null) { setCwd(null); setBranch(null); setBusy(props.paneId, null); return; }
+    // Busy state (running a command vs. at the prompt) — a cheap foreground-pgrp read.
+    try { setBusy(props.paneId, await busyPty(handle)); } catch { /* leave last value */ }
     let dir: string | null = null;
     try { dir = await cwdPty(handle); } catch { return; }
     setCwd(dir);
@@ -178,6 +198,23 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   }
   function findNext() { if (query()) search.findNext(query(), SEARCH_OPTS); }
   function findPrev() { if (query()) search.findPrevious(query(), SEARCH_OPTS); }
+
+  // ---- Scrollback read (th read) -----------------------------------------------------
+  // Return the last `lines` rows of this pane's buffer as plain text. Only reached on an
+  // explicit inbound `th read` request (ADR-0007), never to drive Termhaus's own UI.
+  function readScrollback(lines: number): string {
+    const buf = term.buffer.active;
+    const total = buf.length; // scrollback + viewport rows
+    const want = Math.max(1, Math.min(lines, total));
+    const out: string[] = [];
+    for (let i = total - want; i < total; i++) {
+      const line = buf.getLine(i);
+      out.push(line ? line.translateToString(true) : "");
+    }
+    // Drop trailing blank lines (the empty viewport below the prompt) for a tidy capture.
+    while (out.length > 1 && out[out.length - 1] === "") out.pop();
+    return out.join("\n");
+  }
 
   onMount(async () => {
     term = new Terminal({
@@ -264,6 +301,14 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       }
     });
 
+    // The terminal bell (BEL) is an attention signal — agents/builds often ring on
+    // done/needs-input. Note it unless you're already looking at this pane.
+    term.onBell(() => { if (!looking()) noteBell(props.paneId); });
+
+    // Clear a pane's sticky unseen/bell signals the moment you look at it (focus it in the
+    // active workspace). Separate from the focus-pull effect so it isn't gated on editing/find.
+    createEffect(() => { if (looking()) seePane(props.paneId); });
+
     // Copy-on-select (optional): mirror any selection straight to the OS clipboard.
     term.onSelectionChange(() => {
       if (!settings.copyOnSelect) return;
@@ -289,6 +334,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "close-pane": () => closePane(props.paneId),
       "toggle-zoom": () => toggleZoom(props.paneId),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
+      "command-palette": () => window.dispatchEvent(new CustomEvent("termhaus:command-palette")),
       "source-control": () => window.dispatchEvent(new CustomEvent("termhaus:source-control")),
       "prev-workspace": () => switchWorkspaceRelative(-1),
       "next-workspace": () => switchWorkspaceRelative(1),
@@ -321,6 +367,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       write: (data) => { if (handle !== null) void writePty(handle, data); },
       isLive: () => handle !== null,
       cwd: () => (handle !== null ? cwdPty(handle) : Promise.resolve(null)),
+      read: (lines) => readScrollback(lines),
     });
 
     // Refit + tell the PTY whenever the box resizes (split, drag, zoom, window). Skip when
@@ -350,6 +397,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       clearTimeout(settle);
       ro.disconnect();
       unregisterPane(props.paneId);
+      forgetPane(props.paneId);
       if (handle !== null) void killPty(handle);
       term.dispose();
     });
@@ -360,8 +408,20 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   return (
     <div
       class="pane"
-      classList={{ focused: isFocused(), "bcast-target": appState.broadcastSelecting && inBroadcast() }}
+      classList={{
+        focused: isFocused(),
+        "bcast-target": appState.broadcastSelecting && inBroadcast(),
+        "drag-over": dragOver(),
+      }}
       onPointerDown={() => focusPane(props.paneId)}
+      onDragOver={(e) => { e.preventDefault(); if (!dragOver()) setDragOver(true); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const src = Number(e.dataTransfer?.getData("text/plain"));
+        if (src) swapPanes(src, props.paneId);
+      }}
     >
       <div class="pane-title">
         <Show when={appState.broadcastSelecting}>
@@ -375,6 +435,31 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
             {inBroadcast() ? "◉" : "○"}
           </button>
         </Show>
+        <span
+          class="pane-grip"
+          title="Drag to swap this pane with another"
+          draggable={true}
+          onPointerDown={(e) => e.stopPropagation()}
+          onDragStart={(e) => {
+            e.dataTransfer?.setData("text/plain", String(props.paneId));
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+          }}
+        >
+          ⠿
+        </span>
+        <span
+          class="pane-status"
+          classList={{
+            bell: act()?.bell ?? false,
+            unseen: !(act()?.bell ?? false) && (act()?.unseen ?? false),
+            busy: !(act()?.bell ?? false) && !(act()?.unseen ?? false) && act()?.busy === true,
+          }}
+          title={
+            act()?.bell ? "Bell rang" :
+            act()?.unseen ? "New output" :
+            act()?.busy === true ? "Running a command" : "Idle"
+          }
+        />
         <Show
           when={editing()}
           fallback={

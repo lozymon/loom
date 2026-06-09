@@ -231,6 +231,15 @@ body,
   white-space: nowrap;
 }
 
+/* Attention dot on a hidden workspace: a pane there has unseen output or rang the bell. */
+.rail-attn {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .rail-badge {
   font-size: 10px;
   color: var(--fg-muted);
@@ -350,6 +359,70 @@ body,
 .bcast-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Subset-by-name filter, shown in Targets select-mode. */
+.bcast-pattern {
+  flex: 0 0 auto;
+  width: 12ch;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--broadcast);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.bcast-pattern:focus { outline: none; border-color: var(--broadcast-bright); }
+
+/* Snippets menu (canned prompts). */
+.bcast-snip { position: relative; flex: 0 0 auto; }
+.bcast-snip-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px var(--shadow);
+  padding: 4px;
+  z-index: 40;
+}
+.bcast-snip-save {
+  width: 100%;
+  text-align: left;
+  margin-bottom: 4px;
+}
+.bcast-snip-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 5px;
+}
+.bcast-snip-item:hover { background: var(--surface-hover); }
+.bcast-snip-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--fg-dim);
+}
+.bcast-snip-del {
+  flex: 0 0 auto;
+  padding: 2px 6px !important;
+  color: var(--fg-faint);
+  background: transparent !important;
+  border: none !important;
+}
+.bcast-snip-empty {
+  padding: 8px;
+  text-align: center;
+  color: var(--fg-muted);
 }
 
 .bcast button {
@@ -621,6 +694,44 @@ body,
 .pane.focused .pane-title {
   color: var(--fg);
   background: var(--surface-active);
+}
+
+/* Drag handle: pick up the pane and drop it on another to swap their grid positions. */
+.pane-grip {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--fg-faint);
+  cursor: grab;
+  line-height: 1;
+}
+.pane-grip:hover { color: var(--fg); }
+.pane-grip:active { cursor: grabbing; }
+
+/* Drop target highlight while a pane is being dragged over this one. */
+.pane.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+/* Attention status dot, left of the pane name. Idle = faint; busy = green; unseen output =
+   blue; bell = amber pulse. Precedence (bell > unseen > busy) is decided in the component. */
+.pane-status {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.pane-status.busy { background: #5fb96b; }
+.pane-status.unseen { background: var(--accent); }
+.pane-status.bell {
+  background: #e0b85a;
+  animation: th-pulse 1s ease-in-out infinite;
+}
+@keyframes th-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 #e0b85a88; }
+  50% { opacity: 0.5; box-shadow: 0 0 0 3px #e0b85a00; }
 }
 
 .pane-name {
@@ -1457,4 +1568,97 @@ body,
   font-size: 11px;
   color: var(--fg-muted);
   white-space: nowrap;
+}
+
+/* ---- Command palette (Ctrl+Shift+P) ---- */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  z-index: 70;
+}
+
+.palette {
+  width: 560px;
+  max-width: 92vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px var(--shadow);
+  overflow: hidden;
+}
+
+.palette-input {
+  font: 14px ui-monospace, monospace;
+  color: var(--fg);
+  background: var(--bg);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  outline: none;
+}
+
+.palette-list {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: 13px ui-monospace, monospace;
+  color: var(--fg-dim);
+}
+
+.palette-item.sel {
+  background: var(--surface-active);
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.palette-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-hint {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.palette-key {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--fg-muted);
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.palette-item.sel .palette-key {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.palette-empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--fg-muted);
+  font: 13px ui-monospace, monospace;
 }

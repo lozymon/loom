@@ -53,6 +53,9 @@ jobs:
       - name: Typecheck (frontend)
         run: npx tsc --noEmit
 
+      - name: Unit tests (frontend)
+        run: npm test
+
       - name: Rustfmt
         working-directory: src-tauri
         run: cargo fmt --all --check

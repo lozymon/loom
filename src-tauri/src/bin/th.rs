@@ -7,6 +7,9 @@
 //!   th send Cleo --no-enter ls       # type without the trailing newline
 //!   th send Cleo                     # no text → reads stdin (pipe-friendly)
 //!   th spawn --name Cleo --cwd /repo claude   # open a new pane running `claude`
+//!   th read Cleo -n 100              # capture Cleo's last 100 scrollback lines
+//!   th broadcast "run the tests"     # send to every live pane in the active workspace
+//!   th focus Cleo                    # switch to Cleo's workspace and focus it
 //!
 //! Pure std + serde_json (already a workspace dep): no protocol logic lives here or in Rust —
 //! the request is forwarded verbatim to the webview, which owns routing (src/ipc/protocol.ts).
@@ -114,8 +117,68 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(obj)
         }
 
+        "read" => {
+            // th read <pane> [-n LINES]   — capture the tail of a pane's scrollback.
+            let mut lines: Option<u64> = None;
+            let mut positional: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "-n" | "--lines" => {
+                        i += 1;
+                        let v = args.get(i).ok_or("-n needs a value")?;
+                        lines = Some(v.parse().map_err(|_| format!("bad line count '{v}'"))?);
+                    }
+                    _ => positional.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            if positional.is_empty() {
+                return Err("usage: th read <pane> [-n LINES]".into());
+            }
+            let mut obj = json!({ "op": "read", "target": positional.remove(0) });
+            if let Some(n) = lines {
+                obj["lines"] = json!(n);
+            }
+            Ok(obj)
+        }
+
+        "broadcast" => {
+            // th broadcast [--workspace W] [--no-enter] <text...>   (no text → read stdin)
+            let mut enter = true;
+            let mut workspace: Option<String> = None;
+            let mut positional: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--no-enter" => enter = false,
+                    "--workspace" | "-w" => {
+                        i += 1;
+                        workspace = Some(args.get(i).cloned().ok_or("--workspace needs a value")?);
+                    }
+                    _ => positional.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            let text = if positional.is_empty() {
+                read_stdin()?
+            } else {
+                positional.join(" ")
+            };
+            let mut obj = json!({ "op": "broadcast", "text": text, "enter": enter });
+            if let Some(w) = workspace {
+                obj["workspace"] = json!(w);
+            }
+            Ok(obj)
+        }
+
+        "focus" => {
+            let target = args.get(1).ok_or("usage: th focus <pane>")?;
+            Ok(json!({ "op": "focus", "target": target }))
+        }
+
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus)"
         )),
     }
 }
@@ -175,6 +238,27 @@ fn handle_response(op: &str, resp: &Value) {
                 .unwrap_or("?");
             println!("spawned pane '{name}'");
         }
+        "read" => {
+            let text = data
+                .and_then(|d| d.get("text"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            println!("{text}");
+        }
+        "broadcast" => {
+            let n = data
+                .and_then(|d| d.get("count"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            println!("sent to {n} pane{}", if n == 1 { "" } else { "s" });
+        }
+        "focus" => {
+            let name = data
+                .and_then(|d| d.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            println!("focused pane '{name}'");
+        }
         _ => {}
     }
 }
@@ -204,6 +288,9 @@ fn usage() {
          usage:\n\
         \x20 th list\n\
         \x20 th send <pane> <text...> [--no-enter]\n\
-        \x20 th spawn [--name N] [--cwd D] <command...>"
+        \x20 th spawn [--name N] [--cwd D] <command...>\n\
+        \x20 th read <pane> [-n LINES]\n\
+        \x20 th broadcast [--workspace W] [--no-enter] <text...>\n\
+        \x20 th focus <pane>"
     );
 }

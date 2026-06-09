@@ -10,6 +10,7 @@
 //! If base64 is the bottleneck, the next step is raw-byte channels / a WebSocket (ADR-0003).
 
 use std::collections::HashMap;
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -90,6 +91,7 @@ pub fn spawn(
     cwd: Option<String>,
     shell: Option<String>,
     name: Option<String>,
+    log_path: Option<String>,
     on_output: Channel<String>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
@@ -187,6 +189,26 @@ pub fn spawn(
         }
     });
 
+    // Optional session log (opt-in, per-pane): append the raw PTY output to a file as it
+    // streams. This is product-driven (the frontend decides the path when logging is on) but
+    // the *writing* is an OS concern, so it rides the flusher thread alongside the IPC send.
+    // We tee the un-encoded bytes — the log is the verbatim terminal stream, escape codes and
+    // all (matching what xterm received), never the base64 frames.
+    let mut log = log_path
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+        .and_then(
+            |p| match OpenOptions::new().create(true).append(true).open(p) {
+                Ok(f) => Some(std::io::BufWriter::new(f)),
+                Err(e) => {
+                    eprintln!(
+                        "termhaus: session log unavailable at {p} ({e}); logging off for this pane"
+                    );
+                    None
+                }
+            },
+        );
+
     // Flusher thread: coalesce into one frame and emit at most once per FLUSH_INTERVAL.
     // The frame-rate cap is what keeps WebKitGTK alive under a flood — without it we'd
     // post to the IPC as fast as base64 runs and balloon the main process. acc is capped
@@ -208,6 +230,10 @@ pub fn spawn(
                     Ok(chunk) => acc.extend_from_slice(&chunk),
                     Err(_) => break,
                 }
+            }
+            if let Some(w) = log.as_mut() {
+                let _ = w.write_all(&acc);
+                let _ = w.flush();
             }
             let _ = on_output.send(engine.encode(&acc));
             acc.clear();
@@ -260,6 +286,34 @@ pub fn cwd(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
 /// Non-Unix stub: no `/proc`, so the panel falls back to the workspace folder (see M7).
 #[cfg(not(unix))]
 pub fn cwd(_mgr: &PtyManager, _id: u32) -> Result<Option<String>, String> {
+    Ok(None)
+}
+
+/// Whether a pane is "busy" — running a foreground command rather than sitting at the shell
+/// prompt. We read the PTY's foreground process group (`tcgetpgrp` on the master, via
+/// portable-pty) and compare it to the shell's own pid: at the prompt the shell *is* the
+/// foreground group leader, so a different leader means some child command holds the terminal.
+/// This is a metadata signal (kernel process state), never pane output — it stays inside
+/// ADR-0001's opacity rule, the same carve-out as `cwd`. `None` when the answer is unknown
+/// (pid/leader unavailable, e.g. the child just exited) so the UI shows no busy state.
+#[cfg(unix)]
+pub fn busy(mgr: &PtyManager, id: u32) -> Result<Option<bool>, String> {
+    let panes = mgr.panes.lock().unwrap();
+    let Some(pane) = panes.get(&id) else {
+        return Ok(None);
+    };
+    let Some(pid) = pane.pid else {
+        return Ok(None);
+    };
+    match pane.master.process_group_leader() {
+        Some(leader) => Ok(Some(leader != pid as i32)),
+        None => Ok(None),
+    }
+}
+
+/// Non-Unix stub: no foreground-process-group query, so panes never report busy (see M7).
+#[cfg(not(unix))]
+pub fn busy(_mgr: &PtyManager, _id: u32) -> Result<Option<bool>, String> {
     Ok(None)
 }
 

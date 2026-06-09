@@ -13,6 +13,7 @@ import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
 import BroadcastBar from "./components/BroadcastBar";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
+import CommandPalette from "./components/CommandPalette";
 import { appState, init, startPersistence, flushPersistence } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings } from "./stores/settings";
@@ -23,6 +24,7 @@ export default function App() {
   const [wizardOpen, setWizardOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [gitOpen, setGitOpen] = createSignal(false);
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
 
   onMount(async () => {
@@ -45,6 +47,11 @@ export default function App() {
   const openGit = () => setGitOpen(true);
   window.addEventListener("termhaus:source-control", openGit);
   onCleanup(() => window.removeEventListener("termhaus:source-control", openGit));
+
+  // Ctrl+Shift+P opens the command palette (toggles so a second press closes it).
+  const openPalette = () => setPaletteOpen((v) => !v);
+  window.addEventListener("termhaus:command-palette", openPalette);
+  onCleanup(() => window.removeEventListener("termhaus:command-palette", openPalette));
 
   // Flush any debounced state, then close. preventDefault() must run synchronously so the
   // window waits for us; we destroy it ourselves once the final save resolves.
@@ -85,6 +92,14 @@ export default function App() {
       </Show>
       <Show when={gitOpen()}>
         <GitPanel onClose={() => setGitOpen(false)} />
+      </Show>
+      <Show when={paletteOpen()}>
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          onNewWorkspace={() => setWizardOpen(true)}
+          onSettings={() => setSettingsOpen(true)}
+          onGit={() => setGitOpen(true)}
+        />
       </Show>
     </div>
   );

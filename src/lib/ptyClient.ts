@@ -30,6 +30,8 @@ export interface SpawnOpts {
   shell?: string;
   /** Pane display name, exported to the child as `TERMHAUS_PANE` (ADR-0007). */
   name?: string;
+  /** Absolute file path to append this pane's raw output to (opt-in session logging). */
+  logPath?: string;
 }
 
 /**
@@ -52,6 +54,7 @@ export async function spawnPty(
     cwd: opts.cwd ?? null,
     shell: opts.shell ?? null,
     name: opts.name ?? null,
+    logPath: opts.logPath ?? null,
     onOutput: output,
     onExit: exit,
   });
@@ -75,4 +78,13 @@ export function killPty(handle: PtyHandle): Promise<void> {
 /** The shell's live working directory (`/proc/<pid>/cwd`), or null if unavailable. */
 export function cwdPty(handle: PtyHandle): Promise<string | null> {
   return invoke<string | null>(Cmd.cwd, { id: handle });
+}
+
+/**
+ * Whether the pane is running a foreground command (true) vs sitting at the shell prompt
+ * (false); null when unknown. Read from the PTY's foreground process group — metadata, not
+ * pane output (ADR-0001 carve-out, same as {@link cwdPty}).
+ */
+export function busyPty(handle: PtyHandle): Promise<boolean | null> {
+  return invoke<boolean | null>(Cmd.busy, { id: handle });
 }

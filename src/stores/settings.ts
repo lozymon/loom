@@ -36,6 +36,13 @@ export interface Settings {
   // ---- Broadcast ----
   /** Append Enter (carriage return) to each broadcast message so it runs immediately. */
   broadcastNewline: boolean;
+  /** Saved broadcast snippets for one-click re-send. */
+  broadcastSnippets: string[];
+  /** Delay (ms) between panes when broadcasting; 0 = all at once (no stagger). */
+  broadcastStaggerMs: number;
+  // ---- Session logging ----
+  /** Append each pane's raw output to a per-pane file under <config>/logs/ (opt-in). */
+  sessionLogging: boolean;
   // ---- Keyboard ----
   /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */
   keybindings: Keybindings;
@@ -53,6 +60,9 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultCwd: "",
   confirmClose: true,
   broadcastNewline: true,
+  broadcastSnippets: [],
+  broadcastStaggerMs: 0,
+  sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
 };
 
@@ -69,6 +79,19 @@ function persist() {
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
   setStore(key, value);
   persist();
+}
+
+/** Save a broadcast snippet (trimmed, de-duplicated, newest first, capped at 24). */
+export function addBroadcastSnippet(text: string) {
+  const t = text.trim();
+  if (!t) return;
+  const next = [t, ...settings.broadcastSnippets.filter((s) => s !== t)].slice(0, 24);
+  setSetting("broadcastSnippets", next);
+}
+
+/** Remove a saved broadcast snippet. */
+export function removeBroadcastSnippet(text: string) {
+  setSetting("broadcastSnippets", settings.broadcastSnippets.filter((s) => s !== text));
 }
 
 /** Restore every setting to its default and persist. */

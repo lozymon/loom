@@ -54,6 +54,7 @@ export const Cmd = {
   resize: "pty_resize",
   kill: "pty_kill",
   cwd: "pty_cwd",
+  busy: "pty_busy",
   /** Hand a relayed inter-pane request's answer back to Rust (ADR-0007). */
   paneCmdReply: "pane_cmd_reply",
 } as const;
@@ -77,7 +78,15 @@ export interface ControlEvent {
 export type ControlRequest =
   | { op: "list" }
   | { op: "send"; target: string; text: string; enter?: boolean }
-  | { op: "spawn"; command: string; name?: string; cwd?: string };
+  | { op: "spawn"; command: string; name?: string; cwd?: string }
+  // Read the tail of a pane's scrollback (so an agent can consume another pane's output). An
+  // explicit, requested inbound read — distinct from ADR-0001's ban on Termhaus itself parsing
+  // pane output for product logic; nothing here drives the UI off the content.
+  | { op: "read"; target: string; lines?: number }
+  // Broadcast text to every live pane in a workspace (the active one, or one named explicitly).
+  | { op: "broadcast"; text: string; enter?: boolean; workspace?: string }
+  // Reveal + focus a pane by name (switching to its workspace).
+  | { op: "focus"; target: string };
 
 /** One pane in a `list` response. */
 export interface PaneInfo {

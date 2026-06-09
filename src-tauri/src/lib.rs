@@ -21,11 +21,12 @@ fn pty_spawn(
     cwd: Option<String>,
     shell: Option<String>,
     name: Option<String>,
+    log_path: Option<String>,
     on_output: Channel<String>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
     pty::spawn(
-        &mgr, cols, rows, command, cwd, shell, name, on_output, on_exit,
+        &mgr, cols, rows, command, cwd, shell, name, log_path, on_output, on_exit,
     )
 }
 
@@ -49,6 +50,11 @@ fn pty_cwd(mgr: State<PtyManager>, id: u32) -> Result<Option<String>, String> {
     pty::cwd(&mgr, id)
 }
 
+#[tauri::command]
+fn pty_busy(mgr: State<PtyManager>, id: u32) -> Result<Option<bool>, String> {
+    pty::busy(&mgr, id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pending = Arc::new(PendingReplies::new());
@@ -64,6 +70,7 @@ pub fn run() {
             pty_resize,
             pty_kill,
             pty_cwd,
+            pty_busy,
             control::pane_cmd_reply,
             capture::capture_region,
             git::git_status,
@@ -71,6 +78,7 @@ pub fn run() {
             git::git_diff,
             workspace::state_save,
             workspace::state_load,
+            workspace::session_log_path,
         ])
         .setup(move |app| {
             // Start the inter-pane control bus once the app handle exists (ADR-0007).

@@ -40,3 +40,33 @@ pub fn state_load(app: AppHandle, key: String) -> Result<Option<String>, String>
         Err(e) => Err(e.to_string()),
     }
 }
+
+/// Resolve (and ensure the directory for) a session-log file under `<app config dir>/logs/`.
+/// The frontend decides *whether* to log and what to call each pane's file (product logic); we
+/// just turn that name into a safe absolute path the PTY engine can append to. `name` is
+/// sanitised to a flat filename so it can't escape the logs directory.
+#[tauri::command]
+pub fn session_log_path(app: AppHandle, name: String) -> Result<String, String> {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let safe = safe.trim_matches('.');
+    let stem = if safe.is_empty() { "pane" } else { safe };
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?
+        .join("logs");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir
+        .join(format!("{stem}.log"))
+        .to_string_lossy()
+        .into_owned())
+}

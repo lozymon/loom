@@ -65,6 +65,29 @@ export function computeLayout(tree: LayoutNode): Layout {
   return { leaves, gutters };
 }
 
+function hasLeaf(node: LayoutNode, id: PaneId): boolean {
+  return node.kind === "leaf" ? node.paneId === id : hasLeaf(node.a, id) || hasLeaf(node.b, id);
+}
+
+/**
+ * Return a copy of `tree` with the positions of leaves `a` and `b` exchanged (each keeps its
+ * PaneId, so its <Terminal>/PTY survives — only where it sits in the grid changes). A no-op
+ * unless *both* ids are present (and distinct). Pure: callers pass the result to the store.
+ * Drives pane drag-to-swap.
+ */
+export function swapLeaves(node: LayoutNode, a: PaneId, b: PaneId): LayoutNode {
+  if (a === b || !hasLeaf(node, a) || !hasLeaf(node, b)) return node;
+  const walk = (n: LayoutNode): LayoutNode => {
+    if (n.kind === "leaf") {
+      if (n.paneId === a) return { kind: "leaf", paneId: b };
+      if (n.paneId === b) return { kind: "leaf", paneId: a };
+      return n;
+    }
+    return { ...n, a: walk(n.a), b: walk(n.b) };
+  };
+  return walk(node);
+}
+
 export type Dir = "left" | "right" | "up" | "down";
 
 /**
