@@ -49,6 +49,9 @@ interface AppState {
   presets: Preset[];
   /** Whether the broadcast bar is in subset-select mode (panes show a target toggle). */
   broadcastSelecting: boolean;
+  /** Overview ("fleet glance") mode: the active workspace's panes reflow to a uniform tile grid
+      (a view transform only — the split tree and PTYs are untouched). Active-workspace scoped. */
+  overview: boolean;
 }
 
 let idSeq = 0;
@@ -93,7 +96,7 @@ function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
 
 // Starts empty; `init()` (called once at startup) hydrates from disk or seeds a default
 // workspace. Rendering is gated on init completing so panes spawn exactly once.
-const [app, setApp] = createStore<AppState>({ workspaces: [], activeId: "", recents: [], presets: [], broadcastSelecting: false });
+const [app, setApp] = createStore<AppState>({ workspaces: [], activeId: "", recents: [], presets: [], broadcastSelecting: false, overview: false });
 
 /** Reactive read-only view for components. */
 export const appState = app;
@@ -353,6 +356,16 @@ export function closeWorkspace(id: string) {
 /** Enter/leave subset-select mode (panes show a target toggle while on). */
 export function setBroadcastSelecting(on: boolean) {
   setApp("broadcastSelecting", on);
+}
+
+/** Set overview ("fleet glance") mode on/off. */
+export function setOverview(on: boolean) {
+  setApp("overview", on);
+}
+
+/** Toggle overview mode (Ctrl+Shift+O). */
+export function toggleOverview() {
+  setApp("overview", (v) => !v);
 }
 
 /** Toggle a pane's membership in its workspace's broadcast subset. */

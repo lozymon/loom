@@ -15,6 +15,7 @@ import {
   splitPane,
   switchWorkspace,
   switchWorkspaceRelative,
+  toggleOverview,
   toggleZoom,
 } from "../stores/workspace";
 import { fuzzyScore } from "../lib/matching";
@@ -52,6 +53,7 @@ export default function CommandPalette(props: {
       { label: "New workspace", key: kb("new-workspace"), run: props.onNewWorkspace },
       { label: "Open settings", hint: "Preferences", run: props.onSettings },
       { label: "Open source control", key: kb("source-control"), run: props.onGit },
+      { label: "Toggle overview (fleet glance)", key: kb("overview"), run: () => toggleOverview() },
       { label: "Save workspace as preset", run: () => saveCurrentAsPreset() },
       { label: "Next workspace", key: kb("next-workspace"), run: () => switchWorkspaceRelative(1) },
       { label: "Previous workspace", key: kb("prev-workspace"), run: () => switchWorkspaceRelative(-1) },

@@ -37,6 +37,7 @@ import {
   splitPane,
   closePane,
   toggleZoom,
+  toggleOverview,
   renamePane,
   toggleBroadcastTarget,
   switchWorkspaceRelative,
@@ -365,6 +366,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
       "command-palette": () => window.dispatchEvent(new CustomEvent("termhaus:command-palette")),
       "source-control": () => window.dispatchEvent(new CustomEvent("termhaus:source-control")),
+      "overview": () => toggleOverview(),
       "prev-workspace": () => switchWorkspaceRelative(-1),
       "next-workspace": () => switchWorkspaceRelative(1),
       "copy": () => void copySelection(), // no selection → no-op

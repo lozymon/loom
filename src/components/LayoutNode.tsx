@@ -3,8 +3,8 @@
 // panes plus a layer of draggable gutters. That flat layer is what keeps a leaf's PTY alive
 // across splits/closes — a recursive renderer would remount the <Terminal> and respawn it.
 
-import { createMemo, For } from "solid-js";
-import { setRatio, type WorkspaceUI } from "../stores/workspace";
+import { createMemo, For, Show, type JSX } from "solid-js";
+import { appState, focusPane, setOverview, setRatio, type WorkspaceUI } from "../stores/workspace";
 import { computeLayout, type GutterBox, type Rect } from "../lib/layout";
 import type { PaneId } from "../ipc/protocol";
 import TerminalPane from "./Terminal";
@@ -16,8 +16,38 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
   const paneIds = createMemo(() => Object.keys(props.ws.panes).map(Number) as PaneId[]);
   const rectOf = (id: PaneId): Rect | undefined => layout().leaves.find((l) => l.paneId === id)?.rect;
 
-  /** Position for a pane box: full-bleed when zoomed, its tree rect otherwise. */
-  function paneStyle(id: PaneId) {
+  const overview = () => appState.overview;
+
+  // Overview ("fleet glance"): reflow every pane into a uniform tile grid, ordered top-to-bottom
+  // then left-to-right (reading order) by their tree position so the wall is stable. Pure
+  // re-positioning of the existing flat leaf-boxes — no DOM re-parenting, so the PTYs/xterm
+  // instances are untouched (the resize observer refits each one to its new tile).
+  const overviewPos = createMemo(() => {
+    const leaves = [...layout().leaves].sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+    const n = leaves.length;
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+    const rows = Math.max(1, Math.ceil(n / cols));
+    const gap = 0.8; // percent inset per tile, for breathing room between tiles
+    const m = new Map<PaneId, JSX.CSSProperties>();
+    leaves.forEach((l, i) => {
+      const c = i % cols;
+      const r = Math.floor(i / cols);
+      const w = 100 / cols;
+      const h = 100 / rows;
+      m.set(l.paneId, {
+        left: `calc(${c * w}% + ${gap}%)`,
+        top: `calc(${r * h}% + ${gap}%)`,
+        width: `calc(${w}% - ${2 * gap}%)`,
+        height: `calc(${h}% - ${2 * gap}%)`,
+        display: "block",
+      });
+    });
+    return m;
+  });
+
+  /** Position for a pane box: a uniform tile in overview, full-bleed when zoomed, tree rect otherwise. */
+  function paneStyle(id: PaneId): JSX.CSSProperties {
+    if (overview()) return overviewPos().get(id) ?? { display: "none" };
     const zoomed = props.ws.zoomed;
     if (zoomed !== null) {
       return zoomed === id ? { inset: "0", display: "block" } : { display: "none" };
@@ -50,7 +80,7 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
   }
 
   return (
-    <div ref={root} class="layout-root">
+    <div ref={root} class="layout-root" classList={{ overview: overview() }}>
       <For each={paneIds()}>
         {(id) => (
           <div class="leaf-box" style={paneStyle(id)}>
@@ -59,7 +89,22 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
         )}
       </For>
 
-      <For each={props.ws.zoomed === null ? layout().gutters : []}>
+      {/* In overview, a transparent hit-target over each tile: click focuses that pane and drops
+          back to the split grid (and stops a stray click from typing into the xterm beneath). */}
+      <Show when={overview()}>
+        <For each={paneIds()}>
+          {(id) => (
+            <button
+              class="overview-hit"
+              style={paneStyle(id)}
+              title="Focus this pane"
+              onClick={() => { focusPane(id); setOverview(false); }}
+            />
+          )}
+        </For>
+      </Show>
+
+      <For each={props.ws.zoomed === null && !overview() ? layout().gutters : []}>
         {(g) => (
           <div
             class="gutter"

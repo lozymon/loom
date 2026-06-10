@@ -14,7 +14,7 @@ import BroadcastBar from "./components/BroadcastBar";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import CommandPalette from "./components/CommandPalette";
-import { appState, init, startPersistence, flushPersistence } from "./stores/workspace";
+import { appState, init, startPersistence, flushPersistence, setOverview } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings } from "./stores/settings";
 import { initPaneControl } from "./lib/paneControl";
@@ -52,6 +52,18 @@ export default function App() {
   const openPalette = () => setPaletteOpen((v) => !v);
   window.addEventListener("termhaus:command-palette", openPalette);
   onCleanup(() => window.removeEventListener("termhaus:command-palette", openPalette));
+
+  // Esc leaves overview mode. Capture phase + stopImmediatePropagation so the keystroke never
+  // reaches the focused xterm beneath (it would otherwise be typed into the shell).
+  const onEsc = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && appState.overview) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setOverview(false);
+    }
+  };
+  window.addEventListener("keydown", onEsc, true);
+  onCleanup(() => window.removeEventListener("keydown", onEsc, true));
 
   // Flush any debounced state, then close. preventDefault() must run synchronously so the
   // window waits for us; we destroy it ourselves once the final save resolves.
