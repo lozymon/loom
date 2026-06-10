@@ -17,6 +17,7 @@ import {
   spawnPane,
   workspaceByName,
 } from "../stores/workspace";
+import { noteAttention, clearAttention } from "../stores/activity";
 
 /** Subscribe to relayed requests. Call once at startup; returns the unlisten fn. */
 export async function initPaneControl(): Promise<() => void> {
@@ -84,6 +85,14 @@ function dispatch(req: ControlRequest): ControlResponse {
       const r = revealPaneByName(req.target);
       if ("error" in r) return { ok: false, error: r.error };
       return { ok: true, data: { name: r.name } };
+    }
+
+    case "attention": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      if (req.clear) clearAttention(r.paneId);
+      else noteAttention(r.paneId);
+      return { ok: true, data: { name: req.target, cleared: req.clear === true } };
     }
 
     default:

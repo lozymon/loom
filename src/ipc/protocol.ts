@@ -87,7 +87,10 @@ export type ControlRequest =
   // Broadcast text to every live pane in a workspace (the active one, or one named explicitly).
   | { op: "broadcast"; text: string; enter?: boolean; workspace?: string }
   // Reveal + focus a pane by name (switching to its workspace).
-  | { op: "focus"; target: string };
+  | { op: "focus"; target: string }
+  // Raise (or, with clear, drop) a pane's "needs you" attention border — a UI metadata flag,
+  // never tied to pane output. Lets an agent flag itself when it's blocked on your input.
+  | { op: "attention"; target: string; clear?: boolean };
 
 /** One pane in a `list` response. */
 export interface PaneInfo {

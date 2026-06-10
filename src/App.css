@@ -492,6 +492,18 @@ body,
   color: var(--broadcast-bright);
 }
 
+/* "Needs you" attention border — a command just finished in an unfocused pane, or a process
+   inside it called `th attention`. Amber, matching the bell dot. Cleared when you focus the
+   pane. Placed before .pane.bcast-target / .pane.focused so those borders win when they apply. */
+.pane.attention {
+  border-color: #e0b85a;
+  box-shadow: inset 0 0 0 1px #e0b85a, 0 0 0 1px color-mix(in srgb, #e0b85a 45%, transparent);
+}
+
+.pane.attention .pane-title {
+  box-shadow: inset 2px 0 0 #e0b85a;
+}
+
 .pane.bcast-target {
   border-color: var(--broadcast);
   box-shadow: inset 0 0 0 1px var(--broadcast);

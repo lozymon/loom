@@ -24,7 +24,7 @@ import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
-import { activity, noteUnseen, noteBell, setBusy, seePane, forgetPane } from "../stores/activity";
+import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
 import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
@@ -180,8 +180,16 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
     if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); return; }
-    // Busy state (running a command vs. at the prompt) — a cheap foreground-pgrp read.
-    try { setBusy(props.paneId, await busyPty(handle)); } catch { /* leave last value */ }
+    // Busy state (running a command vs. at the prompt) — a cheap foreground-pgrp read. A
+    // busy→idle transition in a pane you're not watching means a command just finished and the
+    // shell is back at its prompt → raise the sticky attention border (cleared when you look).
+    // It's the foreground-pgrp fact, never pane output (opacity-safe; ADR-0001).
+    try {
+      const wasBusy = act()?.busy === true;
+      const nowBusy = await busyPty(handle);
+      if (wasBusy && nowBusy === false && !looking()) noteAttention(props.paneId);
+      setBusy(props.paneId, nowBusy);
+    } catch { /* leave last value */ }
     // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.
     try { setForeground(await foregroundPty(handle)); } catch { /* leave last value */ }
     let dir: string | null = null;
@@ -421,6 +429,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       class="pane"
       classList={{
         focused: isFocused(),
+        attention: !isFocused() && (act()?.attention ?? false),
         "bcast-target": appState.broadcastSelecting && inBroadcast(),
         "drag-over": dragOver(),
       }}

@@ -10,6 +10,8 @@
 //!   th read Cleo -n 100              # capture Cleo's last 100 scrollback lines
 //!   th broadcast "run the tests"     # send to every live pane in the active workspace
 //!   th focus Cleo                    # switch to Cleo's workspace and focus it
+//!   th attention                     # light this pane's "needs you" border (clears on focus)
+//!   th attention Cleo --clear        # drop pane Cleo's attention border
 //!
 //! Pure std + serde_json (already a workspace dep): no protocol logic lives here or in Rust —
 //! the request is forwarded verbatim to the webview, which owns routing (src/ipc/protocol.ts).
@@ -177,8 +179,31 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(json!({ "op": "focus", "target": target }))
         }
 
+        "attention" => {
+            // th attention [pane] [--clear]   — raise (or drop) a pane's attention border.
+            // No pane → the calling pane (from $TERMHAUS_PANE), so an agent can flag itself.
+            let mut clear = false;
+            let mut positional: Vec<String> = Vec::new();
+            for a in &args[1..] {
+                if a == "--clear" {
+                    clear = true;
+                } else {
+                    positional.push(a.clone());
+                }
+            }
+            let target = if positional.is_empty() {
+                env::var("TERMHAUS_PANE").map_err(|_| {
+                    "no pane given and TERMHAUS_PANE not set — name a pane: th attention <pane>"
+                        .to_string()
+                })?
+            } else {
+                positional.remove(0)
+            };
+            Ok(json!({ "op": "attention", "target": target, "clear": clear }))
+        }
+
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention)"
         )),
     }
 }
@@ -259,6 +284,20 @@ fn handle_response(op: &str, resp: &Value) {
                 .unwrap_or("?");
             println!("focused pane '{name}'");
         }
+        "attention" => {
+            let name = data
+                .and_then(|d| d.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            let cleared = data
+                .and_then(|d| d.get("cleared"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            println!(
+                "attention {} '{name}'",
+                if cleared { "cleared on" } else { "raised on" }
+            );
+        }
         _ => {}
     }
 }
@@ -291,6 +330,7 @@ fn usage() {
         \x20 th spawn [--name N] [--cwd D] <command...>\n\
         \x20 th read <pane> [-n LINES]\n\
         \x20 th broadcast [--workspace W] [--no-enter] <text...>\n\
-        \x20 th focus <pane>"
+        \x20 th focus <pane>\n\
+        \x20 th attention [pane] [--clear]"
     );
 }

@@ -1,14 +1,18 @@
 // Ephemeral per-pane "attention" state — the signals that tell you which of a fleet of panes
-// needs you, without ever parsing pane output (ADR-0001). Three orthogonal signals:
+// needs you, without ever parsing pane output (ADR-0001). Four orthogonal signals:
 //
-//   • unseen — the pane produced output while it wasn't the focused/active pane (a metadata
+//   • unseen    — the pane produced output while it wasn't the focused/active pane (a metadata
 //     fact: bytes arrived; we never look at what they say).
-//   • bell   — the pane rang the terminal bell (BEL); agents/builds often ring on done/prompt.
-//   • busy   — a foreground command is running vs. sitting at the shell prompt, polled from the
+//   • bell      — the pane rang the terminal bell (BEL); agents/builds often ring on done/prompt.
+//   • busy      — a foreground command is running vs. sitting at the shell prompt, polled from the
 //     PTY's foreground process group in Rust (pty_busy). null = unknown.
+//   • attention — a sticky "needs you" flag drawn as a coloured border around the pane. Raised
+//     automatically on the busy→idle transition (a command just finished while you weren't
+//     looking) or explicitly by a process inside the pane via `th attention` (ADR-0007). Like
+//     busy, it's metadata only — the foreground-pgrp fact or an inbound command, never output.
 //
-// unseen/bell are "sticky until looked at" (cleared by seePane on focus); busy is a live poll.
-// This store is not persisted and not part of the layout — it's pure UI state keyed by PaneId.
+// unseen/bell/attention are "sticky until looked at" (cleared by seePane on focus); busy is a
+// live poll. This store is not persisted and not part of the layout — pure UI state by PaneId.
 
 import { createStore } from "solid-js/store";
 import type { PaneId } from "../ipc/protocol";
@@ -17,9 +21,10 @@ export interface PaneActivity {
   unseen: boolean;
   bell: boolean;
   busy: boolean | null;
+  attention: boolean;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null };
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -48,11 +53,23 @@ export function setBusy(id: PaneId, busy: boolean | null) {
   if (activity[id].busy !== busy) setActivity(id, "busy", busy);
 }
 
-/** The user looked at the pane — clear its sticky unseen/bell signals. */
+/** Raise a pane's sticky attention flag (busy→idle transition, or `th attention`). */
+export function noteAttention(id: PaneId) {
+  ensure(id);
+  if (!activity[id].attention) setActivity(id, "attention", true);
+}
+
+/** Clear a pane's attention flag explicitly (`th attention --clear`). */
+export function clearAttention(id: PaneId) {
+  if (activity[id]?.attention) setActivity(id, "attention", false);
+}
+
+/** The user looked at the pane — clear its sticky unseen/bell/attention signals. */
 export function seePane(id: PaneId) {
   if (!activity[id]) return;
   if (activity[id].unseen) setActivity(id, "unseen", false);
   if (activity[id].bell) setActivity(id, "bell", false);
+  if (activity[id].attention) setActivity(id, "attention", false);
 }
 
 /** Drop a pane's state entirely (on unmount/close). */
@@ -64,7 +81,7 @@ export function forgetPane(id: PaneId) {
 export function anyAttention(ids: Iterable<PaneId>): boolean {
   for (const id of ids) {
     const a = activity[id];
-    if (a && (a.unseen || a.bell)) return true;
+    if (a && (a.unseen || a.bell || a.attention)) return true;
   }
   return false;
 }

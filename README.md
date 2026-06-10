@@ -15,9 +15,9 @@ Generic first: a pane is just a real pseudo-terminal running *any* command — a
 - **Workspace rail** — group panes into workspaces on a left rail; switching keeps hidden workspaces' terminals alive.
 - **New-workspace wizard** — pick a working folder (with Recents) → tap a grid preset (1/2/4/6/8/10/12 terminals) → optionally set a per-pane launch command → go.
 - **Broadcast input** — send a line to every live pane in the current workspace, or a hand-picked subset (click panes, or filter by a name pattern like `Cl*`). Recall recent messages with ↑/↓, save reusable snippets, and optionally stagger sends so a fleet doesn't hit an API all at once. Spawn 12 panes, broadcast one prompt to all.
-- **Pane attention signals** — a per-pane status dot shows when a pane is running a command, produced output you haven't looked at, or rang the bell — so you can tell at a glance which of a fleet of agents needs you. Hidden workspaces flag activity on the rail. (Metadata only — pane output is never parsed; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).)
+- **Pane attention signals** — a per-pane status dot shows when a pane is running a command, produced output you haven't looked at, or rang the bell — so you can tell at a glance which of a fleet of agents needs you. A pane also lights an **amber "needs you" border** when a command finishes in a pane you weren't watching, or when a process inside it calls `th attention` (so an agent can flag itself the moment it's blocked on your input — see [Light a pane when an agent needs you](#light-a-pane-when-an-agent-needs-you)). Hidden workspaces flag activity on the rail. (Metadata only — pane output is never parsed; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).)
 - **Command palette** (`Ctrl+Shift+P`) — fuzzy-search every action plus jump-to-pane-by-name across all workspaces.
-- **Inter-pane control bus** — a process *inside* a pane (e.g. a `claude` CLI) can drive the others with the bundled `th` command: `th list`, `th send`, `th spawn`, `th read` (capture another pane's scrollback), `th broadcast`, and `th focus`. One agent can kick off, prompt, and read back from another, without Termhaus ever parsing pane output ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
+- **Inter-pane control bus** — a process *inside* a pane (e.g. a `claude` CLI) can drive the others with the bundled `th` command: `th list`, `th send`, `th spawn`, `th read` (capture another pane's scrollback), `th broadcast`, `th focus`, and `th attention` (light a pane's "needs you" border). One agent can kick off, prompt, and read back from another, without Termhaus ever parsing pane output ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
 - **Drag to rearrange** — grab a pane's title-bar grip and drop it on another to swap their grid positions (the terminals keep running).
 - **Presets** — save a workspace (folder + layout + per-pane commands) and relaunch it in one click.
 - **Persistence** — workspaces, layouts, and per-pane intent are saved as JSON and respawned on launch (intent, not scrollback — terminals are ephemeral).
@@ -91,9 +91,32 @@ th spawn --name Cleo --cwd /repo claude   # open a NEW pane running a command
 th read Cleo -n 100                        # capture Cleo's last 100 scrollback lines
 th broadcast "run the tests"              # send to every live pane in the active workspace
 th focus Cleo                              # switch to Cleo's workspace and focus it
+th attention                              # light THIS pane's "needs you" border (clears on focus)
+th attention Cleo --clear                 # drop pane Cleo's border
 ```
 
 It works over a per-user unix socket (`$XDG_RUNTIME_DIR/termhaus.sock`, mode 0600): Rust is a pure relay, all routing/naming/spawn logic lives in the frontend, and pane *output* is never parsed — this is an inbound command channel, distinct from the opacity rule ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md) / [ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
+
+### Light a pane when an agent needs you
+
+Termhaus can't tell "an agent is waiting for your answer" from "an agent is working" just by watching the process — both are a live foreground command, and pane output is never parsed ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)). So the agent flags itself: a single `th attention` call lights its pane's amber border, which clears the moment you focus it.
+
+Claude Code can do this automatically with hooks. Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "th attention 2>/dev/null || true" } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "th attention 2>/dev/null || true" } ] }
+    ]
+  }
+}
+```
+
+`Stop` fires when Claude finishes and yields back to you; `Notification` fires when it wants permission. The hook runs inside the pane, so `$TERMHAUS_SOCK`/`$TERMHAUS_PANE` are already set and `th` is on `PATH` (the `2>/dev/null || true` makes it a no-op when run outside Termhaus). Any agent with a "done"/"needs input" hook — or even a plain `&& th attention` after a long shell command — works the same way.
 
 ## Getting started
 
