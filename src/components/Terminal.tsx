@@ -25,7 +25,7 @@ import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { notifyAttention } from "../lib/notify";
-import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, nowMs, fmtSince } from "../stores/activity";
+import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
 import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
@@ -88,16 +88,6 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   /** Is the user actually looking at this pane right now? (active workspace + focused) */
   const looking = () => appState.activeId === props.ws.id && isFocused();
   const act = () => activity[props.paneId];
-
-  // Title-bar status timer: "running M:SS" while a foreground command is up, "idle M:SS" once the
-  // shell is back at its prompt. Off the busy poll + its stamped edge (activity.ts) — metadata
-  // only, never pane output (ADR-0001). null when busy is unknown (no PTY / pre-first-poll).
-  const statusTimer = () => {
-    const a = act();
-    if (!a || a.busy === null) return null;
-    const dur = fmtSince(nowMs() - a.since);
-    return a.busy ? `running ${dur}` : `idle ${dur}`;
-  };
 
   /** Spawn a fresh PTY and bind it to this pane's xterm. Used for first run and respawn. */
   async function start() {
@@ -534,13 +524,6 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
               <span class="pane-branch" title={`git branch: ${branch()}`}>⎇ {branch()}</span>
             </Show>
           </span>
-        </Show>
-        <Show when={statusTimer()}>
-          {(t) => (
-            <span class="pane-stat" classList={{ busy: act()?.busy === true }} title="Command run / idle time">
-              {t()}
-            </span>
-          )}
         </Show>
         <span class="pane-controls">
           <button title="Launch Claude here" onClick={launchClaude}>✦</button>

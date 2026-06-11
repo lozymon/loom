@@ -845,23 +845,6 @@ body,
   white-space: nowrap;
 }
 
-/* Title-bar status timer — "running 0:42" / "idle 3:05". Dim and tabular so the digits don't
-   jiggle as they tick; brightens while a command is actually running. */
-.pane-stat {
-  flex: 0 0 auto;
-  margin-left: 6px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-muted);
-  opacity: 0.7;
-  white-space: nowrap;
-}
-
-.pane-stat.busy {
-  color: var(--accent);
-  opacity: 0.9;
-}
-
 .pane-controls {
   display: flex;
   align-items: center;

@@ -14,7 +14,6 @@
 // unseen/bell/attention are "sticky until looked at" (cleared by seePane on focus); busy is a
 // live poll. This store is not persisted and not part of the layout — pure UI state by PaneId.
 
-import { createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { PaneId } from "../ipc/protocol";
 
@@ -23,25 +22,9 @@ export interface PaneActivity {
   bell: boolean;
   busy: boolean | null;
   attention: boolean;
-  // Epoch ms of the last busy-state edge — drives the title-bar status timer (running/idle
-  // duration). Stamped whenever `busy` actually changes; never reflects pane output.
-  since: number;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, since: 0 };
-
-// A shared 1 Hz tick so every pane's "running 0:42" / "idle 3:05" label re-renders once a second
-// off a single timer (not one interval per pane). Reactive read via nowMs().
-const [nowMs, setNowMs] = createSignal(Date.now());
-setInterval(() => setNowMs(Date.now()), 1000);
-export { nowMs };
-
-/** Format a duration (ms) as `M:SS` under an hour, `Hh Mm` beyond. Used by the status timer. */
-export function fmtSince(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-}
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -49,7 +32,7 @@ const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 export { activity };
 
 function ensure(id: PaneId) {
-  if (!activity[id]) setActivity(id, { ...BLANK, since: Date.now() });
+  if (!activity[id]) setActivity(id, { ...BLANK });
 }
 
 /** Mark that output arrived in a pane the user isn't currently looking at. */
@@ -67,10 +50,7 @@ export function noteBell(id: PaneId) {
 /** Update a pane's busy (foreground-command) state from a poll. */
 export function setBusy(id: PaneId, busy: boolean | null) {
   ensure(id);
-  if (activity[id].busy !== busy) {
-    setActivity(id, "busy", busy);
-    setActivity(id, "since", Date.now()); // stamp the edge so the status timer counts from now
-  }
+  if (activity[id].busy !== busy) setActivity(id, "busy", busy);
 }
 
 /** Raise a pane's sticky attention flag (busy→idle transition, or `th attention`). Returns true
