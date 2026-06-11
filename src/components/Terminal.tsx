@@ -27,7 +27,7 @@ import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
-import { settings } from "../stores/settings";
+import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
 import { detectAgent } from "../lib/agents";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
@@ -380,6 +380,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "paste": () => void pasteClipboard(),
       "search": () => openSearch(),
       "capture-region": () => void captureToPane(),
+      "font-increase": () => adjustFontSize(1),
+      "font-decrease": () => adjustFontSize(-1),
     };
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return true;

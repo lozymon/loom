@@ -92,6 +92,17 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
   persist();
 }
 
+/** Terminal font-size bounds (mirrors the Settings slider). */
+export const FONT_SIZE_MIN = 9;
+export const FONT_SIZE_MAX = 24;
+
+/** Nudge the terminal font size by `delta`, clamped to [FONT_SIZE_MIN, FONT_SIZE_MAX]. Every
+ *  open pane restyles + refits live via the appearance effect in Terminal.tsx. */
+export function adjustFontSize(delta: number) {
+  const next = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, settings.fontSize + delta));
+  if (next !== settings.fontSize) setSetting("fontSize", next);
+}
+
 /** Save a broadcast snippet (trimmed, de-duplicated, newest first, capped at 24). */
 export function addBroadcastSnippet(text: string) {
   const t = text.trim();

@@ -23,14 +23,16 @@ export type ActionId =
   | "copy"
   | "paste"
   | "search"
-  | "capture-region";
+  | "capture-region"
+  | "font-increase"
+  | "font-decrease";
 
 export interface ActionDef {
   id: ActionId;
   /** Human label shown in the Settings list. */
   label: string;
   /** Section the action is grouped under in the Settings list. */
-  group: "Focus" | "Panes" | "Workspaces" | "Clipboard & search" | "Capture" | "Git" | "General";
+  group: "Focus" | "Panes" | "Workspaces" | "Clipboard & search" | "Capture" | "Git" | "Appearance" | "General";
   /** Default final key (lowercased `KeyboardEvent.key`). */
   defaultKey: string;
 }
@@ -55,6 +57,10 @@ export const ACTIONS: ActionDef[] = [
   { id: "search", label: "Find in scrollback", group: "Clipboard & search", defaultKey: "f" },
   { id: "capture-region", label: "Snapshot region → focused pane", group: "Capture", defaultKey: "s" },
   { id: "source-control", label: "Open source control", group: "Git", defaultKey: "g" },
+  // Ctrl+Shift+= reports key "+", and Ctrl+Shift+- reports "_" (shift transforms the key); the
+  // PRETTY_KEY map below renders "_" back as "-" so the Settings list reads "Ctrl+Shift+-".
+  { id: "font-increase", label: "Increase font size", group: "Appearance", defaultKey: "+" },
+  { id: "font-decrease", label: "Decrease font size", group: "Appearance", defaultKey: "_" },
 ];
 
 /** A map from every action to its bound final key. */
@@ -64,10 +70,16 @@ export const DEFAULT_KEYBINDINGS: Keybindings = Object.fromEntries(
   ACTIONS.map((a) => [a.id, a.defaultKey]),
 ) as Keybindings;
 
+// Whether Shift is held changes the reported `KeyboardEvent.key` for symbol keys, and the exact
+// character varies by layout — Ctrl+Shift+= may arrive as "+" or "=", Ctrl+Shift+- as "_" or
+// "-". Fold each pair to one canonical key for matching so a binding fires regardless.
+const SHIFT_FOLD: Record<string, string> = { "+": "=", _: "-" };
+const foldKey = (k: string): string => SHIFT_FOLD[k] ?? k;
+
 /** Which action (if any) the pressed final key triggers. First match wins on conflict. */
 export function actionForKey(bindings: Keybindings, key: string): ActionId | null {
-  const k = key.toLowerCase();
-  for (const a of ACTIONS) if (bindings[a.id] === k) return a.id;
+  const k = foldKey(key.toLowerCase());
+  for (const a of ACTIONS) if (foldKey(bindings[a.id]) === k) return a.id;
   return null;
 }
 
@@ -76,6 +88,7 @@ const PRETTY_KEY: Record<string, string> = {
   enter: "Enter", pageup: "PgUp", pagedown: "PgDn",
   " ": "Space", spacebar: "Space", tab: "Tab", backspace: "Backspace",
   escape: "Esc", home: "Home", end: "End", delete: "Del", insert: "Ins",
+  _: "-", // Ctrl+Shift+- arrives as "_"; show the key as printed on the keyboard.
 };
 
 /** Render a stored final key as a full combo, e.g. "d" → "Ctrl+Shift+D". */
