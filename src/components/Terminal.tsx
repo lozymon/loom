@@ -30,7 +30,6 @@ import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
 import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
 import { detectAgent } from "../lib/agents";
-import { NAME_POOL } from "../lib/grid";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
   appState,
@@ -40,7 +39,6 @@ import {
   closePane,
   toggleZoom,
   toggleOverview,
-  renamePane,
   toggleBroadcastTarget,
   switchWorkspaceRelative,
   swapPanes,
@@ -66,12 +64,6 @@ function basename(dir: string): string {
   return i >= 0 ? p.slice(i + 1) || "/" : p;
 }
 
-/** Is this title still the auto-assigned pool name (Faye…/Pane N) vs. a name the user chose?
- *  Auto names yield to the folder basename in the title bar; a custom rename overrides it. */
-function isAutoName(title: string | undefined): boolean {
-  return !title || /^Pane \d+$/.test(title) || NAME_POOL.includes(title);
-}
-
 export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI }) {
   let container!: HTMLDivElement;
   let term!: Terminal;
@@ -81,7 +73,6 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // The live PTY handle, or null before first spawn / after the child exits.
   let handle: PtyHandle | null = null;
   const [dead, setDead] = createSignal<number | null>(null);
-  const [editing, setEditing] = createSignal(false);
   const [finding, setFinding] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [dragOver, setDragOver] = createSignal(false);
@@ -103,25 +94,14 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const looking = () => appState.activeId === props.ws.id && isFocused();
   const act = () => activity[props.paneId];
 
-  // The name shown in the title bar: the live folder (cwd basename) by default, so the bar tells
-  // you *where* the pane is; a manual double-click rename overrides it, and the pool name (Faye…)
-  // is the fallback before the first cwd read. The pool name stays the pane's routing handle for
-  // `th send`/broadcast (folder names aren't unique) — only the display changes.
+  // The name shown in the title bar is the live folder (cwd basename) — it tracks `cd` so the bar
+  // always tells you *where* the pane is. The pool name (Faye…) is only the fallback before the
+  // first cwd read, and stays the pane's routing handle for `th send`/broadcast (folder names
+  // aren't unique) — only the display changes.
   const displayName = () => {
-    const t = spec()?.title;
-    if (t && !isAutoName(t)) return t;
     const d = cwd();
-    return d ? basename(d) : (t ?? "");
+    return d ? basename(d) : (spec()?.title ?? "");
   };
-
-  // Save a rename only when the text actually changed: the edit input is pre-filled with the
-  // shown (folder-derived) name, so a stray double-click + click-away must NOT pin a
-  // folder-tracking pane to a static title.
-  function commitRename(value: string) {
-    const v = value.trim();
-    if (v && v !== displayName()) renamePane(props.paneId, v);
-    setEditing(false);
-  }
 
   /** Spawn a fresh PTY and bind it to this pane's xterm. Used for first run and respawn. */
   async function start() {
@@ -353,7 +333,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     // would still target the previously-focused pane. Guard to the active workspace so hidden
     // layers don't grab focus, and skip while the title/search inputs are taking input.
     createEffect(() => {
-      if (appState.activeId === props.ws.id && isFocused() && !editing() && !finding()) {
+      if (appState.activeId === props.ws.id && isFocused() && !finding()) {
         term.focus();
       }
     });
@@ -530,29 +510,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
             </span>
           )}
         </Show>
-        <Show
-          when={editing()}
-          fallback={
-            <span
-              class="pane-name"
-              title={cwd() ? `${prettyCwd(cwd()!)} — double-click to rename` : "double-click to rename"}
-              onDblClick={() => setEditing(true)}
-            >
-              {displayName()}
-            </span>
-          }
-        >
-          <input
-            class="pane-name-edit"
-            value={displayName()}
-            autofocus
-            onBlur={(e) => commitRename(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitRename(e.currentTarget.value);
-              else if (e.key === "Escape") setEditing(false);
-            }}
-          />
-        </Show>
+        <span class="pane-name" title={cwd() ? prettyCwd(cwd()!) : (spec()?.title ?? "")}>
+          {displayName()}
+        </span>
         <Show when={branch()}>
           <span class="pane-branch" title={`git branch: ${branch()}`}>⎇ {branch()}</span>
         </Show>
