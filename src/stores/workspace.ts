@@ -161,6 +161,13 @@ export function renamePane(paneId: PaneId, title: string) {
   if (i >= 0 && name) setApp("workspaces", i, "panes", paneId, "title", name);
 }
 
+/** Rename a workspace (rail double-click). Blank input is ignored — keeps the old name. */
+export function renameWorkspace(id: string, name: string) {
+  const i = wsIdxById(id);
+  const next = name.trim();
+  if (i >= 0 && next) setApp("workspaces", i, "name", next);
+}
+
 export function splitPane(paneId: PaneId, dir: "row" | "col") {
   const i = wsIdxByPane(paneId);
   if (i < 0) return;

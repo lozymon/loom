@@ -23,6 +23,14 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/** Capitalize the first letter, leaving the rest as-is (`src-tauri` → `Src-tauri`). */
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+/** The default workspace name for a folder: its basename with the first letter capitalized. */
+const autoName = (path: string): string => capitalize(basename(path));
+
 /** A small diagram of how buildBalancedTree(n) will arrange its panes — used on the layout tiles. */
 function MiniGrid(props: { n: number }) {
   return (
@@ -40,6 +48,9 @@ function MiniGrid(props: { n: number }) {
 
 export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   const [cwd, setCwd] = createSignal(settings.defaultCwd);
+  // Name tracks the folder's basename until the user types their own — then it sticks.
+  const [name, setName] = createSignal(autoName(settings.defaultCwd));
+  const [nameDirty, setNameDirty] = createSignal(false);
   const [count, setCount] = createSignal(4);
   const [commands, setCommands] = createSignal<string[]>([]);
   const [cwds, setCwds] = createSignal<string[]>([]);
@@ -65,9 +76,15 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     setCwds((c) => { const n = [...c]; n[i] = dir; return n; });
   const fillAll = (cmd: string) => setCommands(Array.from({ length: count() }, () => cmd));
 
+  // Changing the folder also refreshes the name, unless the user has hand-edited it.
+  function applyCwd(next: string) {
+    setCwd(next);
+    if (!nameDirty()) setName(next.trim() ? autoName(next) : "");
+  }
+
   async function browse() {
     const picked = await open({ directory: true, title: "Pick a working folder" });
-    if (typeof picked === "string") setCwd(picked);
+    if (typeof picked === "string") applyCwd(picked);
   }
   async function browseCwdAt(i: number) {
     const picked = await open({ directory: true, title: "Folder for this terminal" });
@@ -78,8 +95,9 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     const folder = cwd().trim();
     const cmds = commands().slice(0, count());
     const dirs = cwds().slice(0, count());
+    const wsName = name().trim() || (folder ? autoName(folder) : `Workspace ${recents().length + 1}`);
     createWorkspace({
-      name: folder ? basename(folder) : `Workspace ${recents().length + 1}`,
+      name: wsName,
       cwd: folder,
       paneCount: count(),
       commands: cmds.some((c) => c?.trim()) ? cmds : undefined,
@@ -119,13 +137,23 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
           {/* LEFT — where it runs */}
           <div class="wiz-left">
             <div>
+              <label class="wizard-label">Name</label>
+              <input
+                class="wizard-input"
+                placeholder="Workspace name"
+                value={name()}
+                onInput={(e) => { setName(e.currentTarget.value); setNameDirty(true); }}
+              />
+            </div>
+
+            <div>
               <label class="wizard-label">Working folder</label>
               <div class="wizard-row">
                 <input
                   class="wizard-input"
                   placeholder="$HOME (default)"
                   value={cwd()}
-                  onInput={(e) => setCwd(e.currentTarget.value)}
+                  onInput={(e) => applyCwd(e.currentTarget.value)}
                 />
                 <button onClick={browse}>Browse…</button>
               </div>
@@ -137,7 +165,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                 <div class="wizard-recents">
                   <For each={recents()}>
                     {(r) => (
-                      <button class="wizard-recent" onClick={() => { setCwd(r.cwd); setCount(r.count); }}>
+                      <button class="wizard-recent" onClick={() => { applyCwd(r.cwd); setCount(r.count); }}>
                         <span>{basename(r.cwd)}</span>
                         <span class="muted">{r.cwd} · {r.count}</span>
                       </button>

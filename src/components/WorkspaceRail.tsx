@@ -3,8 +3,8 @@
 // closing removes a workspace (PTYs die). App actions (New/Save/Settings/Source control)
 // live in the top title bar, not here.
 
-import { For, Show } from "solid-js";
-import { appState, paneCount, switchWorkspace, closeWorkspace } from "../stores/workspace";
+import { createSignal, For, Show } from "solid-js";
+import { appState, paneCount, switchWorkspace, closeWorkspace, renameWorkspace } from "../stores/workspace";
 import { anyAttention, anyNeedsAttention } from "../stores/activity";
 import { settings, setSetting } from "../stores/settings";
 
@@ -19,6 +19,9 @@ function wsHue(id: string): number {
 }
 
 export default function WorkspaceRail(props: { onNew: () => void }) {
+  // Which workspace row is mid-rename (double-click the name to enter, Enter/blur commits, Esc cancels).
+  const [editingId, setEditingId] = createSignal<string | null>(null);
+
   // Drag the right edge to resize; clamp to a sane range and persist the new width.
   function onResizeDown(e: PointerEvent) {
     e.preventDefault();
@@ -74,7 +77,30 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
                 >
                   ❯
                 </span>
-                <span class="rail-name">{ws.name}</span>
+                <Show
+                  when={editingId() === ws.id}
+                  fallback={
+                    <span
+                      class="rail-name"
+                      title="Double-click to rename"
+                      onDblClick={(e) => { e.stopPropagation(); setEditingId(ws.id); }}
+                    >
+                      {ws.name}
+                    </span>
+                  }
+                >
+                  <input
+                    class="rail-name-edit"
+                    value={ws.name}
+                    ref={(el) => queueMicrotask(() => { el.focus(); el.select(); })}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { renameWorkspace(ws.id, e.currentTarget.value); setEditingId(null); }
+                      else if (e.key === "Escape") setEditingId(null);
+                    }}
+                    onBlur={(e) => { renameWorkspace(ws.id, e.currentTarget.value); setEditingId(null); }}
+                  />
+                </Show>
                 <Show when={hasActivity()}>
                   <span class="rail-attn" title="Activity in this workspace" />
                 </Show>

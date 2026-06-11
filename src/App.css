@@ -437,6 +437,18 @@ body,
   white-space: nowrap;
 }
 
+/* Inline rename field — sits where .rail-name was, sized to match. */
+.rail-name-edit {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg-sunken);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
 /* Attention dot on a hidden workspace: a pane there has unseen output or rang the bell. */
 .rail-attn {
   flex: 0 0 auto;
