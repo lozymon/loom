@@ -15,7 +15,8 @@
         "title": "Termhaus",
         "width": 1200,
         "height": 760,
-        "decorations": false
+        "decorations": false,
+        "transparent": true
       }
     ],
     "security": {

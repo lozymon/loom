@@ -37,7 +37,7 @@
   --shadow: rgba(0, 0, 0, 0.5);
 }
 
-[data-theme="light"] {
+[data-theme='light'] {
   color-scheme: light;
   --bg: #ffffff;
   --bg-sunken: #f1f2f4;
@@ -71,7 +71,7 @@
   --shadow: rgba(0, 0, 0, 0.18);
 }
 
-[data-theme="midnight"] {
+[data-theme='midnight'] {
   color-scheme: dark;
   --bg: #0f1117;
   --bg-sunken: #0b0d12;
@@ -105,7 +105,7 @@
   --shadow: rgba(0, 0, 0, 0.6);
 }
 
-[data-theme="paper"] {
+[data-theme='paper'] {
   color-scheme: light;
   --bg: #faf7f0;
   --bg-sunken: #efe9dd;
@@ -144,7 +144,9 @@ body,
 #root {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  /* Transparent so the desktop/compositor shows through the rounded corners; the app paints
+     its own opaque card in .shell (the window itself is borderless + transparent). */
+  background: transparent;
   overflow: hidden;
 }
 
@@ -153,12 +155,21 @@ body,
   width: 100vw;
 }
 
-/* M3 shell: custom title bar on top, then a horizontal body (left rail | stage). */
+/* M3 shell: custom title bar on top, then a horizontal body (left rail | stage). It's the
+   window's visible card — own rounded border + clip so no child overflows the corners. */
 .shell {
   display: flex;
   flex-direction: column;
   height: 100vh;
   width: 100vw;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  overflow: hidden;
+  /* overflow:hidden alone doesn't clip xterm's canvas layers to the rounded corners in
+     WebKitGTK; clip-path clips every descendant, so the bottom panes stop overflowing. */
+  clip-path: inset(0 round 10px);
 }
 
 /* The horizontal row under the title bar: rail + stage fill the remaining height. */
@@ -192,7 +203,9 @@ body,
 }
 
 .tb-name {
-  font: 600 12px ui-monospace, monospace;
+  font:
+    600 12px ui-monospace,
+    monospace;
   color: var(--fg);
   letter-spacing: 0.02em;
 }
@@ -213,7 +226,9 @@ body,
   border-radius: 5px;
   background: transparent;
   color: var(--fg-dim);
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -246,7 +261,9 @@ body,
   border: none;
   background: transparent;
   color: var(--fg-dim);
-  font: 13px ui-monospace, monospace;
+  font:
+    13px ui-monospace,
+    monospace;
   cursor: pointer;
 }
 
@@ -324,7 +341,9 @@ body,
 }
 
 .rail-title {
-  font: 600 11px ui-monospace, monospace;
+  font:
+    600 11px ui-monospace,
+    monospace;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-muted);
@@ -365,7 +384,9 @@ body,
   padding: 9px 11px;
   border-radius: 8px;
   border: 1px solid transparent;
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
   color: var(--fg-dim);
   background: var(--surface);
   cursor: pointer;
@@ -457,7 +478,9 @@ body,
   padding: 0 10px;
   background: var(--bg-sunken);
   border-top: 1px solid var(--border);
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
 }
 
 .bcast.selecting {
@@ -501,10 +524,16 @@ body,
   border-radius: 6px;
   padding: 5px 8px;
 }
-.bcast-pattern:focus { outline: none; border-color: var(--broadcast-bright); }
+.bcast-pattern:focus {
+  outline: none;
+  border-color: var(--broadcast-bright);
+}
 
 /* Snippets menu (canned prompts). */
-.bcast-snip { position: relative; flex: 0 0 auto; }
+.bcast-snip {
+  position: relative;
+  flex: 0 0 auto;
+}
 .bcast-snip-menu {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -531,7 +560,9 @@ body,
   padding: 5px 6px;
   border-radius: 5px;
 }
-.bcast-snip-item:hover { background: var(--surface-hover); }
+.bcast-snip-item:hover {
+  background: var(--surface-hover);
+}
 .bcast-snip-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -606,7 +637,9 @@ body,
 
 /* ---- Per-pane broadcast targeting ---- */
 .bcast-toggle {
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
   line-height: 1;
   color: var(--fg-muted);
   background: transparent;
@@ -626,7 +659,9 @@ body,
    pane. Placed before .pane.bcast-target / .pane.focused so those borders win when they apply. */
 .pane.attention {
   border-color: #e0b85a;
-  box-shadow: inset 0 0 0 1px #e0b85a, 0 0 0 1px color-mix(in srgb, #e0b85a 45%, transparent);
+  box-shadow:
+    inset 0 0 0 1px #e0b85a,
+    0 0 0 1px color-mix(in srgb, #e0b85a 45%, transparent);
 }
 
 .pane.attention .pane-title {
@@ -660,7 +695,9 @@ body,
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   color: var(--fg);
-  font: 13px ui-monospace, monospace;
+  font:
+    13px ui-monospace,
+    monospace;
   box-shadow: 0 12px 40px var(--shadow);
 }
 
@@ -804,7 +841,11 @@ body,
    the reflow in (the class is dropped on exit, so leaving is instant — no lag on gutter drags,
    which never have this class). The hit overlay below intercepts clicks. */
 .layout-root.overview .leaf-box {
-  transition: left 0.18s ease, top 0.18s ease, width 0.18s ease, height 0.18s ease;
+  transition:
+    left 0.18s ease,
+    top 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease;
 }
 
 .overview-hit {
@@ -834,6 +875,9 @@ body,
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
+  /* Same as .shell: clip xterm's canvas to the rounded corners (overflow:hidden misses it in
+     WebKitGTK), so the terminal stops overflowing the pane's rounded bottom edge. */
+  clip-path: inset(0 round 4px);
   box-sizing: border-box;
 }
 
@@ -849,13 +893,21 @@ body,
   gap: 6px;
   height: 28px;
   padding: 0 6px 0 8px;
-  font: 11px ui-monospace, monospace;
+  font:
+    11px ui-monospace,
+    monospace;
   color: var(--fg-dim);
-  background: linear-gradient(var(--title-bg), color-mix(in srgb, var(--title-bg) 92%, #000));
+  background: linear-gradient(
+    var(--title-bg),
+    color-mix(in srgb, var(--title-bg) 92%, #000)
+  );
   border-bottom: 1px solid var(--border);
   user-select: none;
   flex: 0 0 auto;
-  transition: color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .pane.focused .pane-title {
@@ -871,8 +923,12 @@ body,
   cursor: grab;
   line-height: 1;
 }
-.pane-grip:hover { color: var(--fg); }
-.pane-grip:active { cursor: grabbing; }
+.pane-grip:hover {
+  color: var(--fg);
+}
+.pane-grip:active {
+  cursor: grabbing;
+}
 
 /* Drop target highlight while a pane is being dragged over this one. */
 .pane.drag-over {
@@ -888,7 +944,9 @@ body,
   height: 7px;
   border-radius: 50%;
   background: var(--border);
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 .pane-status.busy {
   background: #5fb96b;
@@ -903,8 +961,15 @@ body,
   animation: th-pulse 1s ease-in-out infinite;
 }
 @keyframes th-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 #e0b85a88; }
-  50% { opacity: 0.5; box-shadow: 0 0 0 3px #e0b85a00; }
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 #e0b85a88;
+  }
+  50% {
+    opacity: 0.5;
+    box-shadow: 0 0 0 3px #e0b85a00;
+  }
 }
 
 /* AI-agent badge: a small coloured pill identifying the agent running in a pane. */
@@ -922,8 +987,13 @@ body,
   letter-spacing: 0.02em;
   line-height: 1;
   color: var(--agent-color, var(--accent));
-  background: color-mix(in srgb, var(--agent-color, var(--accent)) 16%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent-color, var(--accent)) 40%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--agent-color, var(--accent)) 16%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--agent-color, var(--accent)) 40%, transparent);
 }
 
 .pane-name {
@@ -969,14 +1039,18 @@ body,
   justify-content: center;
   width: 20px;
   height: 20px;
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
   line-height: 1;
   color: var(--fg-muted);
   background: transparent;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  transition: color 0.1s ease, background 0.1s ease;
+  transition:
+    color 0.1s ease,
+    background 0.1s ease;
 }
 
 .pane-controls button:hover {
@@ -995,17 +1069,28 @@ body,
 }
 
 /* Terminal area fills the rest of the pane; positions the dead overlay. */
+/* The 4px breathing room lives here, NOT on the xterm mount node: FitAddon misreads a padded
+   mount as its full border-box in WebKitGTK and computes one row too many (which then gets
+   clipped). Padding the wrapper keeps the mount's fit math exact. bg == the xterm theme
+   background so the inset blends into the terminal. */
 .pane-term-wrap {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  padding: 4px;
+  box-sizing: border-box;
+  background: var(--bg);
 }
 
 .terminal-pane {
   height: 100%;
   width: 100%;
-  padding: 4px;
   box-sizing: border-box;
+  background: var(--bg);
+  /* xterm's canvas ignores overflow:hidden in WebKitGTK; clip the subtree to the mount box so a
+     transient over-fit can't spill onto the wrapper's padding. inset(0) = the box, so it never
+     cuts a row (fit sizes the canvas to fit exactly now that the mount is padding-free). */
+  clip-path: inset(0);
 }
 
 .terminal-pane .xterm,
@@ -1045,7 +1130,9 @@ body,
   gap: 8px;
   align-items: center;
   padding: 6px 10px;
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
   color: var(--fg);
   background: var(--overlay-strong);
   border: 1px solid var(--border-strong);
@@ -1083,7 +1170,9 @@ body,
 }
 
 .pane-search-input {
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
   color: var(--fg);
   background: var(--bg-sunken);
   border: 1px solid var(--border-strong);
@@ -1098,7 +1187,9 @@ body,
 }
 
 .pane-search button {
-  font: 12px ui-monospace, monospace;
+  font:
+    12px ui-monospace,
+    monospace;
   line-height: 1;
   color: var(--fg-dim);
   background: var(--control);
@@ -1162,7 +1253,9 @@ body,
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   color: var(--fg);
-  font: 13px ui-monospace, monospace;
+  font:
+    13px ui-monospace,
+    monospace;
   box-shadow: 0 12px 40px var(--shadow);
 }
 
@@ -1269,7 +1362,7 @@ body,
   order: 2;
 }
 
-.settings-row.toggle input[type="checkbox"] {
+.settings-row.toggle input[type='checkbox'] {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -1310,7 +1403,7 @@ body,
   gap: 8px;
 }
 
-.settings-range input[type="range"] {
+.settings-range input[type='range'] {
   flex: 1 1 auto;
   accent-color: var(--accent-strong);
 }
@@ -1476,7 +1569,9 @@ body,
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   color: var(--fg);
-  font: 13px ui-monospace, monospace;
+  font:
+    13px ui-monospace,
+    monospace;
   box-shadow: 0 12px 40px var(--shadow);
   overflow: hidden;
 }
@@ -1548,9 +1643,16 @@ body,
   cursor: pointer;
 }
 
-.git-file:hover { background: var(--bg-sunken); }
-.git-file.on { background: var(--accent-strong); color: #fff; }
-.git-file.on .git-file-dir { color: rgba(255, 255, 255, 0.7); }
+.git-file:hover {
+  background: var(--bg-sunken);
+}
+.git-file.on {
+  background: var(--accent-strong);
+  color: #fff;
+}
+.git-file.on .git-file-dir {
+  color: rgba(255, 255, 255, 0.7);
+}
 
 .git-file-name {
   flex: 1 1 auto;
@@ -1562,7 +1664,10 @@ body,
   white-space: nowrap;
 }
 
-.git-file-base { overflow: hidden; text-overflow: ellipsis; }
+.git-file-base {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .git-file-dir {
   flex: 1 1 auto;
@@ -1580,11 +1685,22 @@ body,
   font-weight: 600;
   font-size: 12px;
 }
-.git-file-badge[data-s="M"] { color: #d2a24c; }
-.git-file-badge[data-s="A"], .git-file-badge[data-s="U"] { color: #57a05a; }
-.git-file-badge[data-s="D"] { color: var(--danger); }
-.git-file-badge[data-s="R"] { color: var(--accent); }
-.git-file.on .git-file-badge { color: #fff; }
+.git-file-badge[data-s='M'] {
+  color: #d2a24c;
+}
+.git-file-badge[data-s='A'],
+.git-file-badge[data-s='U'] {
+  color: #57a05a;
+}
+.git-file-badge[data-s='D'] {
+  color: var(--danger);
+}
+.git-file-badge[data-s='R'] {
+  color: var(--accent);
+}
+.git-file.on .git-file-badge {
+  color: #fff;
+}
 
 /* diff pane */
 .git-diff {
@@ -1642,11 +1758,25 @@ body,
 }
 
 /* del/add/empty tints — rgba overlays so they read on any theme background */
-.git-ln.del, .git-code.del { background: rgba(248, 81, 73, 0.16); }
-.git-ln.add, .git-code.add { background: rgba(63, 185, 80, 0.16); }
-.git-code.del { box-shadow: inset 2px 0 0 rgba(248, 81, 73, 0.6); }
-.git-code.add { box-shadow: inset 2px 0 0 rgba(63, 185, 80, 0.6); }
-.git-ln.empty, .git-code.empty { background: var(--bg-sunken); opacity: 0.5; }
+.git-ln.del,
+.git-code.del {
+  background: rgba(248, 81, 73, 0.16);
+}
+.git-ln.add,
+.git-code.add {
+  background: rgba(63, 185, 80, 0.16);
+}
+.git-code.del {
+  box-shadow: inset 2px 0 0 rgba(248, 81, 73, 0.6);
+}
+.git-code.add {
+  box-shadow: inset 2px 0 0 rgba(63, 185, 80, 0.6);
+}
+.git-ln.empty,
+.git-code.empty {
+  background: var(--bg-sunken);
+  opacity: 0.5;
+}
 
 .git-empty {
   padding: 24px 16px;
@@ -1674,11 +1804,17 @@ body,
 }
 
 /* ---- diff line selection + send-to-terminal ---- */
-.git-diff-grid { user-select: none; cursor: default; }
+.git-diff-grid {
+  user-select: none;
+  cursor: default;
+}
 
 /* Selection tint — layered over any del/add background via an inset fill so it reads on
    every theme. Placed after the del/add rules so it wins the shared-class box-shadow. */
-.git-ln.sel, .git-code.sel { box-shadow: inset 0 0 0 9999px rgba(90, 140, 255, 0.24); }
+.git-ln.sel,
+.git-code.sel {
+  box-shadow: inset 0 0 0 9999px rgba(90, 140, 255, 0.24);
+}
 
 .git-diff-path {
   display: flex;
@@ -1709,7 +1845,9 @@ body,
   color: var(--accent);
   white-space: nowrap;
 }
-.git-send-loc { color: var(--fg-muted); }
+.git-send-loc {
+  color: var(--fg-muted);
+}
 .git-send-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -1721,7 +1859,10 @@ body,
   border-radius: 6px;
   padding: 5px 9px;
 }
-.git-send-input:focus { outline: none; border-color: var(--accent); }
+.git-send-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 .git-send-enter {
   flex: 0 0 auto;
   display: flex;
@@ -1743,8 +1884,13 @@ body,
   color: #fff;
   cursor: pointer;
 }
-.git-send-btn:hover:not(:disabled) { background: var(--accent-strong-hover); }
-.git-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.git-send-btn:hover:not(:disabled) {
+  background: var(--accent-strong-hover);
+}
+.git-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .git-send-clear {
   flex: 0 0 auto;
   font: inherit;
@@ -1754,7 +1900,9 @@ body,
   cursor: pointer;
   padding: 2px 4px;
 }
-.git-send-clear:hover { color: var(--danger); }
+.git-send-clear:hover {
+  color: var(--danger);
+}
 .git-send-flash {
   flex: 0 0 auto;
   font-size: 11px;
@@ -1788,7 +1936,9 @@ body,
 }
 
 .palette-input {
-  font: 14px ui-monospace, monospace;
+  font:
+    14px ui-monospace,
+    monospace;
   color: var(--fg);
   background: var(--bg);
   border: none;
@@ -1810,7 +1960,9 @@ body,
   padding: 7px 10px;
   border-radius: 6px;
   cursor: pointer;
-  font: 13px ui-monospace, monospace;
+  font:
+    13px ui-monospace,
+    monospace;
   color: var(--fg-dim);
 }
 
@@ -1852,5 +2004,7 @@ body,
   padding: 14px;
   text-align: center;
   color: var(--fg-muted);
-  font: 13px ui-monospace, monospace;
+  font:
+    13px ui-monospace,
+    monospace;
 }
