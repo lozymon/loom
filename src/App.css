@@ -243,6 +243,13 @@ body,
   color: var(--fg);
 }
 
+/* The leading glyph reads larger than the label for a clearer menu icon. */
+.tb-ico {
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 3px;
+}
+
 /* The flexible drag handle — most of the bar is grabbable to move the window. */
 .tb-spacer {
   flex: 1 1 auto;

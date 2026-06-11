@@ -7,16 +7,17 @@
 // listens for. (New workspace lives in the rail header; broadcasting in the docked bar;
 // save-as-preset in the palette — none need a button here.)
 
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { appState, toggleOverview } from "../stores/workspace";
-import appIcon from "../assets/app-icon.png";
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { appState, toggleOverview } from '../stores/workspace';
+import appIcon from '../assets/app-icon.png';
 
 export default function TitleBar(props: {
   onSettings: () => void;
   onGit: () => void;
 }) {
   const win = getCurrentWindow();
-  const openPalette = () => window.dispatchEvent(new CustomEvent("termhaus:command-palette"));
+  const openPalette = () =>
+    window.dispatchEvent(new CustomEvent('termhaus:command-palette'));
 
   return (
     <header class="titlebar" data-tauri-drag-region>
@@ -32,25 +33,55 @@ export default function TitleBar(props: {
           title="Overview / fleet glance (Ctrl+Shift+O)"
           onClick={() => toggleOverview()}
         >
-          ▦ Overview
+          <span class="tb-ico">▦</span> Overview
         </button>
-        <button class="tb-btn" title="Command palette (Ctrl+Shift+P)" onClick={openPalette}>
-          ⌘ Palette
+        <button
+          class="tb-btn"
+          title="Command palette (Ctrl+Shift+P)"
+          onClick={openPalette}
+        >
+          <span class="tb-ico">⌘</span> Palette
         </button>
-        <button class="tb-btn" title="Source control (Ctrl+Shift+G)" onClick={() => props.onGit()}>
-          ⎇ Git
+        <button
+          class="tb-btn"
+          title="Source control (Ctrl+Shift+G)"
+          onClick={() => props.onGit()}
+        >
+          <span class="tb-ico">⎇</span> Git
         </button>
-        <button class="tb-btn" title="Settings" onClick={() => props.onSettings()}>
-          ⚙ Settings
+        <button
+          class="tb-btn"
+          title="Settings"
+          onClick={() => props.onSettings()}
+        >
+          <span class="tb-ico">⚙</span> Settings
         </button>
       </nav>
 
       <div class="tb-spacer" data-tauri-drag-region />
 
       <div class="tb-window">
-        <button class="tb-wbtn" title="Minimize" onClick={() => void win.minimize()}>﹣</button>
-        <button class="tb-wbtn" title="Maximize" onClick={() => void win.toggleMaximize()}>▢</button>
-        <button class="tb-wbtn close" title="Close" onClick={() => void win.close()}>✕</button>
+        <button
+          class="tb-wbtn"
+          title="Minimize"
+          onClick={() => void win.minimize()}
+        >
+          ﹣
+        </button>
+        <button
+          class="tb-wbtn"
+          title="Maximize"
+          onClick={() => void win.toggleMaximize()}
+        >
+          ▢
+        </button>
+        <button
+          class="tb-wbtn close"
+          title="Close"
+          onClick={() => void win.close()}
+        >
+          ✕
+        </button>
       </div>
     </header>
   );
