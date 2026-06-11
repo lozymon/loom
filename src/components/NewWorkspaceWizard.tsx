@@ -1,15 +1,21 @@
-// The + on the rail opens this 3-step wizard (Start → Layout → Agents):
-//  1. Start  — pick the working folder (native picker + Recents) every pane starts in.
-//  2. Layout — a grid-preset tile (1/2/4/6/8/10/12) → buildBalancedTree(n) on launch.
-//  3. Agents — optional per-pane launch command; "Open without AI" = all plain shells.
+// The + on the rail opens this single-page launcher. Everything that used to be three steps
+// (Start → Layout → Agents) now lives on one panel:
+//  • Left  — where: working folder (native picker + Recents), saved Presets, launch options.
+//  • Right — what runs: a visual layout picker (mini-grid tiles + a 1–16 slider), a "fleet"
+//            row that fills every pane with one agent in a click, and an interactive grid
+//            preview where clicking a pane sets its agent / command / cwd individually.
 
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
-import { createWorkspace, deletePreset, launchPreset, presets, recents } from "../stores/workspace";
+import {
+  createWorkspace, deletePreset, launchPreset, presets, recents, saveCurrentAsPreset,
+} from "../stores/workspace";
 import { settings } from "../stores/settings";
-import { AGENTS } from "../lib/agents";
+import { AGENTS, detectAgent } from "../lib/agents";
+import { allocName, balancedBands } from "../lib/grid";
 
 const PRESETS = [1, 2, 4, 6, 8, 10, 12];
+const MAX_PANES = 16;
 
 /** Final path segment of a folder, for the workspace name. */
 function basename(path: string): string {
@@ -17,25 +23,70 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/** A small diagram of how buildBalancedTree(n) will arrange its panes — used on the layout tiles. */
+function MiniGrid(props: { n: number }) {
+  return (
+    <span class="wiz-mini">
+      <For each={balancedBands(props.n)}>
+        {(take) => (
+          <span class="wiz-mini-row">
+            <For each={Array.from({ length: take })}>{() => <span class="wiz-mini-cell" />}</For>
+          </span>
+        )}
+      </For>
+    </span>
+  );
+}
+
 export default function NewWorkspaceWizard(props: { onClose: () => void }) {
-  const [step, setStep] = createSignal(1);
   const [cwd, setCwd] = createSignal(settings.defaultCwd);
   const [count, setCount] = createSignal(4);
   const [commands, setCommands] = createSignal<string[]>([]);
+  const [cwds, setCwds] = createSignal<string[]>([]);
+  const [selected, setSelected] = createSignal<number | null>(null);
+  const [saveAsPreset, setSaveAsPreset] = createSignal(false);
+  const [broadcastAll, setBroadcastAll] = createSignal(false);
+
+  // Auto-names exactly as buildWorkspace allocates them (Faye, Cleo, …) so the preview matches.
+  const names = createMemo(() => {
+    const taken: string[] = [];
+    return Array.from({ length: count() }, () => {
+      const nm = allocName(taken);
+      taken.push(nm);
+      return nm;
+    });
+  });
+  const bands = createMemo(() => balancedBands(count()));
+  const agentCount = createMemo(() => commands().slice(0, count()).filter((c) => c?.trim()).length);
+
+  const setCommandAt = (i: number, cmd: string) =>
+    setCommands((c) => { const n = [...c]; n[i] = cmd; return n; });
+  const setCwdAt = (i: number, dir: string) =>
+    setCwds((c) => { const n = [...c]; n[i] = dir; return n; });
+  const fillAll = (cmd: string) => setCommands(Array.from({ length: count() }, () => cmd));
 
   async function browse() {
     const picked = await open({ directory: true, title: "Pick a working folder" });
     if (typeof picked === "string") setCwd(picked);
   }
+  async function browseCwdAt(i: number) {
+    const picked = await open({ directory: true, title: "Folder for this terminal" });
+    if (typeof picked === "string") setCwdAt(i, picked);
+  }
 
-  function launch(withCommands: boolean) {
+  function launch() {
     const folder = cwd().trim();
+    const cmds = commands().slice(0, count());
+    const dirs = cwds().slice(0, count());
     createWorkspace({
       name: folder ? basename(folder) : `Workspace ${recents().length + 1}`,
       cwd: folder,
       paneCount: count(),
-      commands: withCommands ? commands() : undefined,
+      commands: cmds.some((c) => c?.trim()) ? cmds : undefined,
+      cwds: dirs.some((c) => c?.trim()) ? dirs : undefined,
+      broadcastAll: broadcastAll(),
     });
+    if (saveAsPreset()) saveCurrentAsPreset();
     props.onClose();
   }
 
@@ -44,138 +95,217 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     if (p) { launchPreset(p); props.onClose(); }
   }
 
-  // Esc closes the wizard from anywhere (the panel isn't focus-trapped), matching Settings
-  // and GitPanel. Capture phase: while a terminal has focus, xterm stops propagation of
-  // Escape (it sends \x1b to the PTY), so a bubble-phase listener wouldn't fire until you
-  // click off the pane.
+  // Esc closes the launcher from anywhere (capture phase: xterm swallows Escape when a terminal
+  // has focus, so a bubble listener wouldn't fire until you click off the pane).
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") props.onClose();
+    else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) launch();
   };
   onMount(() => window.addEventListener("keydown", onKey, true));
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
   return (
     <div class="wizard-backdrop" onClick={() => props.onClose()}>
-      <div class="wizard" onClick={(e) => e.stopPropagation()}>
-        <header class="wizard-steps">
-          <span classList={{ on: step() === 1 }}>1 · Start</span>
-          <span classList={{ on: step() === 2 }}>2 · Layout</span>
-          <span classList={{ on: step() === 3 }}>3 · Agents</span>
+      <div class="wizard wizard-wide" onClick={(e) => e.stopPropagation()}>
+        <header class="wizard-head">
+          <strong>New workspace</strong>
+          <span class="muted">
+            {count()} terminal{count() === 1 ? "" : "s"}
+            {agentCount() > 0 ? ` · ${agentCount()} agent${agentCount() === 1 ? "" : "s"}` : " · shells"}
+          </span>
         </header>
 
-        {/* Step 1 — working folder + presets + recents */}
-        <Show when={step() === 1}>
-          <div class="wizard-body">
-            <Show when={presets().length > 0}>
-              <div class="wizard-label">Presets · one-click relaunch</div>
-              <div class="wizard-presets">
-                <For each={presets()}>
-                  {(p) => (
-                    <div class="wizard-preset">
-                      <button class="wizard-preset-go" onClick={() => launchSaved(p.id)}>
-                        <span>{p.name}</span>
-                        <span class="muted">{p.paneCount} panes{p.commands?.some(Boolean) ? " · agents" : ""}</span>
+        <div class="wiz-cols">
+          {/* LEFT — where it runs */}
+          <div class="wiz-left">
+            <div>
+              <label class="wizard-label">Working folder</label>
+              <div class="wizard-row">
+                <input
+                  class="wizard-input"
+                  placeholder="$HOME (default)"
+                  value={cwd()}
+                  onInput={(e) => setCwd(e.currentTarget.value)}
+                />
+                <button onClick={browse}>Browse…</button>
+              </div>
+            </div>
+
+            <Show when={recents().length > 0}>
+              <div>
+                <label class="wizard-label">Recent</label>
+                <div class="wizard-recents">
+                  <For each={recents()}>
+                    {(r) => (
+                      <button class="wizard-recent" onClick={() => { setCwd(r.cwd); setCount(r.count); }}>
+                        <span>{basename(r.cwd)}</span>
+                        <span class="muted">{r.cwd} · {r.count}</span>
                       </button>
-                      <button class="wizard-preset-del" title="Delete preset" onClick={() => deletePreset(p.id)}>✕</button>
-                    </div>
-                  )}
-                </For>
+                    )}
+                  </For>
+                </div>
               </div>
             </Show>
-            <label class="wizard-label">Working folder</label>
-            <div class="wizard-row">
-              <input
-                class="wizard-input"
-                placeholder="$HOME (default)"
-                value={cwd()}
-                onInput={(e) => setCwd(e.currentTarget.value)}
-              />
-              <button onClick={browse}>Browse…</button>
+
+            <Show when={presets().length > 0}>
+              <div>
+                <label class="wizard-label">Presets · one-click relaunch</label>
+                <div class="wizard-presets">
+                  <For each={presets()}>
+                    {(p) => (
+                      <div class="wizard-preset">
+                        <button class="wizard-preset-go" onClick={() => launchSaved(p.id)}>
+                          <span>{p.name}</span>
+                          <span class="muted">{p.paneCount} panes{p.commands?.some(Boolean) ? " · agents" : ""}</span>
+                        </button>
+                        <button class="wizard-preset-del" title="Delete preset" onClick={() => deletePreset(p.id)}>✕</button>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
+            <div class="wiz-opts">
+              <label class="wiz-opt">
+                <input type="checkbox" checked={broadcastAll()} onChange={(e) => setBroadcastAll(e.currentTarget.checked)} />
+                Preselect all panes for broadcast
+              </label>
+              <label class="wiz-opt">
+                <input type="checkbox" checked={saveAsPreset()} onChange={(e) => setSaveAsPreset(e.currentTarget.checked)} />
+                Save as preset on launch
+              </label>
             </div>
-            <Show when={recents().length > 0}>
-              <div class="wizard-label">Recent</div>
-              <div class="wizard-recents">
-                <For each={recents()}>
-                  {(r) => (
-                    <button class="wizard-recent" onClick={() => { setCwd(r.cwd); setCount(r.count); }}>
-                      <span>{basename(r.cwd)}</span>
-                      <span class="muted">{r.cwd} · {r.count}</span>
+          </div>
+
+          {/* RIGHT — what runs */}
+          <div class="wiz-right">
+            <div>
+              <label class="wizard-label">Layout</label>
+              <div class="wiz-ltiles">
+                <For each={PRESETS}>
+                  {(n) => (
+                    <button class="wiz-ltile" classList={{ on: count() === n }} onClick={() => setCount(n)}>
+                      <MiniGrid n={n} />
+                      <span>{n}</span>
                     </button>
                   )}
                 </For>
               </div>
+              <div class="wiz-slider">
+                <span class="muted">custom</span>
+                <input
+                  type="range" min="1" max={MAX_PANES} value={count()}
+                  onInput={(e) => setCount(+e.currentTarget.value)}
+                />
+                <span class="wiz-slider-n">{count()}</span>
+              </div>
+            </div>
+
+            <div>
+              <label class="wizard-label">Fleet · fill every pane</label>
+              <div class="wiz-fleet">
+                <For each={AGENTS}>
+                  {(a) => (
+                    <button class="wiz-chip" style={{ "--chip": a.color }} title={`Fill all with ${a.label}`} onClick={() => fillAll(a.command)}>
+                      <span class="wiz-chip-ic">{a.icon}</span>{a.label}
+                    </button>
+                  )}
+                </For>
+                <button class="wiz-chip wiz-chip-shell" title="All plain shells" onClick={() => fillAll("")}>
+                  <span class="wiz-chip-ic">⌗</span>Shells
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="wizard-label">Preview · click a pane to set its agent</label>
+              <div class="wiz-grid">
+                <For each={bands()}>
+                  {(take, bandIdx) => {
+                    const start = () => bands().slice(0, bandIdx()).reduce((a, b) => a + b, 0);
+                    return (
+                      <div class="wiz-grid-row">
+                        <For each={Array.from({ length: take })}>
+                          {(_, k) => {
+                            const idx = () => start() + k();
+                            const agent = () => detectAgent(commands()[idx()]);
+                            return (
+                              <button
+                                class="wiz-cell"
+                                classList={{ on: selected() === idx(), agent: !!agent() }}
+                                style={agent() ? { "--cell-accent": agent()!.color } : undefined}
+                                onClick={() => setSelected(idx())}
+                              >
+                                <span class="wiz-cell-name">{names()[idx()]}</span>
+                                <span class="wiz-cell-agent">
+                                  {agent() ? `${agent()!.icon} ${agent()!.label}` : "shell"}
+                                  <Show when={cwds()[idx()]?.trim()}> · {basename(cwds()[idx()]!)}</Show>
+                                </span>
+                              </button>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+
+            <Show when={selected() !== null && selected()! < count()}>
+              {(() => {
+                const i = () => selected()!;
+                return (
+                  <div class="wiz-editor">
+                    <div class="wiz-editor-head">
+                      <strong>{names()[i()]}</strong>
+                      <button class="wiz-editor-x" title="Done" onClick={() => setSelected(null)}>✕</button>
+                    </div>
+                    <div class="wiz-fleet">
+                      <For each={AGENTS}>
+                        {(a) => (
+                          <button
+                            class="wiz-chip" style={{ "--chip": a.color }}
+                            classList={{ on: detectAgent(commands()[i()])?.id === a.id }}
+                            onClick={() => setCommandAt(i(), a.command)}
+                          >
+                            <span class="wiz-chip-ic">{a.icon}</span>{a.label}
+                          </button>
+                        )}
+                      </For>
+                      <button class="wiz-chip wiz-chip-shell" classList={{ on: !commands()[i()]?.trim() }} onClick={() => setCommandAt(i(), "")}>
+                        <span class="wiz-chip-ic">⌗</span>Shell
+                      </button>
+                    </div>
+                    <div class="wizard-row">
+                      <span class="muted" style={{ width: "5ch" }}>cmd</span>
+                      <input
+                        class="wizard-input" placeholder="$SHELL"
+                        value={commands()[i()] ?? ""}
+                        onInput={(e) => setCommandAt(i(), e.currentTarget.value)}
+                      />
+                    </div>
+                    <div class="wizard-row">
+                      <span class="muted" style={{ width: "5ch" }}>cwd</span>
+                      <input
+                        class="wizard-input" placeholder="(workspace folder)"
+                        value={cwds()[i()] ?? ""}
+                        onInput={(e) => setCwdAt(i(), e.currentTarget.value)}
+                      />
+                      <button onClick={() => browseCwdAt(i())}>Browse…</button>
+                    </div>
+                  </div>
+                );
+              })()}
             </Show>
           </div>
-        </Show>
-
-        {/* Step 2 — grid preset */}
-        <Show when={step() === 2}>
-          <div class="wizard-body">
-            <label class="wizard-label">Terminals</label>
-            <div class="wizard-tiles">
-              <For each={PRESETS}>
-                {(n) => (
-                  <button class="wizard-tile" classList={{ on: count() === n }} onClick={() => setCount(n)}>
-                    {n}
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
-        </Show>
-
-        {/* Step 3 — per-pane commands */}
-        <Show when={step() === 3}>
-          <div class="wizard-body">
-            <label class="wizard-label">Launch command per terminal (optional)</label>
-            <div class="wizard-cmds">
-              <For each={Array.from({ length: count() })}>
-                {(_, i) => (
-                  <div class="wizard-row">
-                    <span class="muted" style={{ width: "5ch" }}>#{i() + 1}</span>
-                    <input
-                      class="wizard-input"
-                      placeholder="$SHELL"
-                      value={commands()[i()] ?? ""}
-                      onInput={(e) => setCommands((c) => { const n = [...c]; n[i()] = e.currentTarget.value; return n; })}
-                    />
-                    <select
-                      class="wizard-agent"
-                      title="Quick-fill an AI agent command"
-                      value=""
-                      onChange={(e) => {
-                        const cmd = e.currentTarget.value;
-                        e.currentTarget.value = "";
-                        if (cmd) setCommands((c) => { const n = [...c]; n[i()] = cmd; return n; });
-                      }}
-                    >
-                      <option value="">+ agent</option>
-                      <For each={AGENTS}>
-                        {(a) => <option value={a.command}>{a.label}</option>}
-                      </For>
-                    </select>
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
-        </Show>
+        </div>
 
         <footer class="wizard-foot">
           <button onClick={() => props.onClose()}>Cancel</button>
           <span class="spacer" />
-          <Show when={step() > 1}>
-            <button onClick={() => setStep((s) => s - 1)}>Back</button>
-          </Show>
-          <Show when={step() < 3}>
-            <button onClick={() => setStep((s) => s + 1)}>Next</button>
-          </Show>
-          <Show when={step() === 2}>
-            <button class="primary" onClick={() => launch(false)}>Open without AI</button>
-          </Show>
-          <Show when={step() === 3}>
-            <button class="primary" onClick={() => launch(true)}>Launch</button>
-          </Show>
+          <button class="primary" onClick={launch}>Launch</button>
         </footer>
       </div>
     </div>

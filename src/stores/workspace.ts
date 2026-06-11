@@ -77,6 +77,10 @@ export interface NewWorkspaceOpts {
   paneCount: number;
   /** Per-pane launch commands in row-major order; entry omitted/empty = plain shell. */
   commands?: (string | undefined)[];
+  /** Per-pane working-folder overrides (row-major); entry omitted/empty = workspace `cwd`. */
+  cwds?: (string | undefined)[];
+  /** Preselect every pane as a broadcast target (one prompt → many panes from launch). */
+  broadcastAll?: boolean;
 }
 
 function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
@@ -86,12 +90,17 @@ function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
     const paneId = nextPaneId();
     const title = allocName(Object.values(panes).map((p) => p.title));
     const command = opts.commands?.[i]?.trim();
-    panes[paneId] = command ? { title, command } : { title };
+    const cwd = opts.cwds?.[i]?.trim();
+    const spec: PaneSpec = { title };
+    if (command) spec.command = command;
+    if (cwd) spec.cwd = cwd;
+    panes[paneId] = spec;
     i++;
     return { kind: "leaf", paneId };
   };
   const tree = buildBalancedTree(Math.max(1, opts.paneCount), makeLeaf);
-  return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, broadcast: [] };
+  const broadcast = opts.broadcastAll ? leafIds(tree) : [];
+  return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, broadcast };
 }
 
 // Starts empty; `init()` (called once at startup) hydrates from disk or seeds a default

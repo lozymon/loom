@@ -730,6 +730,8 @@ body,
 }
 
 .wizard-label {
+  display: block;
+  margin-bottom: 7px;
   color: var(--fg-muted);
   font-size: 11px;
 }
@@ -791,30 +793,258 @@ body,
   font-size: 11px;
 }
 
-.wizard-tiles {
+/* ---- Single-page launcher (two columns: where | what) ---- */
+.wizard-wide {
+  width: 820px;
+}
+
+.wizard-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.wizard-tile {
-  width: 52px;
-  height: 52px;
-  font-size: 16px !important;
+.wizard-head strong {
+  color: var(--fg);
 }
 
-.wizard-tile.on {
-  background: var(--accent-strong) !important;
-  border-color: var(--accent-strong) !important;
-  color: var(--on-accent) !important;
+.wiz-cols {
+  display: flex;
+  align-items: stretch;
 }
 
-.wizard-cmds {
+.wiz-left,
+.wiz-right {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 260px;
+  gap: 14px;
+  padding: 16px;
+  max-height: 64vh;
   overflow-y: auto;
+}
+
+.wiz-left {
+  flex: 0 0 290px;
+  border-right: 1px solid var(--border);
+}
+
+.wiz-right {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wiz-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.wiz-opt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.wiz-opt input {
+  accent-color: var(--accent-strong);
+}
+
+/* Layout tiles — each tile renders a mini diagram of the real grid shape. */
+.wiz-ltiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wizard .wiz-ltile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 50px;
+  padding: 6px 4px;
+}
+
+.wizard .wiz-ltile.on {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: var(--on-accent);
+}
+
+.wiz-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 32px;
+  height: 24px;
+}
+
+.wiz-mini-row {
+  display: flex;
+  gap: 2px;
+  flex: 1 1 0;
+}
+
+.wiz-mini-cell {
+  flex: 1 1 0;
+  background: var(--fg-faint);
+  border-radius: 1px;
+}
+
+.wiz-ltile.on .wiz-mini-cell {
+  background: var(--on-accent);
+  opacity: 0.7;
+}
+
+.wiz-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.wiz-slider input[type="range"] {
+  flex: 1 1 auto;
+  accent-color: var(--accent-strong);
+}
+
+.wiz-slider-n {
+  min-width: 2ch;
+  text-align: right;
+  color: var(--fg);
+}
+
+/* Agent chips — fleet-fill row and the per-pane editor share these. */
+.wiz-fleet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wizard .wiz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 5px;
+  border-radius: 14px;
+  font-size: 11px;
+}
+
+.wizard .wiz-chip.on {
+  border-color: var(--chip, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--chip, var(--accent));
+}
+
+.wiz-chip-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--chip, var(--control-hover));
+  color: #fff;
+  font-size: 10px;
+}
+
+.wizard .wiz-chip-shell .wiz-chip-ic {
+  background: var(--control-hover);
+  color: var(--fg-dim);
+}
+
+/* Interactive preview grid. */
+.wiz-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  background: var(--border);
+  border-radius: 6px;
+  min-height: 150px;
+}
+
+.wiz-grid-row {
+  display: flex;
+  gap: 4px;
+  flex: 1 1 0;
+}
+
+.wizard .wiz-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 8px;
+  text-align: left;
+  background: var(--bg-sunken);
+  color: var(--fg-dim);
+}
+
+.wizard .wiz-cell:hover {
+  border-color: var(--accent);
+}
+
+.wizard .wiz-cell.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.wizard .wiz-cell.agent {
+  border-left: 3px solid var(--cell-accent);
+}
+
+.wiz-cell-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wiz-cell-agent {
+  font-size: 10px;
+  color: var(--fg-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Per-pane editor card (shown when a preview cell is selected). */
+.wiz-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.wiz-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wiz-editor-head strong {
+  color: var(--fg);
+}
+
+.wizard .wiz-editor-x {
+  padding: 2px 7px;
+  background: transparent;
+  border-color: transparent;
 }
 
 .wizard-foot {

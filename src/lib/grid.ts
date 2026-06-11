@@ -36,20 +36,37 @@ function chain(items: LayoutNode[], dir: "row" | "col"): LayoutNode {
 }
 
 /**
+ * The width-biased band shape of an `n`-leaf grid: `rows = floor(√n)` bands stacked
+ * top-to-bottom, the returned array giving each band's leaf count (row-major). This is
+ * the single source of truth for the grid geometry — `buildBalancedTree` builds the real
+ * split tree from it, and the wizard's preview/mini tiles render the same shape.
+ */
+export function balancedBands(n: number): number[] {
+  const count = Math.max(1, Math.floor(n));
+  const rows = Math.max(1, Math.floor(Math.sqrt(count)));
+  const bands: number[] = [];
+  let idx = 0;
+  for (let r = 0; r < rows; r++) {
+    // Spread the remaining leaves evenly across the remaining bands.
+    const take = Math.ceil((count - idx) / (rows - r));
+    bands.push(take);
+    idx += take;
+  }
+  return bands;
+}
+
+/**
  * Build a width-biased balanced tree of `n` leaves: `rows = floor(√n)` bands stacked
  * top-to-bottom (`col`), each band a row of side-by-side leaves (`row`). `makeLeaf` is
  * called once per leaf, in row-major order, so callers can allocate pane ids/specs.
  */
 export function buildBalancedTree(n: number, makeLeaf: () => LayoutNode): LayoutNode {
   const count = Math.max(1, Math.floor(n));
-  const rows = Math.max(1, Math.floor(Math.sqrt(count)));
   const leaves = Array.from({ length: count }, makeLeaf);
 
   const bands: LayoutNode[] = [];
   let idx = 0;
-  for (let r = 0; r < rows; r++) {
-    // Spread the remaining leaves evenly across the remaining bands.
-    const take = Math.ceil((count - idx) / (rows - r));
+  for (const take of balancedBands(count)) {
     bands.push(chain(leaves.slice(idx, idx + take), "row"));
     idx += take;
   }
