@@ -7,6 +7,7 @@
 
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import TitleBar from "./components/TitleBar";
 import WorkspaceRail from "./components/WorkspaceRail";
 import LayoutView from "./components/LayoutNode";
 import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
@@ -75,11 +76,13 @@ export default function App() {
 
   return (
     <div class="shell">
-      <WorkspaceRail
+      <TitleBar
         onNew={() => setWizardOpen(true)}
         onSettings={() => setSettingsOpen(true)}
         onGit={() => setGitOpen(true)}
       />
+      <div class="body">
+      <WorkspaceRail />
       <div class="stage">
         <div class="stage-grid">
           <Show when={ready()}>
@@ -95,6 +98,7 @@ export default function App() {
         <Show when={ready()}>
           <BroadcastBar />
         </Show>
+      </div>
       </div>
       <Show when={wizardOpen()}>
         <NewWorkspaceWizard onClose={() => setWizardOpen(false)} />

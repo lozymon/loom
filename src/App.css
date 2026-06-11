@@ -153,11 +153,111 @@ body,
   width: 100vw;
 }
 
-/* M3 shell: left rail | stage of workspace layers. */
+/* M3 shell: custom title bar on top, then a horizontal body (left rail | stage). */
 .shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
+}
+
+/* The horizontal row under the title bar: rail + stage fill the remaining height. */
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---- Custom title bar (replaces the native window frame) ---- */
+.titlebar {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 36px;
+  height: 36px;
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tb-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 10px;
+}
+
+.tb-logo {
+  display: block;
+}
+
+.tb-name {
+  font: 600 12px ui-monospace, monospace;
+  color: var(--fg);
+  letter-spacing: 0.02em;
+}
+
+.tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-dim);
+  font: 12px ui-monospace, monospace;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tb-btn:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.tb-btn.on {
+  background: var(--surface-active);
+  color: var(--fg);
+}
+
+/* The flexible drag handle — most of the bar is grabbable to move the window. */
+.tb-spacer {
+  flex: 1 1 auto;
+}
+
+.tb-window {
+  display: flex;
+  align-items: stretch;
+}
+
+.tb-wbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font: 13px ui-monospace, monospace;
+  cursor: pointer;
+}
+
+.tb-wbtn:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.tb-wbtn.close:hover {
+  background: #e81123;
+  color: #fff;
 }
 
 .stage {
@@ -259,63 +359,6 @@ body,
 
 .rail-close:hover {
   color: var(--danger);
-}
-
-.rail-foot {
-  display: flex;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.rail-save {
-  flex: 1 1 auto;
-  font: 11px ui-monospace, monospace;
-  color: var(--fg-dim);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px;
-  cursor: pointer;
-}
-
-.rail-save:hover {
-  background: var(--surface-hover);
-  color: var(--fg);
-}
-
-.rail-new {
-  font-size: 18px;
-  line-height: 1;
-  color: var(--fg-dim);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-  flex: 0 0 auto;
-}
-
-.rail-new:hover {
-  background: var(--surface-hover);
-  color: var(--fg);
-}
-
-/* ---- Settings button (rail footer) ---- */
-.rail-settings {
-  flex: 0 0 auto;
-  font: 11px ui-monospace, monospace;
-  color: var(--fg-dim);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px;
-  cursor: pointer;
-  text-align: center;
-}
-
-.rail-settings:hover {
-  background: var(--surface-hover);
-  color: var(--fg);
 }
 
 /* ---- Broadcast bar ---- */

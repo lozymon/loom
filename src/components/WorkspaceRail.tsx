@@ -1,12 +1,13 @@
 // Left vertical workspace rail: one entry per workspace (name + live terminal-count badge
-// + close ✕), the active one highlighted; a + at the bottom opens the new-workspace flow.
-// Switching keeps hidden workspaces' PTYs alive; closing removes a workspace (PTYs die).
+// + close ✕), the active one highlighted. Switching keeps hidden workspaces' PTYs alive;
+// closing removes a workspace (PTYs die). App actions (New/Save/Settings/Source control)
+// live in the top title bar, not here.
 
 import { For, Show } from "solid-js";
-import { appState, paneCount, switchWorkspace, closeWorkspace, saveCurrentAsPreset } from "../stores/workspace";
+import { appState, paneCount, switchWorkspace, closeWorkspace } from "../stores/workspace";
 import { anyAttention } from "../stores/activity";
 
-export default function WorkspaceRail(props: { onNew: () => void; onSettings: () => void; onGit: () => void }) {
+export default function WorkspaceRail() {
   return (
     <nav class="rail">
       <div class="rail-list">
@@ -35,23 +36,6 @@ export default function WorkspaceRail(props: { onNew: () => void; onSettings: ()
             </div>
           )}
         </For>
-      </div>
-      <button class="rail-settings" title="Source control (Ctrl+Shift+G)" onClick={() => props.onGit()}>
-        ⎇ Source control
-      </button>
-      <button class="rail-settings" title="Settings" onClick={() => props.onSettings()}>
-        ⚙ Settings
-      </button>
-
-      <div class="rail-foot">
-        <button
-          class="rail-save"
-          title="Save active workspace as a preset"
-          onClick={() => saveCurrentAsPreset()}
-        >
-          ⛁ Save
-        </button>
-        <button class="rail-new" title="New workspace" onClick={() => props.onNew()}>＋</button>
       </div>
     </nav>
   );
