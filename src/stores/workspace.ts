@@ -383,6 +383,12 @@ export function clearBroadcastTargets() {
   if (i >= 0) setApp("workspaces", i, "broadcast", []);
 }
 
+/** Explicitly select every pane in the active workspace as a broadcast target. */
+export function selectAllBroadcastTargets() {
+  const i = wsIdxById(app.activeId);
+  if (i >= 0) setApp("workspaces", i, "broadcast", leafIds(app.workspaces[i].tree));
+}
+
 /**
  * Set the active workspace's broadcast subset to every pane whose name matches `pattern` (a
  * glob like `Cl*` or a plain substring; see lib/matching). An empty pattern clears the subset

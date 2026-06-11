@@ -2,17 +2,16 @@
 // tauri.conf.json), so this bar owns: the app icon + name, a flat row of app-action buttons,
 // a draggable region (data-tauri-drag-region), and the min/maximize/close window controls.
 //
-// Actions reuse the same entry points as the rail/keyboard: New/Settings/Git are passed down
-// from App; Overview and the Command Palette fire through the store / the window events App
-// already listens for. (Broadcast lives in the always-docked bar; save-as-preset is in the
-// palette — neither needs a button here.)
+// Actions reuse the same entry points as the rail/keyboard: Settings/Git are passed down from
+// App; Overview and the Command Palette fire through the store / the window events App already
+// listens for. (New workspace lives in the rail header; broadcasting in the docked bar;
+// save-as-preset in the palette — none need a button here.)
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { appState, toggleOverview } from "../stores/workspace";
 import appIcon from "../assets/app-icon.png";
 
 export default function TitleBar(props: {
-  onNew: () => void;
   onSettings: () => void;
   onGit: () => void;
 }) {
@@ -27,9 +26,6 @@ export default function TitleBar(props: {
       </div>
 
       <nav class="tb-actions">
-        <button class="tb-btn" title="New workspace (Ctrl+Shift+T)" onClick={() => props.onNew()}>
-          ＋ New
-        </button>
         <button
           class="tb-btn"
           classList={{ on: appState.overview }}

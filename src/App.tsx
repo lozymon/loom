@@ -77,12 +77,11 @@ export default function App() {
   return (
     <div class="shell">
       <TitleBar
-        onNew={() => setWizardOpen(true)}
         onSettings={() => setSettingsOpen(true)}
         onGit={() => setGitOpen(true)}
       />
       <div class="body">
-      <WorkspaceRail />
+      <WorkspaceRail onNew={() => setWizardOpen(true)} />
       <div class="stage">
         <div class="stage-grid">
           <Show when={ready()}>

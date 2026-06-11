@@ -18,7 +18,7 @@ function wsHue(id: string): number {
   return h;
 }
 
-export default function WorkspaceRail() {
+export default function WorkspaceRail(props: { onNew: () => void }) {
   // Drag the right edge to resize; clamp to a sane range and persist the new width.
   function onResizeDown(e: PointerEvent) {
     e.preventDefault();
@@ -41,6 +41,10 @@ export default function WorkspaceRail() {
 
   return (
     <nav class="rail" style={{ "flex-basis": `${settings.railWidth}px`, width: `${settings.railWidth}px` }}>
+      <div class="rail-header">
+        <span class="rail-title">Workspaces</span>
+        <button class="rail-add" title="New workspace (Ctrl+Shift+T)" onClick={() => props.onNew()}>＋</button>
+      </div>
       <div class="rail-list">
         <For each={appState.workspaces}>
           {(ws) => {

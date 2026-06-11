@@ -15,6 +15,7 @@ import {
   appState,
   broadcastTargets,
   clearBroadcastTargets,
+  selectAllBroadcastTargets,
   setBroadcastByPattern,
   setBroadcastSelecting,
 } from "../stores/workspace";
@@ -41,6 +42,9 @@ export default function BroadcastBar() {
   const reach = () => countLive(targets());
   const selecting = () => appState.broadcastSelecting;
   const subset = () => (ws()?.broadcast.length ?? 0) > 0;
+  /** Total panes in the active workspace, and whether every one is explicitly picked. */
+  const paneTotal = () => Object.keys(ws()?.panes ?? {}).length;
+  const allPicked = () => paneTotal() > 0 && (ws()?.broadcast.length ?? 0) >= paneTotal();
 
   function send() {
     const ids = targets();
@@ -86,6 +90,13 @@ export default function BroadcastBar() {
   function applyPattern(p: string) {
     setPattern(p);
     setBroadcastByPattern(p);
+  }
+
+  /** One-click select-all / deselect-all while picking targets in the active workspace. */
+  function toggleAll() {
+    if (allPicked()) clearBroadcastTargets();
+    else selectAllBroadcastTargets();
+    setPattern("");
   }
 
   function useSnippet(s: string) {
@@ -141,6 +152,13 @@ export default function BroadcastBar() {
       />
 
       <Show when={selecting()}>
+        <button
+          class="bcast-all"
+          title={allPicked() ? "Deselect all panes" : "Select all panes in this workspace"}
+          onClick={toggleAll}
+        >
+          {allPicked() ? "None" : "All"}
+        </button>
         <input
           class="bcast-pattern"
           placeholder="name e.g. Cl*"
