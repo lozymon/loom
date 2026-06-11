@@ -19,6 +19,7 @@ export type ActionId =
   | "next-workspace"
   | "command-palette"
   | "source-control"
+  | "settings"
   | "overview"
   | "copy"
   | "paste"
@@ -51,6 +52,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "prev-workspace", label: "Previous workspace", group: "Workspaces", defaultKey: "pageup" },
   { id: "next-workspace", label: "Next workspace", group: "Workspaces", defaultKey: "pagedown" },
   { id: "command-palette", label: "Command palette", group: "General", defaultKey: "p" },
+  { id: "settings", label: "Open settings", group: "General", defaultKey: "," },
   { id: "overview", label: "Toggle overview (fleet glance)", group: "General", defaultKey: "o" },
   { id: "copy", label: "Copy selection", group: "Clipboard & search", defaultKey: "c" },
   { id: "paste", label: "Paste", group: "Clipboard & search", defaultKey: "v" },
@@ -73,7 +75,9 @@ export const DEFAULT_KEYBINDINGS: Keybindings = Object.fromEntries(
 // Whether Shift is held changes the reported `KeyboardEvent.key` for symbol keys, and the exact
 // character varies by layout — Ctrl+Shift+= may arrive as "+" or "=", Ctrl+Shift+- as "_" or
 // "-". Fold each pair to one canonical key for matching so a binding fires regardless.
-const SHIFT_FOLD: Record<string, string> = { "+": "=", _: "-" };
+// Ctrl+Shift+, reports "<" on US layouts (shift transforms ","); fold it back to "," so the
+// binding fires regardless, matching the +/= and _/- pairs.
+const SHIFT_FOLD: Record<string, string> = { "+": "=", _: "-", "<": "," };
 const foldKey = (k: string): string => SHIFT_FOLD[k] ?? k;
 
 /** Which action (if any) the pressed final key triggers. First match wins on conflict. */
@@ -89,6 +93,7 @@ const PRETTY_KEY: Record<string, string> = {
   " ": "Space", spacebar: "Space", tab: "Tab", backspace: "Backspace",
   escape: "Esc", home: "Home", end: "End", delete: "Del", insert: "Ins",
   _: "-", // Ctrl+Shift+- arrives as "_"; show the key as printed on the keyboard.
+  "<": ",", // Ctrl+Shift+, may arrive as "<"; show it as printed.
 };
 
 /** Render a stored final key as a full combo, e.g. "d" → "Ctrl+Shift+D". */

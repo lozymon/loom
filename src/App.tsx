@@ -15,9 +15,13 @@ import BroadcastBar from "./components/BroadcastBar";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import CommandPalette from "./components/CommandPalette";
-import { appState, init, startPersistence, flushPersistence, setOverview } from "./stores/workspace";
+import {
+  appState, init, startPersistence, flushPersistence,
+  setOverview, toggleOverview, switchWorkspaceRelative,
+} from "./stores/workspace";
 import { initTheme } from "./stores/theme";
-import { initSettings } from "./stores/settings";
+import { initSettings, settings } from "./stores/settings";
+import { actionForKey, isModifierKey, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import "./App.css";
 
@@ -49,10 +53,43 @@ export default function App() {
   window.addEventListener("termhaus:source-control", openGit);
   onCleanup(() => window.removeEventListener("termhaus:source-control", openGit));
 
+  // Ctrl+Shift+, from a focused pane opens Settings.
+  const openSettings = () => setSettingsOpen(true);
+  window.addEventListener("termhaus:settings", openSettings);
+  onCleanup(() => window.removeEventListener("termhaus:settings", openSettings));
+
   // Ctrl+Shift+P opens the command palette (toggles so a second press closes it).
   const openPalette = () => setPaletteOpen((v) => !v);
   window.addEventListener("termhaus:command-palette", openPalette);
   onCleanup(() => window.removeEventListener("termhaus:command-palette", openPalette));
+
+  // Global fallback for the app-level Ctrl+Shift shortcuts. Terminal.tsx intercepts these via
+  // xterm's key handler, but that only fires while a *terminal* owns focus — so when focus is on
+  // the rail, a dialog, a button, or nothing, the shortcuts would otherwise be dead. This window
+  // listener covers that gap. Pane-scoped actions (focus/split/close/zoom/copy/paste/…) need a
+  // focused pane and stay terminal-only; only workspace/app actions are wired here.
+  const GLOBAL_ACTIONS: Partial<Record<ActionId, () => void>> = {
+    "new-workspace": () => setWizardOpen(true),
+    "settings": () => setSettingsOpen(true),
+    "source-control": () => setGitOpen(true),
+    "command-palette": () => setPaletteOpen((v) => !v),
+    "overview": () => toggleOverview(),
+    "prev-workspace": () => switchWorkspaceRelative(-1),
+    "next-workspace": () => switchWorkspaceRelative(1),
+  };
+  const onGlobalKey = (e: KeyboardEvent) => {
+    if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
+    if (isModifierKey(e.key)) return;
+    // When a terminal has focus, its own handler runs these — bail so we don't double-fire.
+    if ((document.activeElement as HTMLElement | null)?.closest(".xterm")) return;
+    const action = actionForKey(settings.keybindings, e.key);
+    const run = action && GLOBAL_ACTIONS[action];
+    if (!run) return;
+    e.preventDefault();
+    run();
+  };
+  window.addEventListener("keydown", onGlobalKey);
+  onCleanup(() => window.removeEventListener("keydown", onGlobalKey));
 
   // Esc leaves overview mode. Capture phase + stopImmediatePropagation so the keystroke never
   // reaches the focused xterm beneath (it would otherwise be typed into the shell).
