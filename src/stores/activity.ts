@@ -81,11 +81,22 @@ export function forgetPane(id: PaneId) {
   if (activity[id]) setActivity(id, undefined as unknown as PaneActivity);
 }
 
-/** Does any pane in `ids` have a sticky signal? Drives the rail's per-workspace attention dot. */
+/** Does any pane in `ids` have a sticky signal (unseen output / bell / attention)? Drives the
+ *  rail's lighter per-workspace activity dot. */
 export function anyAttention(ids: Iterable<PaneId>): boolean {
   for (const id of ids) {
     const a = activity[id];
     if (a && (a.unseen || a.bell || a.attention)) return true;
+  }
+  return false;
+}
+
+/** Does any pane in `ids` have the strict "needs you" attention flag (busy→idle finish or
+ *  `th attention`)? Drives the rail's amber border — not raised by mere background output. */
+export function anyNeedsAttention(ids: Iterable<PaneId>): boolean {
+  for (const id of ids) {
+    const a = activity[id];
+    if (a && a.attention) return true;
   }
   return false;
 }

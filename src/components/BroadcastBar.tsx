@@ -9,7 +9,7 @@
 // This sends discrete messages, not a synchronized keystroke mirror (that's deferred) — so
 // the input never steals focus from a pane's PTY; it's its own field, Enter sends.
 
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import {
   activeWorkspace,
   appState,
@@ -31,12 +31,6 @@ export default function BroadcastBar() {
   // Cursor into `history` while recalling with ↑/↓; -1 = not recalling (editing fresh text).
   let histIdx = -1;
   let flashTimer: ReturnType<typeof setTimeout> | undefined;
-  let inputEl: HTMLInputElement | undefined;
-
-  // The title bar's "Broadcast" button fires this to jump focus into the (always-docked) input.
-  const onFocusReq = () => inputEl?.focus();
-  window.addEventListener("termhaus:focus-broadcast", onFocusReq);
-  onCleanup(() => window.removeEventListener("termhaus:focus-broadcast", onFocusReq));
 
   const ws = activeWorkspace;
   const targets = (): number[] => {
@@ -134,7 +128,6 @@ export default function BroadcastBar() {
       </div>
 
       <input
-        ref={inputEl}
         class="bcast-input"
         placeholder="Type a prompt → all live panes in this workspace"
         value={text()}

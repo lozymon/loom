@@ -51,6 +51,9 @@ export interface Settings {
   // ---- Keyboard ----
   /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */
   keybindings: Keybindings;
+  // ---- Layout ----
+  /** Width (px) of the left workspace rail; drag its right edge to resize. */
+  railWidth: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -71,6 +74,7 @@ export const DEFAULT_SETTINGS: Settings = {
   broadcastStaggerMs: 0,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
+  railWidth: 168,
 };
 
 const [settings, setStore] = createStore<Settings>({ ...DEFAULT_SETTINGS });

@@ -4,10 +4,11 @@
 //
 // Actions reuse the same entry points as the rail/keyboard: New/Settings/Git are passed down
 // from App; Overview and the Command Palette fire through the store / the window events App
-// already listens for; Broadcast focuses the always-docked broadcast input.
+// already listens for. (Broadcast lives in the always-docked bar; save-as-preset is in the
+// palette — neither needs a button here.)
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { appState, toggleOverview, saveCurrentAsPreset } from "../stores/workspace";
+import { appState, toggleOverview } from "../stores/workspace";
 import appIcon from "../assets/app-icon.png";
 
 export default function TitleBar(props: {
@@ -17,7 +18,6 @@ export default function TitleBar(props: {
 }) {
   const win = getCurrentWindow();
   const openPalette = () => window.dispatchEvent(new CustomEvent("termhaus:command-palette"));
-  const focusBroadcast = () => window.dispatchEvent(new CustomEvent("termhaus:focus-broadcast"));
 
   return (
     <header class="titlebar" data-tauri-drag-region>
@@ -37,12 +37,6 @@ export default function TitleBar(props: {
           onClick={() => toggleOverview()}
         >
           ▦ Overview
-        </button>
-        <button class="tb-btn" title="Focus the broadcast input" onClick={focusBroadcast}>
-          ⌁ Broadcast
-        </button>
-        <button class="tb-btn" title="Save active workspace as a preset" onClick={() => saveCurrentAsPreset()}>
-          ⛁ Save
         </button>
         <button class="tb-btn" title="Command palette (Ctrl+Shift+P)" onClick={openPalette}>
           ⌘ Palette
