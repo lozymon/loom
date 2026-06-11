@@ -273,6 +273,20 @@ export default function Settings(props: { onClose: () => void }) {
             </label>
           </section>
 
+          {/* ---- Notifications ---- */}
+          <section class="settings-section">
+            <h3>Notifications</h3>
+            <label class="settings-row toggle">
+              <input
+                type="checkbox"
+                checked={settings.notifyOnAttention}
+                onChange={(e) => setSetting("notifyOnAttention", e.currentTarget.checked)}
+              />
+              <span class="settings-label">Notify when a pane needs you <span class="muted">— desktop notification when a command finishes (or an agent calls <code>th attention</code>) while Termhaus is in the background</span></span>
+            </label>
+            <p class="settings-hint muted">Only fires when the Termhaus window isn't focused — when it's up front the amber pane border is enough. Your OS may ask permission the first time.</p>
+          </section>
+
           {/* ---- Session logging ---- */}
           <section class="settings-section">
             <h3>Session logging</h3>

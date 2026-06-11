@@ -19,12 +19,11 @@ import {
   setBroadcastSelecting,
 } from "../stores/workspace";
 import { countLive, writeToPanes } from "../lib/paneRegistry";
-import { addBroadcastSnippet, removeBroadcastSnippet, settings } from "../stores/settings";
-
-// Session-lifetime history of sent messages (newest last), shared across re-scopes.
-const history: string[] = [];
+import { addBroadcastSnippet, pushBroadcastHistory, removeBroadcastSnippet, settings } from "../stores/settings";
 
 export default function BroadcastBar() {
+  // Recall history is the persisted send log (oldest first), shared across re-scopes + sessions.
+  const history = () => settings.broadcastHistory;
   const [text, setText] = createSignal("");
   const [flash, setFlash] = createSignal<string | null>(null);
   const [pattern, setPattern] = createSignal("");
@@ -57,25 +56,19 @@ export default function BroadcastBar() {
     } else {
       n = writeToPanes(ids, msg);
     }
-    pushHistory(text());
+    pushBroadcastHistory(text());
     setText("");
     histIdx = -1;
     showFlash(stagger > 0 ? `staggered to ${n} pane${n === 1 ? "" : "s"}` : `sent to ${n} pane${n === 1 ? "" : "s"}`);
   }
 
-  function pushHistory(t: string) {
-    const v = t.trim();
-    if (!v || history[history.length - 1] === v) return;
-    history.push(v);
-    if (history.length > 100) history.shift();
-  }
-
   /** ↑/↓ through history: walk back from the newest, forward back to a fresh empty line. */
   function recall(dir: -1 | 1) {
-    if (history.length === 0) return;
-    if (histIdx === -1) histIdx = history.length;
-    histIdx = Math.max(0, Math.min(history.length, histIdx + dir));
-    setText(histIdx === history.length ? "" : history[histIdx]);
+    const h = history();
+    if (h.length === 0) return;
+    if (histIdx === -1) histIdx = h.length;
+    histIdx = Math.max(0, Math.min(h.length, histIdx + dir));
+    setText(histIdx === h.length ? "" : h[histIdx]);
   }
 
   function showFlash(msg: string) {

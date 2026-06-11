@@ -33,11 +33,16 @@ export interface Settings {
   // ---- Safety ----
   /** Ask before closing a pane/workspace that still has a live process. */
   confirmClose: boolean;
+  // ---- Notifications ----
+  /** Pop a desktop notification when a pane raises attention while Termhaus is unfocused. */
+  notifyOnAttention: boolean;
   // ---- Broadcast ----
   /** Append Enter (carriage return) to each broadcast message so it runs immediately. */
   broadcastNewline: boolean;
   /** Saved broadcast snippets for one-click re-send. */
   broadcastSnippets: string[];
+  /** Recently-sent broadcast messages (oldest first), recalled with ↑/↓; persisted, capped at 50. */
+  broadcastHistory: string[];
   /** Delay (ms) between panes when broadcasting; 0 = all at once (no stagger). */
   broadcastStaggerMs: number;
   // ---- Session logging ----
@@ -59,8 +64,10 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultShell: "",
   defaultCwd: "",
   confirmClose: true,
+  notifyOnAttention: false,
   broadcastNewline: true,
   broadcastSnippets: [],
+  broadcastHistory: [],
   broadcastStaggerMs: 0,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
@@ -92,6 +99,15 @@ export function addBroadcastSnippet(text: string) {
 /** Remove a saved broadcast snippet. */
 export function removeBroadcastSnippet(text: string) {
   setSetting("broadcastSnippets", settings.broadcastSnippets.filter((s) => s !== text));
+}
+
+/** Record a sent broadcast message in the recall history (skip consecutive dupes, cap at 50). */
+export function pushBroadcastHistory(text: string) {
+  const v = text.trim();
+  if (!v) return;
+  const cur = settings.broadcastHistory;
+  if (cur[cur.length - 1] === v) return;
+  setSetting("broadcastHistory", [...cur, v].slice(-50));
 }
 
 /** Restore every setting to its default and persist. */

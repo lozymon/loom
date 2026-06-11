@@ -24,6 +24,7 @@ import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
+import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, nowMs, fmtSince } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings } from "../stores/settings";
@@ -198,7 +199,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     try {
       const wasBusy = act()?.busy === true;
       const nowBusy = await busyPty(handle);
-      if (wasBusy && nowBusy === false && !looking()) noteAttention(props.paneId);
+      if (wasBusy && nowBusy === false && !looking() && noteAttention(props.paneId)) {
+        void notifyAttention(spec()?.title ?? `Pane ${props.paneId}`, props.ws.name);
+      }
       setBusy(props.paneId, nowBusy);
     } catch { /* leave last value */ }
     // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.

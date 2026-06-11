@@ -73,10 +73,14 @@ export function setBusy(id: PaneId, busy: boolean | null) {
   }
 }
 
-/** Raise a pane's sticky attention flag (busy→idle transition, or `th attention`). */
-export function noteAttention(id: PaneId) {
+/** Raise a pane's sticky attention flag (busy→idle transition, or `th attention`). Returns true
+ *  only when it was newly raised (was clear before) — callers use that to fire a one-shot OS
+ *  notification without re-notifying a pane that's already flagged. */
+export function noteAttention(id: PaneId): boolean {
   ensure(id);
-  if (!activity[id].attention) setActivity(id, "attention", true);
+  if (activity[id].attention) return false;
+  setActivity(id, "attention", true);
+  return true;
 }
 
 /** Clear a pane's attention flag explicitly (`th attention --clear`). */
