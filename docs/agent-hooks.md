@@ -7,7 +7,9 @@ its output. This page wires Claude Code's **lifecycle hooks** to that bus, so a 
 lights up the UI as they work and pause.
 
 This is the "hook adapter" step of the agent-integration arc in [IDEAS.md](IDEAS.md) — the cheap,
-robust bridge that validates the needs-input (#1) and status (#3) flows before a fuller MCP server.
+robust bridge that validates the needs-input (#1) and status (#3) flows. Its bigger sibling is the
+[Termhaus MCP server](agent-mcp.md), which exposes the same control bus as agent *tools*; hooks and
+MCP are complementary (hooks signal the blocked moments MCP can't see — keep both).
 
 ## What it gives you
 

@@ -215,12 +215,22 @@ It's conflict-free by design: `Notification` owns `attention` (cleared by focusi
 `Stop --clear` to race the idle notification); the prompt/stop pair owns `status`. See
 [agent-hooks.md](agent-hooks.md). Next along the arc is **C** — the same handlers behind an MCP server.
 
-### C. A Termhaus MCP server 🟡 — the model-native one
+### C. A Termhaus MCP server 🟡 — the model-native one ✅ shipped
 Expose the `ControlRequest` set (`list/send/spawn/broadcast/read/focus/attention/status`) as an
 **MCP server** the agent connects to. The agent gets first-class *tools* — "spawn a pane",
 "broadcast to the reviewers group", "flag myself blocked" — instead of shelling out to `th`.
 Mechanically a thin re-skin: the MCP tool handlers call the same relay the `th` CLI does, so the
 `th` CLI and the MCP server become two front-ends to one bus.
+
+**✅ Built as:** a `th-mcp` binary — a hand-rolled stdio MCP server (newline-delimited JSON-RPC,
+pure std + serde_json, no SDK) exposing the eight ops as tools (`list_panes`, `send_text`,
+`spawn_pane`, `read_pane`, `broadcast`, `focus_pane`, `flag_attention`, `set_status`). The socket
+relay is factored into `src/control_sock.rs`, shared with `th` via `#[path]` so the two bins are
+literally two faces of one relay. `flag_attention`/`set_status` default to the agent's own pane
+(`$TERMHAUS_PANE`). `th-mcp` ships beside `th` (its dir is already on each pane's `PATH`) and its
+absolute path is exposed as `$TERMHAUS_MCP`. Register with `claude mcp add --transport stdio
+termhaus -- th-mcp`. See [agent-mcp.md](agent-mcp.md). The hook adapter (B) stays for the
+blocked-agent moments MCP structurally can't see — that's the "permanent sliver of hooks" below.
 
 ### The decision: MCP-core, with a permanent sliver of hooks
 

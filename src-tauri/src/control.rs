@@ -85,6 +85,14 @@ pub fn cli_path() -> Option<PathBuf> {
     cand.exists().then_some(cand)
 }
 
+/// Absolute path to the `th-mcp` MCP server, beside the app binary like `th`. `None` if it isn't
+/// built. Exposed to pane children as `$TERMHAUS_MCP` so an agent's `.mcp.json` can point at it.
+pub fn mcp_path() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let cand = exe.parent()?.join("th-mcp");
+    cand.exists().then_some(cand)
+}
+
 /// Bind the socket and start accepting on a background thread.
 ///
 /// The path is fixed and shared, so we must distinguish a *stale* socket (left by a crashed

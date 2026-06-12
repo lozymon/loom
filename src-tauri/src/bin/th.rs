@@ -22,12 +22,15 @@
 
 use std::env;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::net::UnixStream;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use serde_json::{json, Value};
+
+// The unix-socket relay, shared with the `th-mcp` MCP server (two front-ends, one bus).
+#[path = "../control_sock.rs"]
+mod control_sock;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -53,7 +56,7 @@ fn main() {
             exit(2);
         }
     };
-    let resp = match send(&req) {
+    let resp = match control_sock::send(&req) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("th: {e}");
@@ -279,27 +282,6 @@ fn read_stdin() -> Result<String, String> {
         .read_to_string(&mut buf)
         .map_err(|e| e.to_string())?;
     Ok(buf)
-}
-
-/// Connect to the app, write the request as one JSON line, read one JSON response line.
-fn send(req: &Value) -> Result<Value, String> {
-    let path = env::var("TERMHAUS_SOCK")
-        .map_err(|_| "TERMHAUS_SOCK not set — run this inside a Termhaus pane".to_string())?;
-    let stream =
-        UnixStream::connect(&path).map_err(|e| format!("cannot reach Termhaus at {path}: {e}"))?;
-    let mut w = &stream;
-    let line = serde_json::to_string(req).map_err(|e| e.to_string())?;
-    w.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
-    w.write_all(b"\n").map_err(|e| e.to_string())?;
-    w.flush().ok();
-
-    let mut reader = BufReader::new(&stream);
-    let mut resp = String::new();
-    reader.read_line(&mut resp).map_err(|e| e.to_string())?;
-    if resp.trim().is_empty() {
-        return Err("no response from Termhaus".into());
-    }
-    serde_json::from_str(resp.trim()).map_err(|e| format!("bad response: {e}"))
 }
 
 fn handle_response(op: &str, resp: &Value) {

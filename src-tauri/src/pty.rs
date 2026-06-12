@@ -147,6 +147,11 @@ pub fn spawn(
             cmd.env("PATH", format!("{dir}:{path}"));
         }
     }
+    // The MCP server sits beside `th` (already on PATH above); also expose its absolute path so an
+    // agent's `.mcp.json` can reference `$TERMHAUS_MCP` directly (ADR-0007, IDEAS.md step C).
+    if let Some(mcp) = crate::control::mcp_path() {
+        cmd.env("TERMHAUS_MCP", mcp.to_string_lossy().into_owned());
+    }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     // A killer we can store in the Pane to terminate the child from `kill`, while the
