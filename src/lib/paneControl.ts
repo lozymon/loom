@@ -17,7 +17,7 @@ import {
   spawnPane,
   workspaceByName,
 } from "../stores/workspace";
-import { noteAttention, clearAttention } from "../stores/activity";
+import { noteAttention, clearAttention, setStatus } from "../stores/activity";
 import { notifyAttention } from "./notify";
 
 /** Subscribe to relayed requests. Call once at startup; returns the unlisten fn. */
@@ -95,6 +95,14 @@ function dispatch(req: ControlRequest): ControlResponse {
       // Only a fresh raise fires the OS notification (an agent flagging itself while you're away).
       else if (noteAttention(r.paneId)) void notifyAttention(req.target, "");
       return { ok: true, data: { name: req.target, cleared: req.clear === true } };
+    }
+
+    case "status": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      const text = (req.text ?? "").trim();
+      setStatus(r.paneId, text);
+      return { ok: true, data: { name: req.target, text, cleared: text === "" } };
     }
 
     default:

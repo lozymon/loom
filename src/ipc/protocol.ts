@@ -90,7 +90,11 @@ export type ControlRequest =
   | { op: "focus"; target: string }
   // Raise (or, with clear, drop) a pane's "needs you" attention border — a UI metadata flag,
   // never tied to pane output. Lets an agent flag itself when it's blocked on your input.
-  | { op: "attention"; target: string; clear?: boolean };
+  | { op: "attention"; target: string; clear?: boolean }
+  // Set (or, with no/empty text, clear) a pane's short status label, shown in its title bar and
+  // overview tile. Same opacity-safe category as `attention`: the agent *pushes* the label; we
+  // never read it from output. Turns overview mode into a fleet dashboard (building/blocked/idle).
+  | { op: "status"; target: string; text?: string };
 
 /** One pane in a `list` response. */
 export interface PaneInfo {

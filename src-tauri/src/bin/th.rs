@@ -12,6 +12,8 @@
 //!   th focus Cleo                    # switch to Cleo's workspace and focus it
 //!   th attention                     # light this pane's "needs you" border (clears on focus)
 //!   th attention Cleo --clear        # drop pane Cleo's attention border
+//!   th status "running tests"        # set this pane's status label (shown in its title/overview)
+//!   th status Cleo --clear           # clear pane Cleo's status label
 //!
 //! Pure std + serde_json (already a workspace dep): no protocol logic lives here or in Rust —
 //! the request is forwarded verbatim to the webview, which owns routing (src/ipc/protocol.ts).
@@ -202,8 +204,55 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(json!({ "op": "attention", "target": target, "clear": clear }))
         }
 
+        "status" => {
+            // th status [pane] [text...|--clear]   — set a pane's short status label.
+            // No pane → the calling pane (from $TERMHAUS_PANE), so an agent can label itself.
+            // Empty text (or --clear) clears the label. A leading "--" ends flag parsing so a
+            // status that starts with a dash still works: th status -- --resuming.
+            let mut clear = false;
+            let mut positional: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--clear" => clear = true,
+                    "--" => {
+                        positional.extend_from_slice(&args[i + 1..]);
+                        break;
+                    }
+                    _ => positional.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            // We can't resolve pane names here (Rust is a pure relay), so we use a convention to
+            // tell "set my own status" from "set pane X's status", mirroring `th attention`:
+            //   • --clear      → the (optional) lone positional is a pane name, else self.
+            //   • one token + a calling pane → that token is the status text for *this* pane.
+            //   • two+ tokens  → first is the target pane, the rest is the status text.
+            let self_pane = env::var("TERMHAUS_PANE").ok();
+            let no_pane = || {
+                "no pane given and TERMHAUS_PANE not set — name a pane: th status <pane> <text>"
+                    .to_string()
+            };
+            let (target, text) = if clear {
+                let t = if positional.is_empty() {
+                    self_pane.ok_or_else(no_pane)?
+                } else {
+                    positional.remove(0)
+                };
+                (t, String::new())
+            } else if positional.is_empty() {
+                (self_pane.ok_or_else(no_pane)?, String::new())
+            } else if positional.len() == 1 && self_pane.is_some() {
+                (self_pane.unwrap(), positional.remove(0))
+            } else {
+                let t = positional.remove(0);
+                (t, positional.join(" "))
+            };
+            Ok(json!({ "op": "status", "target": target, "text": text }))
+        }
+
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status)"
         )),
     }
 }
@@ -298,6 +347,25 @@ fn handle_response(op: &str, resp: &Value) {
                 if cleared { "cleared on" } else { "raised on" }
             );
         }
+        "status" => {
+            let name = data
+                .and_then(|d| d.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            let cleared = data
+                .and_then(|d| d.get("cleared"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if cleared {
+                println!("status cleared on '{name}'");
+            } else {
+                let text = data
+                    .and_then(|d| d.get("text"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                println!("status of '{name}' → {text}");
+            }
+        }
         _ => {}
     }
 }
@@ -331,6 +399,7 @@ fn usage() {
         \x20 th read <pane> [-n LINES]\n\
         \x20 th broadcast [--workspace W] [--no-enter] <text...>\n\
         \x20 th focus <pane>\n\
-        \x20 th attention [pane] [--clear]"
+        \x20 th attention [pane] [--clear]\n\
+        \x20 th status [pane] <text...> | [pane] --clear"
     );
 }

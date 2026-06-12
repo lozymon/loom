@@ -612,6 +612,31 @@ body,
   color: var(--fg-muted);
 }
 
+/* Saved target groups: the name-input + save row at the top of the groups menu. */
+.bcast-group-save {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.bcast-group-name {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.bcast-group-name:focus {
+  outline: none;
+  border-color: var(--broadcast-bright);
+}
+.bcast-group-pat {
+  color: var(--broadcast-bright);
+  font-style: normal;
+  opacity: 0.8;
+}
+
 .bcast button {
   font: inherit;
   color: var(--fg);
@@ -646,6 +671,22 @@ body,
 
 .bcast-send.primary:hover:not(:disabled) {
   background: var(--accent-strong-hover);
+}
+
+/* Needs-input triage: reply once to every pane flagging for input. Amber, matching the
+   "needs you" attention border so the gesture reads as "answer the lit panes". */
+.bcast-flagged {
+  color: #1a1505 !important;
+  background: #e0b85a !important;
+  border-color: #e0b85a !important;
+  font-weight: 600;
+  animation: th-pulse 1.4s ease-in-out infinite;
+}
+.bcast-flagged:hover:not(:disabled) {
+  background: var(--broadcast-bright) !important;
+}
+.bcast-flagged:disabled {
+  animation: none;
 }
 
 .bcast-reach {
@@ -1272,6 +1313,26 @@ body,
   color: var(--accent);
   white-space: nowrap;
   font-weight: 400;
+}
+
+/* Agent-pushed status label (`th status "…"`) — a small pill, distinct from the git chip. Lets
+   overview tiles read as a fleet dashboard (building / blocked / idle) without parsing output. */
+.pane-statuslabel {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 4px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--broadcast-bright);
+  background: color-mix(in srgb, var(--broadcast-bright) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--broadcast-bright) 32%, transparent);
 }
 
 .pane-controls {

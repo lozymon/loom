@@ -15,12 +15,21 @@ import {
   appState,
   broadcastTargets,
   clearBroadcastTargets,
+  flaggedTargets,
   selectAllBroadcastTargets,
   setBroadcastByPattern,
   setBroadcastSelecting,
 } from "../stores/workspace";
+import { clearAttention } from "../stores/activity";
 import { countLive, writeToPanes } from "../lib/paneRegistry";
-import { addBroadcastSnippet, pushBroadcastHistory, removeBroadcastSnippet, settings } from "../stores/settings";
+import {
+  addBroadcastGroup,
+  addBroadcastSnippet,
+  pushBroadcastHistory,
+  removeBroadcastGroup,
+  removeBroadcastSnippet,
+  settings,
+} from "../stores/settings";
 
 export default function BroadcastBar() {
   // Recall history is the persisted send log (oldest first), shared across re-scopes + sessions.
@@ -29,6 +38,8 @@ export default function BroadcastBar() {
   const [flash, setFlash] = createSignal<string | null>(null);
   const [pattern, setPattern] = createSignal("");
   const [menuOpen, setMenuOpen] = createSignal(false);
+  const [groupsOpen, setGroupsOpen] = createSignal(false);
+  const [groupName, setGroupName] = createSignal("");
   // Cursor into `history` while recalling with ↑/↓; -1 = not recalling (editing fresh text).
   let histIdx = -1;
   let flashTimer: ReturnType<typeof setTimeout> | undefined;
@@ -40,30 +51,52 @@ export default function BroadcastBar() {
   };
   /** Live panes among the current targets — the bar's real reach. */
   const reach = () => countLive(targets());
+  /** Panes currently flagging for input (`th attention`) — the needs-input triage target set. */
+  const flagged = (): number[] => {
+    const w = ws();
+    return w ? flaggedTargets(w) : [];
+  };
   const selecting = () => appState.broadcastSelecting;
   const subset = () => (ws()?.broadcast.length ?? 0) > 0;
   /** Total panes in the active workspace, and whether every one is explicitly picked. */
   const paneTotal = () => Object.keys(ws()?.panes ?? {}).length;
   const allPicked = () => paneTotal() > 0 && (ws()?.broadcast.length ?? 0) >= paneTotal();
 
-  function send() {
-    const ids = targets();
-    if (ids.length === 0) return;
+  /** Write the current text to `ids`, honouring the per-pane stagger. Returns how many panes it
+   *  reached and whether it staggered (for the flash). Shared by send + flagged-reply. */
+  function deliver(ids: number[]): { n: number; staggered: boolean } {
     const msg = text() + (settings.broadcastNewline ? "\r" : "");
     const stagger = settings.broadcastStaggerMs;
-    let n: number;
     if (stagger > 0) {
       // Fire one pane at a time, spaced by `stagger` ms (avoids a fleet stampeding an API).
       const live = ids.filter((id) => countLive([id]) > 0);
       live.forEach((id, k) => setTimeout(() => writeToPanes([id], msg), k * stagger));
-      n = live.length;
-    } else {
-      n = writeToPanes(ids, msg);
+      return { n: live.length, staggered: true };
     }
+    return { n: writeToPanes(ids, msg), staggered: false };
+  }
+
+  function send() {
+    const ids = targets();
+    if (ids.length === 0) return;
+    const { n, staggered } = deliver(ids);
     pushBroadcastHistory(text());
     setText("");
     histIdx = -1;
-    showFlash(stagger > 0 ? `staggered to ${n} pane${n === 1 ? "" : "s"}` : `sent to ${n} pane${n === 1 ? "" : "s"}`);
+    showFlash(staggered ? `staggered to ${n} pane${n === 1 ? "" : "s"}` : `sent to ${n} pane${n === 1 ? "" : "s"}`);
+  }
+
+  /** Needs-input triage (IDEAS #1): answer once into exactly the panes flagging for input, then
+   *  drop their flags — so the next batch of pauses is what's left lit. Ignores the picked subset. */
+  function sendToFlagged() {
+    const ids = flagged();
+    if (ids.length === 0) return;
+    const { n } = deliver(ids);
+    ids.forEach((id) => clearAttention(id));
+    pushBroadcastHistory(text());
+    setText("");
+    histIdx = -1;
+    showFlash(`replied to ${n} flagged pane${n === 1 ? "" : "s"}`);
   }
 
   /** ↑/↓ through history: walk back from the newest, forward back to a fresh empty line. */
@@ -105,6 +138,19 @@ export default function BroadcastBar() {
     histIdx = -1;
   }
 
+  /** Flip the broadcast scope to a saved group: enter select-mode and resolve its name pattern. */
+  function useGroup(p: string) {
+    setBroadcastSelecting(true);
+    applyPattern(p);
+    setGroupsOpen(false);
+  }
+
+  /** Save the current Targets pattern under a name for one-click recall later. */
+  function saveGroup() {
+    addBroadcastGroup(groupName(), pattern());
+    setGroupName("");
+  }
+
   return (
     <div class="bcast" classList={{ selecting: selecting() }}>
       <span class="bcast-label">⌁ Broadcast</span>
@@ -131,6 +177,47 @@ export default function BroadcastBar() {
                 <div class="bcast-snip-item">
                   <span class="bcast-snip-text" title={s} onClick={() => useSnippet(s)}>{s}</span>
                   <button class="bcast-snip-del" title="Delete snippet" onClick={() => removeBroadcastSnippet(s)}>✕</button>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+
+      <div class="bcast-snip">
+        <button
+          class="bcast-snip-btn"
+          title="Saved target groups"
+          onClick={() => setGroupsOpen((v) => !v)}
+        >
+          ⚐ ▾
+        </button>
+        <Show when={groupsOpen()}>
+          <div class="bcast-snip-menu" onPointerDown={(e) => e.stopPropagation()}>
+            <div class="bcast-group-save">
+              <input
+                class="bcast-group-name"
+                placeholder="group name"
+                value={groupName()}
+                onInput={(e) => setGroupName(e.currentTarget.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveGroup(); }}
+              />
+              <button
+                class="bcast-snip-save"
+                disabled={!groupName().trim() || !pattern().trim()}
+                title={pattern().trim() ? "" : "Type a Targets name pattern first"}
+                onClick={saveGroup}
+              >
+                ＋ Save “{pattern().trim() || "…"}”
+              </button>
+            </div>
+            <For each={settings.broadcastGroups} fallback={<div class="bcast-snip-empty">No groups yet — pick a Targets pattern, then save it</div>}>
+              {(g) => (
+                <div class="bcast-snip-item">
+                  <span class="bcast-snip-text" title={`${g.name}: ${g.pattern}`} onClick={() => useGroup(g.pattern)}>
+                    {g.name} <em class="bcast-group-pat">{g.pattern}</em>
+                  </span>
+                  <button class="bcast-snip-del" title="Delete group" onClick={() => removeBroadcastGroup(g.name)}>✕</button>
                 </div>
               )}
             </For>
@@ -179,6 +266,16 @@ export default function BroadcastBar() {
       <span class="bcast-reach" classList={{ subset: subset() }}>
         → {reach()} live{subset() ? ` / ${targets().length} picked` : ""}
       </span>
+      <Show when={flagged().length > 0}>
+        <button
+          class="bcast-flagged"
+          disabled={!text().trim()}
+          title="Send to the panes flagging for input, then clear their flags"
+          onClick={sendToFlagged}
+        >
+          ⚑ Reply to {flagged().length} flagged
+        </button>
+      </Show>
       <button class="bcast-send primary" disabled={reach() === 0} onClick={send}>Send</button>
       <Show when={flash()}>
         <span class="bcast-flash">{flash()}</span>

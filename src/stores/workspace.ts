@@ -15,6 +15,7 @@ import { neighbor, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
 import { countLive } from "../lib/paneRegistry";
 import { settings } from "./settings";
+import { activity } from "./activity";
 
 /**
  * A workspace plus its ephemeral UI state (focus/zoom/broadcast — not persisted).
@@ -430,6 +431,16 @@ export function broadcastTargets(ws: WorkspaceUI): PaneId[] {
   if (ws.broadcast.length === 0) return order;
   const sel = new Set(ws.broadcast);
   return order.filter((id) => sel.has(id));
+}
+
+/**
+ * The PaneIds in `ws` currently raising the "needs you" attention flag, in row-major order — the
+ * target set for the needs-input triage loop (IDEAS #1): several agents pause on a y/n and flag
+ * themselves with `th attention`; you answer once into exactly those panes. Independent of the
+ * broadcast subset (a flagged reply ignores the picked scope). Reactive via the activity store.
+ */
+export function flaggedTargets(ws: WorkspaceUI): PaneId[] {
+  return leafIds(ws.tree).filter((id) => activity[id]?.attention);
 }
 
 // ---- Presets (saved workspace templates) --------------------------------------------

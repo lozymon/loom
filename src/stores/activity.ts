@@ -22,9 +22,14 @@ export interface PaneActivity {
   bell: boolean;
   busy: boolean | null;
   attention: boolean;
+  // A short agent-pushed status label (`th status "running tests"`), shown in the title bar and
+  // overview tile. "" = no status. Like attention, it's metadata only — never read from output —
+  // but unlike the sticky signals it is NOT cleared by looking at the pane; only the agent (or a
+  // respawn) clears it. Lets overview read as a fleet dashboard.
+  status: string;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false };
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "" };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -66,6 +71,19 @@ export function noteAttention(id: PaneId): boolean {
 /** Clear a pane's attention flag explicitly (`th attention --clear`). */
 export function clearAttention(id: PaneId) {
   if (activity[id]?.attention) setActivity(id, "attention", false);
+}
+
+/** Set a pane's agent-pushed status label (`th status "…"`); empty text clears it. Unlike the
+ *  sticky signals this survives focus — only the agent or a respawn clears it. */
+export function setStatus(id: PaneId, text: string) {
+  ensure(id);
+  const next = text.trim();
+  if (activity[id].status !== next) setActivity(id, "status", next);
+}
+
+/** Clear a pane's status label (respawn, or `th status --clear`). */
+export function clearStatus(id: PaneId) {
+  if (activity[id]?.status) setActivity(id, "status", "");
 }
 
 /** The user looked at the pane — clear its sticky unseen/bell/attention signals. */

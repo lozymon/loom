@@ -43,6 +43,9 @@ export interface Settings {
   broadcastSnippets: string[];
   /** Recently-sent broadcast messages (oldest first), recalled with ↑/↓; persisted, capped at 50. */
   broadcastHistory: string[];
+  /** Named broadcast target scopes — flip the bar to "claudes"/"reviewers" in one click. Each
+   *  resolves through the same name glob as the Targets pattern field (lib/matching). */
+  broadcastGroups: { name: string; pattern: string }[];
   /** Delay (ms) between panes when broadcasting; 0 = all at once (no stagger). */
   broadcastStaggerMs: number;
   // ---- Session logging ----
@@ -71,6 +74,7 @@ export const DEFAULT_SETTINGS: Settings = {
   broadcastNewline: true,
   broadcastSnippets: [],
   broadcastHistory: [],
+  broadcastGroups: [],
   broadcastStaggerMs: 0,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
@@ -114,6 +118,20 @@ export function addBroadcastSnippet(text: string) {
 /** Remove a saved broadcast snippet. */
 export function removeBroadcastSnippet(text: string) {
   setSetting("broadcastSnippets", settings.broadcastSnippets.filter((s) => s !== text));
+}
+
+/** Save (or overwrite) a named broadcast target group. Empty name/pattern is ignored. */
+export function addBroadcastGroup(name: string, pattern: string) {
+  const n = name.trim();
+  const p = pattern.trim();
+  if (!n || !p) return;
+  const rest = settings.broadcastGroups.filter((g) => g.name !== n);
+  setSetting("broadcastGroups", [{ name: n, pattern: p }, ...rest].slice(0, 24));
+}
+
+/** Remove a named broadcast target group. */
+export function removeBroadcastGroup(name: string) {
+  setSetting("broadcastGroups", settings.broadcastGroups.filter((g) => g.name !== name));
 }
 
 /** Record a sent broadcast message in the recall history (skip consecutive dupes, cap at 50). */

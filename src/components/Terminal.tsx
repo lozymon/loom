@@ -25,7 +25,7 @@ import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { notifyAttention } from "../lib/notify";
-import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane } from "../stores/activity";
+import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
@@ -519,6 +519,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         <Show when={branch()}>
           <span class="pane-branch" title={`git branch: ${branch()}`}>⎇ {branch()}</span>
         </Show>
+        <Show when={act()?.status}>
+          {(s) => (
+            <span class="pane-statuslabel" title={`agent status: ${s()}`}>{s()}</span>
+          )}
+        </Show>
         <span class="pane-controls">
           <button title="Launch Claude here" onClick={launchClaude}>✦</button>
           <button title="Find (Ctrl+Shift+F)" onClick={openSearch}>⌕</button>
@@ -554,7 +559,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         <Show when={dead() !== null}>
           <div class="pane-dead">
             <span>process exited ({dead()})</span>
-            <button onClick={() => { term.clear(); void start(); }}>Restart</button>
+            <button onClick={() => { term.clear(); clearStatus(props.paneId); void start(); }}>Restart</button>
           </div>
         </Show>
       </div>
