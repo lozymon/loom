@@ -16,6 +16,7 @@ export default function TitleBar(props: {
   onGit: () => void;
   onDocs: () => void;
   onShortcuts: () => void;
+  onPreview: () => void;
 }) {
   const win = getCurrentWindow();
   const openPalette = () =>
@@ -50,6 +51,13 @@ export default function TitleBar(props: {
           onClick={() => props.onGit()}
         >
           <span class="tb-ico">⎇</span> Git
+        </button>
+        <button
+          class="tb-btn"
+          title="Preview panel — localhost / docs (Ctrl+Shift+B)"
+          onClick={() => props.onPreview()}
+        >
+          <span class="tb-ico">▤</span> Preview
         </button>
         <button
           class="tb-btn"

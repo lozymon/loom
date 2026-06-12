@@ -32,6 +32,7 @@ export type ActionId =
   | "settings"
   | "overview"
   | "shortcuts"
+  | "preview"
   | "copy"
   | "paste"
   | "search"
@@ -75,6 +76,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "settings", label: "Open settings", group: "General", defaultKey: "," },
   { id: "overview", label: "Toggle overview (fleet glance)", group: "General", defaultKey: "o" },
   { id: "shortcuts", label: "Keyboard shortcuts cheat-sheet", group: "General", defaultKey: "?" },
+  { id: "preview", label: "Toggle preview panel (browser)", group: "General", defaultKey: "b" },
   { id: "copy", label: "Copy selection", group: "Clipboard & search", defaultKey: "c" },
   { id: "paste", label: "Paste", group: "Clipboard & search", defaultKey: "v" },
   { id: "search", label: "Find in scrollback", group: "Clipboard & search", defaultKey: "f" },

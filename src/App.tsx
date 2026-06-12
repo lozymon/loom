@@ -18,6 +18,7 @@ import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
 import ShortcutsOverlay from "./components/ShortcutsOverlay";
 import SessionLogViewer from "./components/SessionLogViewer";
+import PreviewPanel from "./components/PreviewPanel";
 import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
@@ -38,6 +39,7 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const [logsOpen, setLogsOpen] = createSignal(false);
   const [logPreselect, setLogPreselect] = createSignal<string | null>(null);
+  const [previewOpen, setPreviewOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
@@ -96,6 +98,11 @@ export default function App() {
   window.addEventListener("termhaus:view-session-log", openLogs);
   onCleanup(() => window.removeEventListener("termhaus:view-session-log", openLogs));
 
+  // Ctrl+Shift+B toggles the right-side preview panel (browser view).
+  const togglePreview = () => setPreviewOpen((v) => !v);
+  window.addEventListener("termhaus:preview", togglePreview);
+  onCleanup(() => window.removeEventListener("termhaus:preview", togglePreview));
+
   // Ctrl+Shift+, from a focused pane opens Settings.
   const openSettings = () => setSettingsOpen(true);
   window.addEventListener("termhaus:settings", openSettings);
@@ -119,6 +126,7 @@ export default function App() {
     "command-palette": () => setPaletteOpen((v) => !v),
     "overview": () => toggleOverview(),
     "shortcuts": () => setShortcutsOpen((v) => !v),
+    "preview": () => setPreviewOpen((v) => !v),
     "prev-workspace": () => switchWorkspaceRelative(-1),
     "next-workspace": () => switchWorkspaceRelative(1),
   };
@@ -177,6 +185,7 @@ export default function App() {
         onGit={() => setGitOpen(true)}
         onDocs={() => setDocsOpen(true)}
         onShortcuts={() => setShortcutsOpen(true)}
+        onPreview={() => setPreviewOpen((v) => !v)}
       />
       <div class="body">
       <WorkspaceRail onNew={() => setWizardOpen(true)} />
@@ -196,6 +205,9 @@ export default function App() {
           <BroadcastBar />
         </Show>
       </div>
+      <Show when={previewOpen()}>
+        <PreviewPanel onClose={() => setPreviewOpen(false)} />
+      </Show>
       </div>
       <Show when={wizardOpen()}>
         <NewWorkspaceWizard onClose={() => setWizardOpen(false)} />
@@ -224,6 +236,7 @@ export default function App() {
           onDocs={() => setDocsOpen(true)}
           onShortcuts={() => setShortcutsOpen(true)}
           onLogs={() => { setLogPreselect(null); setLogsOpen(true); }}
+          onPreview={() => setPreviewOpen((v) => !v)}
         />
       </Show>
     </div>

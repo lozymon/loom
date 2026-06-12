@@ -378,6 +378,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "settings": () => window.dispatchEvent(new CustomEvent("termhaus:settings")),
       "overview": () => toggleOverview(),
       "shortcuts": () => window.dispatchEvent(new CustomEvent("termhaus:shortcuts")),
+      "preview": () => window.dispatchEvent(new CustomEvent("termhaus:preview")),
       "prev-workspace": () => switchWorkspaceRelative(-1),
       "next-workspace": () => switchWorkspaceRelative(1),
       // Ctrl+Shift+1…9 → jump straight to workspace N.

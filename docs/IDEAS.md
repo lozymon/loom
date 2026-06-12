@@ -223,7 +223,12 @@ it to the whole pane.
   "Quit" emits `termhaus://quit` so the frontend flushes state first, like the close path).
 - **Multi-window / tear-off panes** — currently a pane lives in one workspace in one window. 🔴
 - **Right-side browser / preview panel** — the dropped reference-app feature (localhost/docs
-  preview); users currently alt-tab to a real browser. 🔴
+  preview); users currently alt-tab to a real browser. 🔴 ✅ shipped — `PreviewPanel.tsx`, a docked
+  right-side `<iframe>` with a URL bar (reload / go / open-externally / close), resizable + persisted
+  (`settings.previewUrl`/`previewWidth`). Docked as a flex sibling of the stage so opening it shrinks
+  the grid and panes refit. Toggle from the title bar's ▤ Preview button, the palette, or
+  Ctrl+Shift+B (new `preview` action). Sites that refuse framing (X-Frame-Options / CSP) won't load
+  inline — the ↗ button opens them in the real browser.
 
 ---
 

@@ -508,6 +508,81 @@ body,
   color: var(--accent);
 }
 
+/* ---- Right-side preview panel (docked browser view) ---- */
+/* width/flex-basis are set inline from settings.previewWidth; drag .preview-resizer to change it. */
+.preview-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 0;
+  flex-shrink: 0;
+  background: var(--bg-sunken);
+  border-left: 1px solid var(--border);
+  box-sizing: border-box;
+  min-width: 0;
+}
+.preview-resizer {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+.preview-resizer:hover {
+  background: var(--accent, var(--border));
+  opacity: 0.5;
+}
+.preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.preview-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.preview-url:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.preview-btn {
+  flex: 0 0 auto;
+  font: inherit;
+  color: var(--fg-dim);
+  background: var(--control);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  line-height: 1;
+}
+.preview-btn:hover {
+  background: var(--control-hover);
+  color: var(--fg);
+}
+.preview-btn.close:hover {
+  color: var(--danger);
+}
+.preview-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: #fff;
+  min-height: 0;
+}
+
 /* ---- Broadcast bar ---- */
 .bcast {
   display: flex;
