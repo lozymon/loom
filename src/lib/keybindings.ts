@@ -17,11 +17,21 @@ export type ActionId =
   | "new-workspace"
   | "prev-workspace"
   | "next-workspace"
+  | "switch-workspace-1"
+  | "switch-workspace-2"
+  | "switch-workspace-3"
+  | "switch-workspace-4"
+  | "switch-workspace-5"
+  | "switch-workspace-6"
+  | "switch-workspace-7"
+  | "switch-workspace-8"
+  | "switch-workspace-9"
   | "command-palette"
   | "source-control"
   | "docs"
   | "settings"
   | "overview"
+  | "shortcuts"
   | "copy"
   | "paste"
   | "search"
@@ -52,9 +62,19 @@ export const ACTIONS: ActionDef[] = [
   { id: "new-workspace", label: "New workspace", group: "Workspaces", defaultKey: "t" },
   { id: "prev-workspace", label: "Previous workspace", group: "Workspaces", defaultKey: "pageup" },
   { id: "next-workspace", label: "Next workspace", group: "Workspaces", defaultKey: "pagedown" },
+  { id: "switch-workspace-1", label: "Switch to workspace 1", group: "Workspaces", defaultKey: "1" },
+  { id: "switch-workspace-2", label: "Switch to workspace 2", group: "Workspaces", defaultKey: "2" },
+  { id: "switch-workspace-3", label: "Switch to workspace 3", group: "Workspaces", defaultKey: "3" },
+  { id: "switch-workspace-4", label: "Switch to workspace 4", group: "Workspaces", defaultKey: "4" },
+  { id: "switch-workspace-5", label: "Switch to workspace 5", group: "Workspaces", defaultKey: "5" },
+  { id: "switch-workspace-6", label: "Switch to workspace 6", group: "Workspaces", defaultKey: "6" },
+  { id: "switch-workspace-7", label: "Switch to workspace 7", group: "Workspaces", defaultKey: "7" },
+  { id: "switch-workspace-8", label: "Switch to workspace 8", group: "Workspaces", defaultKey: "8" },
+  { id: "switch-workspace-9", label: "Switch to workspace 9", group: "Workspaces", defaultKey: "9" },
   { id: "command-palette", label: "Command palette", group: "General", defaultKey: "p" },
   { id: "settings", label: "Open settings", group: "General", defaultKey: "," },
   { id: "overview", label: "Toggle overview (fleet glance)", group: "General", defaultKey: "o" },
+  { id: "shortcuts", label: "Keyboard shortcuts cheat-sheet", group: "General", defaultKey: "?" },
   { id: "copy", label: "Copy selection", group: "Clipboard & search", defaultKey: "c" },
   { id: "paste", label: "Paste", group: "Clipboard & search", defaultKey: "v" },
   { id: "search", label: "Find in scrollback", group: "Clipboard & search", defaultKey: "f" },
@@ -67,6 +87,19 @@ export const ACTIONS: ActionDef[] = [
   { id: "font-decrease", label: "Decrease font size", group: "Appearance", defaultKey: "_" },
 ];
 
+/** The nine direct-jump workspace actions, in order (Ctrl+Shift+1…9 by default). */
+export const SWITCH_WORKSPACE_ACTIONS = [
+  "switch-workspace-1",
+  "switch-workspace-2",
+  "switch-workspace-3",
+  "switch-workspace-4",
+  "switch-workspace-5",
+  "switch-workspace-6",
+  "switch-workspace-7",
+  "switch-workspace-8",
+  "switch-workspace-9",
+] as const satisfies readonly ActionId[];
+
 /** A map from every action to its bound final key. */
 export type Keybindings = Record<ActionId, string>;
 
@@ -78,8 +111,13 @@ export const DEFAULT_KEYBINDINGS: Keybindings = Object.fromEntries(
 // character varies by layout — Ctrl+Shift+= may arrive as "+" or "=", Ctrl+Shift+- as "_" or
 // "-". Fold each pair to one canonical key for matching so a binding fires regardless.
 // Ctrl+Shift+, reports "<" on US layouts (shift transforms ","); fold it back to "," so the
-// binding fires regardless, matching the +/= and _/- pairs.
-const SHIFT_FOLD: Record<string, string> = { "+": "=", _: "-", "<": "," };
+// binding fires regardless, matching the +/= and _/- pairs. The digit row is the same story:
+// Ctrl+Shift+1 arrives as "!", …+9 as "(" (US layout) — fold those back to 1…9 so the
+// workspace-jump shortcuts fire.
+const SHIFT_FOLD: Record<string, string> = {
+  "+": "=", _: "-", "<": ",",
+  "!": "1", "@": "2", "#": "3", $: "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9",
+};
 const foldKey = (k: string): string => SHIFT_FOLD[k] ?? k;
 
 /** Which action (if any) the pressed final key triggers. First match wins on conflict. */

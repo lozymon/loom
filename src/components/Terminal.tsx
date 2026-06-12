@@ -28,7 +28,7 @@ import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
-import { actionForKey, isModifierKey, type ActionId } from "../lib/keybindings";
+import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
 import { detectAgent } from "../lib/agents";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
@@ -41,6 +41,7 @@ import {
   toggleOverview,
   toggleBroadcastTarget,
   switchWorkspaceRelative,
+  switchWorkspaceIndex,
   swapPanes,
   type WorkspaceUI,
 } from "../stores/workspace";
@@ -376,8 +377,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "docs": () => window.dispatchEvent(new CustomEvent("termhaus:docs")),
       "settings": () => window.dispatchEvent(new CustomEvent("termhaus:settings")),
       "overview": () => toggleOverview(),
+      "shortcuts": () => window.dispatchEvent(new CustomEvent("termhaus:shortcuts")),
       "prev-workspace": () => switchWorkspaceRelative(-1),
       "next-workspace": () => switchWorkspaceRelative(1),
+      // Ctrl+Shift+1…9 → jump straight to workspace N.
+      ...(Object.fromEntries(
+        SWITCH_WORKSPACE_ACTIONS.map((id, i) => [id, () => switchWorkspaceIndex(i)]),
+      ) as Record<(typeof SWITCH_WORKSPACE_ACTIONS)[number], () => void>),
       "copy": () => void copySelection(), // no selection → no-op
       "paste": () => void pasteClipboard(),
       "search": () => openSearch(),
@@ -453,9 +459,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       classList={{
         focused: isFocused(),
         attention: !isFocused() && (act()?.attention ?? false),
+        agented: !!agent(),
         "bcast-target": appState.broadcastSelecting && inBroadcast(),
         "drag-over": dragOver(),
       }}
+      style={agent() ? { "--agent-color": agent()!.color } : undefined}
       onPointerDown={() => focusPane(props.paneId)}
       onDragOver={(e) => { e.preventDefault(); if (!dragOver()) setDragOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}

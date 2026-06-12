@@ -4,7 +4,7 @@
 // live in the top title bar, not here.
 
 import { createSignal, For, Show } from "solid-js";
-import { appState, paneCount, switchWorkspace, closeWorkspace, renameWorkspace } from "../stores/workspace";
+import { appState, paneCount, switchWorkspace, closeWorkspace, renameWorkspace, duplicateWorkspace } from "../stores/workspace";
 import { anyAttention, anyNeedsAttention } from "../stores/activity";
 import { settings, setSetting } from "../stores/settings";
 
@@ -105,6 +105,13 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
                   <span class="rail-attn" title="Activity in this workspace" />
                 </Show>
                 <span class="rail-badge">{paneCount(ws)}</span>
+                <button
+                  class="rail-dup"
+                  title="Duplicate workspace (same layout + commands)"
+                  onClick={(e) => { e.stopPropagation(); duplicateWorkspace(ws.id); }}
+                >
+                  ⧉
+                </button>
                 <button
                   class="rail-close"
                   title="Close workspace"

@@ -15,6 +15,7 @@ export default function TitleBar(props: {
   onSettings: () => void;
   onGit: () => void;
   onDocs: () => void;
+  onShortcuts: () => void;
 }) {
   const win = getCurrentWindow();
   const openPalette = () =>
@@ -63,6 +64,13 @@ export default function TitleBar(props: {
           onClick={() => props.onSettings()}
         >
           <span class="tb-ico">⚙</span> Settings
+        </button>
+        <button
+          class="tb-btn"
+          title="Keyboard shortcuts (Ctrl+Shift+?)"
+          onClick={() => props.onShortcuts()}
+        >
+          <span class="tb-ico">⌨</span>
         </button>
       </nav>
 

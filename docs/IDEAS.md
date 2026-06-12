@@ -140,14 +140,25 @@ per-pane `cwd` we added to the launcher) so relaunch is faithful.
 
 *(Known gap, noted when we added the launcher's per-pane cwd — that override currently can't round-trip through a preset.)*
 
-### 6. Quick workspace switch (Ctrl+1…9)  🟢
+### 6. Quick workspace switch (Ctrl+1…9)  🟢 ✅ shipped
 You have prev/next (`switchWorkspaceRelative`, PageUp/PageDown). Add direct jumps to workspace N.
 Register as keybinding actions (`lib/keybindings.ts`) so they show up in Settings and the global
 fallback handler we just added.
 
-### 7. Duplicate workspace  🟢
+**✅ Built as:** nine `switch-workspace-1…9` keybinding actions (default Ctrl+Shift+1…9) →
+`switchWorkspaceIndex(n)`. The subtle bit: Ctrl+Shift+1 reports `e.key` as `"!"` (Shift transforms
+the digit), so `SHIFT_FOLD` now maps `! @ # $ % ^ & * (` back to `1…9` — same mechanism as the
+existing `+`/`_`/`<` folds. Wired into both dispatch maps (App global fallback + Terminal) via the
+exported `SWITCH_WORKSPACE_ACTIONS`. Covered by `keybindings.test.ts`.
+
+### 7. Duplicate workspace  🟢 ✅ shipped
 Clone the active workspace's tree + per-pane commands/cwd into a fresh workspace (fresh PaneIds,
 fresh PTYs). One rail action; reuses `buildWorkspace`-style construction.
+
+**✅ Built as:** `duplicateWorkspace(id)` (`stores/workspace.ts`) deep-clones the split tree
+(preserving `dir`/`ratio`), remaps every leaf to a fresh `PaneId`, copies each `PaneSpec`
+(command/cwd/env/title, env deep-copied), names it "<name> copy", and makes it active — panes
+respawn like any launch. Triggered by a ⧉ button on each rail row.
 
 ### 8. Drag-to-reorder panes in overview  🟡
 `swapLeaves` already exists (`lib/layout.ts`) and powers programmatic swaps. Wire it to
@@ -157,20 +168,31 @@ drag-and-drop between tiles in overview mode (`overview-hit` overlay in `LayoutN
 
 ## Tier 3 — observability & onboarding
 
-### 9. Keybinding cheat-sheet overlay (`?`)  🟢
+### 9. Keybinding cheat-sheet overlay (`?`)  🟢 ✅ shipped
 A visible shortcut map (read straight from `ACTIONS` in `lib/keybindings.ts`, so it stays in sync
 and shows live rebinds). Complements the command palette and aids discovery — would have surfaced
 the focus-vs-no-focus shortcut gap on its own.
+
+**✅ Built as:** `ShortcutsOverlay.tsx` — a read-only modal that derives its groups straight from
+`ACTIONS` and renders live keys via `formatBinding(settings.keybindings[id])`, so rebinds and new
+actions show automatically. Flows into balanced columns. Opened from the title bar's ⌨ button, the
+command palette, or **Ctrl+Shift+?** (new `shortcuts` action).
 
 ### 10. Session-log viewer  🟡
 `sessionLog.ts` already writes per-pane raw output to disk (opt-in, `settings.sessionLogging`).
 Add a small in-app reader/tail to review what an agent did without re-running it. This is the
 natural on-ramp to the deferred searchable-scrollback / SQLite idea (PLAN "Out of scope").
 
-### 11. Per-agent border tint  🟢
+### 11. Per-agent border tint  🟢 ✅ shipped
 Agent defs carry colors (`lib/agents.ts`). Tint each pane's focus ring / title bar by its detected
 agent so a mixed fleet (Claude vs Codex vs Gemini) reads at a glance — and so overview tiles are
 colour-coded by agent.
+
+**✅ Built as:** when `agent()` resolves, `Terminal.tsx` sets `--agent-color` on the pane root and
+an `agented` class. CSS tints the focused border + title stripe with the agent colour and shows a
+subtle always-on title stripe at rest (so overview tiles read by agent) — gated with `:not(.attention)`
+so the amber "needs you" signal always wins. The agent badge already carried the colour; this extends
+it to the whole pane.
 
 ---
 

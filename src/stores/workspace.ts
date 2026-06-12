@@ -341,6 +341,51 @@ export function switchWorkspace(id: string) {
   setApp("activeId", id);
 }
 
+/** Jump directly to the workspace at position `i` (0-based) — Ctrl+Shift+1…9. No-op out of range. */
+export function switchWorkspaceIndex(i: number) {
+  if (i >= 0 && i < app.workspaces.length) setApp("activeId", app.workspaces[i].id);
+}
+
+/**
+ * Clone a workspace into a fresh one (fresh PaneIds → fresh PTYs) keeping the exact split tree,
+ * gutter ratios, and each pane's spec (command/cwd/env/title). The new workspace is appended and
+ * made active; its panes respawn their commands like any launch. Returns the new id.
+ */
+export function duplicateWorkspace(id: string): string | undefined {
+  const src = app.workspaces.find((w) => w.id === id);
+  if (!src) return;
+  const panes: Record<PaneId, PaneSpec> = {};
+  const usedTitles: string[] = [];
+  const cloneNode = (node: LayoutNode): LayoutNode => {
+    if (node.kind === "leaf") {
+      const paneId = nextPaneId();
+      const srcSpec = src.panes[node.paneId];
+      const spec: PaneSpec = srcSpec ? { ...srcSpec } : { title: allocName(usedTitles) };
+      if (spec.env) spec.env = { ...spec.env }; // deep-copy so the clone doesn't share env
+      usedTitles.push(spec.title);
+      panes[paneId] = spec;
+      return { kind: "leaf", paneId };
+    }
+    return { kind: "split", dir: node.dir, ratio: node.ratio, a: cloneNode(node.a), b: cloneNode(node.b) };
+  };
+  const tree = cloneNode(src.tree);
+  const ws: WorkspaceUI = {
+    id: nextWsId(),
+    name: `${src.name} copy`,
+    cwd: src.cwd,
+    tree,
+    panes,
+    focused: firstLeaf(tree),
+    zoomed: null,
+    broadcast: [],
+  };
+  batch(() => {
+    setApp("workspaces", app.workspaces.length, ws);
+    setApp("activeId", ws.id);
+  });
+  return ws.id;
+}
+
 /** Switch to the next (+1) / previous (-1) workspace, wrapping (Ctrl+Shift+PageUp/Down). */
 export function switchWorkspaceRelative(delta: number) {
   const n = app.workspaces.length;

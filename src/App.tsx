@@ -15,14 +15,15 @@ import BroadcastBar from "./components/BroadcastBar";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
+import ShortcutsOverlay from "./components/ShortcutsOverlay";
 import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
-  setOverview, toggleOverview, switchWorkspaceRelative,
+  setOverview, toggleOverview, switchWorkspaceRelative, switchWorkspaceIndex,
 } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings, settings } from "./stores/settings";
-import { actionForKey, isModifierKey, type ActionId } from "./lib/keybindings";
+import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import "./App.css";
 
@@ -31,6 +32,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [gitOpen, setGitOpen] = createSignal(false);
   const [docsOpen, setDocsOpen] = createSignal(false);
+  const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
@@ -75,6 +77,11 @@ export default function App() {
   window.addEventListener("termhaus:docs", openDocs);
   onCleanup(() => window.removeEventListener("termhaus:docs", openDocs));
 
+  // Ctrl+Shift+? opens the keyboard cheat-sheet (toggle so a second press closes it).
+  const openShortcuts = () => setShortcutsOpen((v) => !v);
+  window.addEventListener("termhaus:shortcuts", openShortcuts);
+  onCleanup(() => window.removeEventListener("termhaus:shortcuts", openShortcuts));
+
   // Ctrl+Shift+, from a focused pane opens Settings.
   const openSettings = () => setSettingsOpen(true);
   window.addEventListener("termhaus:settings", openSettings);
@@ -97,9 +104,14 @@ export default function App() {
     "docs": () => setDocsOpen(true),
     "command-palette": () => setPaletteOpen((v) => !v),
     "overview": () => toggleOverview(),
+    "shortcuts": () => setShortcutsOpen((v) => !v),
     "prev-workspace": () => switchWorkspaceRelative(-1),
     "next-workspace": () => switchWorkspaceRelative(1),
   };
+  // Ctrl+Shift+1…9 jump straight to workspace N (works rail/dialog/nothing-focused too).
+  SWITCH_WORKSPACE_ACTIONS.forEach((id, i) => {
+    GLOBAL_ACTIONS[id] = () => switchWorkspaceIndex(i);
+  });
   const onGlobalKey = (e: KeyboardEvent) => {
     if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
     if (isModifierKey(e.key)) return;
@@ -140,6 +152,7 @@ export default function App() {
         onSettings={() => setSettingsOpen(true)}
         onGit={() => setGitOpen(true)}
         onDocs={() => setDocsOpen(true)}
+        onShortcuts={() => setShortcutsOpen(true)}
       />
       <div class="body">
       <WorkspaceRail onNew={() => setWizardOpen(true)} />
@@ -172,6 +185,9 @@ export default function App() {
       <Show when={docsOpen()}>
         <DocsPanel onClose={() => setDocsOpen(false)} />
       </Show>
+      <Show when={shortcutsOpen()}>
+        <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />
+      </Show>
       <Show when={paletteOpen()}>
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -179,6 +195,7 @@ export default function App() {
           onSettings={() => setSettingsOpen(true)}
           onGit={() => setGitOpen(true)}
           onDocs={() => setDocsOpen(true)}
+          onShortcuts={() => setShortcutsOpen(true)}
         />
       </Show>
     </div>

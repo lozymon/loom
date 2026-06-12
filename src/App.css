@@ -495,6 +495,19 @@ body,
   color: var(--danger);
 }
 
+.rail-dup {
+  color: var(--fg-faint);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+}
+
+.rail-dup:hover {
+  color: var(--accent);
+}
+
 /* ---- Broadcast bar ---- */
 .bcast {
   display: flex;
@@ -1214,6 +1227,20 @@ body,
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* Per-agent tint (IDEAS #11): colour an agented pane's focus ring + title stripe by its detected
+   agent (--agent-color, set inline in Terminal.tsx) so a mixed fleet reads at a glance and overview
+   tiles are colour-coded. The at-rest stripe yields to attention (amber) and focus via :not(). */
+.pane.agented:not(.focused):not(.attention) .pane-title {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--agent-color) 60%, transparent);
+}
+.pane.agented.focused {
+  border-color: var(--agent-color);
+  box-shadow: inset 0 0 0 1px var(--agent-color);
+}
+.pane.agented.focused .pane-title {
+  box-shadow: inset 2px 0 0 var(--agent-color);
+}
+
 /* Drag handle: pick up the pane and drop it on another to swap their grid positions. */
 .pane-grip {
   flex: 0 0 auto;
@@ -1805,6 +1832,58 @@ body,
   border-color: var(--accent-strong);
   box-shadow: 0 0 0 1px var(--accent-strong);
   color: var(--fg-dim);
+}
+
+/* Keyboard shortcuts cheat-sheet (read-only overlay). Flows groups into balanced columns. */
+.settings.shortcuts {
+  width: 660px;
+}
+.shortcuts-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 16px 12px;
+  column-width: 280px;
+  column-gap: 28px;
+}
+.shortcuts-group {
+  break-inside: avoid;
+  margin-bottom: 8px;
+}
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+.shortcuts-label {
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shortcuts-key {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.shortcuts-foot {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--fg-faint);
+  font-size: 11px;
+}
+.shortcuts-foot .shortcuts-key {
+  font-size: 10px;
+  padding: 1px 5px;
 }
 
 .kb-key.conflict {
