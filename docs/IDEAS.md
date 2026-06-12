@@ -197,7 +197,7 @@ Launch `th-wrap claude` instead of `claude`; the wrapper owns the PTY, passes I/
 but it means parsing ANSI/TUI redraws — fragile, agent-version-specific, and it re-introduces
 exactly the brittleness ADR-0001 (opaque panes) exists to avoid. Only if an agent has no hooks/MCP.
 
-### B. Adapter via the agent's own hooks 🟢 — cheap, robust
+### B. Adapter via the agent's own hooks 🟢 — cheap, robust ✅ shipped (Claude Code)
 Most capable CLIs fire lifecycle events without any output parsing (Claude Code, e.g., has a
 "needs attention/permission" notification event and a "finished" stop event). Ship a tiny config
 that points those at `th`:
@@ -206,6 +206,14 @@ that points those at `th`:
 
 The agent *pushes* its own state through the channel you already built. Per-agent, ~10 lines of
 config each. This is the natural partner to #1 (needs-input broadcast) and #3 (agent status).
+
+**✅ Built as:** a `th hooks` subcommand (a *local* helper — no socket round-trip) that prints the
+recommended Claude Code profile, or `--install [--user|--project]` merges it idempotently into the
+right `.claude/settings.json` (preserving other keys/hooks). The profile wires `Notification` →
+`th attention` (#1), `UserPromptSubmit` → `th status working` + `Stop` → `th status` (clears) (#3).
+It's conflict-free by design: `Notification` owns `attention` (cleared by focusing the pane, so no
+`Stop --clear` to race the idle notification); the prompt/stop pair owns `status`. See
+[agent-hooks.md](agent-hooks.md). Next along the arc is **C** — the same handlers behind an MCP server.
 
 ### C. A Termhaus MCP server 🟡 — the model-native one
 Expose the `ControlRequest` set (`list/send/spawn/broadcast/read/focus/attention/status`) as an
