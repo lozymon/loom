@@ -6,6 +6,7 @@
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { appState, focusPane, setOverview, setRatio, swapPanes, type WorkspaceUI } from "../stores/workspace";
 import { computeLayout, type GutterBox, type Rect } from "../lib/layout";
+import { isDetachedPlaceholder, recallPane } from "../lib/detach";
 import type { PaneId } from "../ipc/protocol";
 import TerminalPane from "./Terminal";
 
@@ -86,7 +87,20 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
       <For each={paneIds()}>
         {(id) => (
           <div class="leaf-box" style={paneStyle(id)}>
-            <TerminalPane paneId={id} ws={props.ws} />
+            <Show
+              when={!isDetachedPlaceholder(id)}
+              fallback={
+                <div class="pane detached-pane">
+                  <div class="detached-msg">
+                    <div class="detached-title">◳ Torn off</div>
+                    <div class="detached-sub">This pane is open in its own window.</div>
+                    <button class="detached-recall" onClick={() => void recallPane(id)}>Bring it back</button>
+                  </div>
+                </div>
+              }
+            >
+              <TerminalPane paneId={id} ws={props.ws} />
+            </Show>
           </div>
         )}
       </For>

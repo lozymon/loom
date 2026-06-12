@@ -46,6 +46,11 @@ struct Pane {
     // The shell child's OS pid, so the Source Control panel can read its live cwd from
     // `/proc/<pid>/cwd` (see `cwd` below). `None` if the platform didn't report one.
     pid: Option<u32>,
+    // The webview Channels the flusher/reaper write to, behind a mutex so `retarget` can swap
+    // them to a *different* window without disturbing the running PTY — the basis of tearing a
+    // pane off into its own window (the PTY stays put in this process, only its output sink moves).
+    sink: Arc<Mutex<Channel<String>>>,
+    exit_sink: Arc<Mutex<Channel<i32>>>,
 }
 
 impl PtyManager {
@@ -214,12 +219,19 @@ pub fn spawn(
             },
         );
 
+    // The output/exit sinks live behind a mutex so `retarget` can swap them to another window's
+    // Channels mid-stream (tear-off). The flusher/reaper clone the Arcs; the Pane keeps copies.
+    let sink = Arc::new(Mutex::new(on_output));
+    let exit_sink = Arc::new(Mutex::new(on_exit));
+
     // Flusher thread: coalesce into one frame and emit at most once per FLUSH_INTERVAL.
     // The frame-rate cap is what keeps WebKitGTK alive under a flood — without it we'd
     // post to the IPC as fast as base64 runs and balloon the main process. acc is capped
     // at FRAME_MAX; when it's full we stop draining `rx`, which back-pressures the reader.
     let mut child = child;
     let panes = mgr.panes.clone();
+    let flush_sink = sink.clone();
+    let flush_exit = exit_sink.clone();
     std::thread::spawn(move || {
         let engine = base64::engine::general_purpose::STANDARD;
         let mut acc: Vec<u8> = Vec::with_capacity(FRAME_MAX);
@@ -240,7 +252,9 @@ pub fn spawn(
                 let _ = w.write_all(&acc);
                 let _ = w.flush();
             }
-            let _ = on_output.send(engine.encode(&acc));
+            // Lock just long enough to enqueue the frame; `retarget` may have swapped the sink to
+            // another window's Channel since the last frame, and that's exactly the point.
+            let _ = flush_sink.lock().unwrap().send(engine.encode(&acc));
             acc.clear();
             // Pace: hold the floor at one frame per FLUSH_INTERVAL so we never out-run
             // the webview's ability to render (the cause of the unbounded-memory flood).
@@ -254,7 +268,7 @@ pub fn spawn(
             Ok(status) => status.exit_code() as i32,
             Err(_) => -1,
         };
-        let _ = on_exit.send(code);
+        let _ = flush_exit.lock().unwrap().send(code);
         panes.lock().unwrap().remove(&id);
     });
 
@@ -265,9 +279,27 @@ pub fn spawn(
             writer,
             killer,
             pid,
+            sink,
+            exit_sink,
         },
     );
     Ok(id)
+}
+
+/// Point a live pane's output (and exit) at a different window's Channels — the basis of tearing a
+/// pane off into its own window and re-docking it. The PTY, its child, and all I/O threads keep
+/// running untouched; only where the bytes are delivered changes. A no-op error if the pane is gone.
+pub fn retarget(
+    mgr: &PtyManager,
+    id: u32,
+    on_output: Channel<String>,
+    on_exit: Channel<i32>,
+) -> Result<(), String> {
+    let panes = mgr.panes.lock().unwrap();
+    let pane = panes.get(&id).ok_or_else(|| format!("no live pane {id}"))?;
+    *pane.sink.lock().unwrap() = on_output;
+    *pane.exit_sink.lock().unwrap() = on_exit;
+    Ok(())
 }
 
 /// Best-effort current working directory of a pane's shell, read from `/proc/<pid>/cwd`.

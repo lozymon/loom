@@ -65,6 +65,19 @@ export function writePty(handle: PtyHandle, data: string): Promise<void> {
   return invoke(Cmd.write, { id: handle, data });
 }
 
+/**
+ * Re-point a live PTY's output/exit at fresh Channels in *this* window (tear-off / re-dock). The
+ * PTY keeps running; only where its bytes land changes. Used by a detached pane window to claim a
+ * pane's stream, and by the main window to reclaim it when that window closes.
+ */
+export async function retargetPty(handle: PtyHandle, onOutput: PtyOutput, onExit: PtyExit): Promise<void> {
+  const output = new Channel<string>();
+  output.onmessage = (b64) => onOutput(b64ToBytes(b64));
+  const exit = new Channel<ExitCode>();
+  exit.onmessage = (code) => onExit(code);
+  return invoke(Cmd.retarget, { id: handle, onOutput: output, onExit: exit });
+}
+
 /** Tell the PTY its new dimensions after a fit/resize. */
 export function resizePty(handle: PtyHandle, cols: number, rows: number): Promise<void> {
   return invoke(Cmd.resize, { id: handle, cols, rows });

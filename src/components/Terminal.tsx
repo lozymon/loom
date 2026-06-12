@@ -19,7 +19,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { homeDir } from "@tauri-apps/api/path";
 import "@xterm/xterm/css/xterm.css";
 
-import { spawnPty, writePty, resizePty, killPty, cwdPty, busyPty, foregroundPty } from "../lib/ptyClient";
+import { spawnPty, writePty, resizePty, killPty, cwdPty, busyPty, foregroundPty, retargetPty } from "../lib/ptyClient";
+import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detach";
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
@@ -73,6 +74,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   let searchInput: HTMLInputElement | undefined;
   // The live PTY handle, or null before first spawn / after the child exits.
   let handle: PtyHandle | null = null;
+  // Set true while tearing this pane off into its own window, so onCleanup unmounts the xterm
+  // WITHOUT killing the PTY — the detached window takes over the live stream.
+  let detaching = false;
   const [dead, setDead] = createSignal<number | null>(null);
   const [finding, setFinding] = createSignal(false);
   const [query, setQuery] = createSignal("");
@@ -104,10 +108,43 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     return d ? basename(d) : (spec()?.title ?? "");
   };
 
-  /** Spawn a fresh PTY and bind it to this pane's xterm. Used for first run and respawn. */
+  // Stream bytes into xterm; flag unseen output when this pane isn't being looked at (ADR-0001:
+  // we react to the *fact* of output, never its content). Shared by spawn + re-dock binding.
+  const onOutput = (bytes: Uint8Array) => {
+    term.write(bytes);
+    if (!looking()) noteUnseen(props.paneId);
+  };
+  const onExit = (code: number) => {
+    handle = null;
+    setBusy(props.paneId, null);
+    setForeground(null);
+    term.write(`\r\n\x1b[2m[process exited: ${code}]\x1b[0m\r\n`);
+    setDead(code);
+  };
+
+  /** Spawn a fresh PTY and bind it to this pane's xterm — or, when re-docking from a torn-off
+   *  window, rebind to the *existing* PTY (no respawn). Used for first run, respawn, and re-dock. */
   async function start() {
     if (handle !== null) return;
     setDead(null);
+
+    // Re-docking: a saved handle means this pane is a live PTY coming back from its own window.
+    // Reclaim its output stream instead of spawning a new shell.
+    const reattach = detachedHandle(props.paneId);
+    if (reattach !== null) {
+      try {
+        handle = reattach;
+        await retargetPty(reattach, onOutput, onExit);
+        if (handle !== null) void resizePty(handle, term.cols, term.rows);
+      } catch (e) {
+        handle = null;
+        term.write(`\r\n\x1b[31mfailed to re-dock pane: ${e}\x1b[0m\r\n`);
+      } finally {
+        forgetDetached(props.paneId);
+      }
+      return;
+    }
+
     // Resolve the opt-in session-log path (same file across respawns; null if logging off).
     const logPath = settings.sessionLogging
       ? (await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId)) ?? undefined
@@ -124,22 +161,23 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           name: spec()?.title,
           logPath,
         },
-        (bytes) => {
-          term.write(bytes);
-          // Output in a pane you're not looking at → an "unseen activity" signal (ADR-0001:
-          // we react to the *fact* of output, never its content).
-          if (!looking()) noteUnseen(props.paneId);
-        },
-        (code) => {
-          handle = null;
-          setBusy(props.paneId, null);
-          setForeground(null);
-          term.write(`\r\n\x1b[2m[process exited: ${code}]\x1b[0m\r\n`);
-          setDead(code);
-        },
+        onOutput,
+        onExit,
       );
     } catch (e) {
       term.write(`\r\n\x1b[31mfailed to spawn pty: ${e}\x1b[0m\r\n`);
+    }
+  }
+
+  /** Tear this pane off into its own window: hand the live PTY's output to a new window and let
+   *  the main grid show a placeholder until that window closes (the PTY itself never stops). */
+  async function detachPane() {
+    if (handle === null) return; // a dead pane has nothing to tear off
+    detaching = true; // tell onCleanup not to kill the PTY when this Terminal unmounts
+    try {
+      await detachPaneToWindow(props.paneId, handle, spec()?.title ?? displayName());
+    } catch {
+      detaching = false; // window didn't open — detachPaneToWindow already re-docked us
     }
   }
 
@@ -447,7 +485,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       ro.disconnect();
       unregisterPane(props.paneId);
       forgetPane(props.paneId);
-      if (handle !== null) void killPty(handle);
+      // Detaching hands the PTY to another window — keep it alive; otherwise this unmount is a
+      // real close, so kill the child.
+      if (handle !== null && !detaching) void killPty(handle);
       term.dispose();
     });
 
@@ -542,6 +582,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           <button title="Zoom (Ctrl+Shift+Enter)" onClick={() => toggleZoom(props.paneId)}>
             {props.ws.zoomed === props.paneId ? "▢" : "⤢"}
           </button>
+          <button title="Tear off into its own window" onClick={() => void detachPane()}>◳</button>
           <Show when={settings.sessionLogging}>
             <button
               title="View this pane's session log"

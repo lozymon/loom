@@ -54,6 +54,8 @@ export const Cmd = {
   resize: "pty_resize",
   kill: "pty_kill",
   cwd: "pty_cwd",
+  /** Re-point a live pane's output/exit Channels at another window (tear-off / re-dock). */
+  retarget: "pty_retarget",
   busy: "pty_busy",
   foreground: "pty_foreground",
   /** Hand a relayed inter-pane request's answer back to Rust (ADR-0007). */

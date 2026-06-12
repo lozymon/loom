@@ -7,6 +7,7 @@
 
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { listen } from "@tauri-apps/api/event";
 import TitleBar from "./components/TitleBar";
 import WorkspaceRail from "./components/WorkspaceRail";
@@ -27,6 +28,7 @@ import {
 import { initTheme } from "./stores/theme";
 import { initSettings, settings } from "./stores/settings";
 import { applyGlobalHotkey } from "./lib/globalHotkey";
+import { redock } from "./lib/detach";
 import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import "./App.css";
@@ -163,7 +165,17 @@ export default function App() {
   // Flush any debounced state, then close. preventDefault() must run synchronously so the
   // window waits for us; we destroy it ourselves once the final save resolves. With "close to
   // tray" on, the close button just hides the window instead (Quit from the tray still exits).
-  const quitApp = async () => { try { await flushPersistence(); } finally { await win.destroy(); } };
+  const quitApp = async () => {
+    try { await flushPersistence(); } finally {
+      // Close any torn-off pane windows too, so the app actually exits (and their PTYs die with
+      // the process) instead of lingering when the main window is the last to go.
+      try {
+        const wins = await getAllWebviewWindows();
+        await Promise.all(wins.filter((w) => w.label !== win.label).map((w) => w.destroy().catch(() => {})));
+      } catch (e) { console.error("closing child windows failed", e); }
+      await win.destroy();
+    }
+  };
   const unlistenClose = win.onCloseRequested(async (event) => {
     event.preventDefault();
     if (settings.closeToTray) { await win.hide(); return; }
@@ -174,6 +186,13 @@ export default function App() {
   // The tray's "Quit" menu item routes here so it flushes state like the close path does.
   const unlistenQuit = listen("termhaus://quit", () => { void quitApp(); });
   onCleanup(() => { void unlistenQuit.then((u) => u()); });
+
+  // A torn-off pane window closing → reclaim that pane into the main grid (backs up the per-window
+  // destroyed listener in lib/detach, in case that event doesn't reach us).
+  const unlistenRedock = listen<{ paneId: number }>("termhaus://redock", (e) => {
+    if (typeof e.payload?.paneId === "number") redock(e.payload.paneId);
+  });
+  onCleanup(() => { void unlistenRedock.then((u) => u()); });
 
   // Keep the global summon/hide hotkey in sync with the setting (re-registers on change; ""=off).
   createEffect(() => { void applyGlobalHotkey(settings.globalHotkey); });

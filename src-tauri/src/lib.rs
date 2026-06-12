@@ -54,6 +54,16 @@ fn pty_cwd(mgr: State<PtyManager>, id: u32) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn pty_retarget(
+    mgr: State<PtyManager>,
+    id: u32,
+    on_output: Channel<String>,
+    on_exit: Channel<i32>,
+) -> Result<(), String> {
+    pty::retarget(&mgr, id, on_output, on_exit)
+}
+
+#[tauri::command]
 fn pty_busy(mgr: State<PtyManager>, id: u32) -> Result<Option<bool>, String> {
     pty::busy(&mgr, id)
 }
@@ -82,6 +92,7 @@ pub fn run() {
             pty_resize,
             pty_kill,
             pty_cwd,
+            pty_retarget,
             pty_busy,
             pty_foreground,
             control::pane_cmd_reply,

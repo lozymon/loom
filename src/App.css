@@ -583,6 +583,52 @@ body,
   min-height: 0;
 }
 
+/* ---- Torn-off pane window + its main-grid placeholder ---- */
+.detached-window {
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  display: flex;
+}
+.detached-term {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 6px;
+}
+/* Placeholder shown in the main grid while a pane is open in its own window. */
+.detached-pane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-sunken);
+}
+.detached-msg {
+  text-align: center;
+  color: var(--fg-muted);
+}
+.detached-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}
+.detached-sub {
+  margin: 6px 0 12px;
+  font-size: 12px;
+}
+.detached-recall {
+  font: inherit;
+  color: var(--fg);
+  background: var(--control);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.detached-recall:hover {
+  background: var(--control-hover);
+}
+
 /* ---- Broadcast bar ---- */
 .bcast {
   display: flex;

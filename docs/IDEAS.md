@@ -222,6 +222,14 @@ it to the whole pane.
   anywhere. An opt-in `settings.closeToTray` makes the close button hide instead of quit (tray
   "Quit" emits `termhaus://quit` so the frontend flushes state first, like the close path).
 - **Multi-window / tear-off panes** — currently a pane lives in one workspace in one window. 🔴
+  ✅ shipped (pending live verification) — the ◳ title-bar button tears a pane into its own window.
+  The PTY never moves (stays in the Rust process by handle, ADR-0002); a new `pty_retarget` command
+  swaps its output Channel (`pty.rs` sink behind `Arc<Mutex<Channel>>`) to the new `WebviewWindow`,
+  which renders a single xterm (`DetachedPane.tsx`, entry branches on `?detach=` in `index.tsx`).
+  The main grid shows a placeholder (`lib/detach.ts` state machine); closing the window re-docks the
+  pane — the main `Terminal.start()` rebinds to the same handle (no respawn), gated so the detach
+  unmount doesn't kill the child. Known limitation: while detached, a pane is off the broadcast/`th`
+  registry (drive it from its own window); re-routing `th send` to detached panes is a follow-up.
 - **Right-side browser / preview panel** — the dropped reference-app feature (localhost/docs
   preview); users currently alt-tab to a real browser. 🔴 ✅ shipped — `PreviewPanel.tsx`, a docked
   right-side `<iframe>` with a URL bar (reload / go / open-externally / close), resizable + persisted
