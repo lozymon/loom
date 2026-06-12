@@ -12,6 +12,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { activeWorkspace, broadcastTargets } from "../stores/workspace";
 import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
 import { listDocs, readDoc, type DocEntry } from "../lib/docsClient";
+import { parseMarkdownBlocks } from "../lib/markdown";
+import { settings, setSetting } from "../stores/settings";
 
 /** Split a relative path into a dimmed directory + a bold basename (VSCode-style, like GitPanel). */
 function splitPath(path: string): { dir: string; base: string } {
@@ -45,8 +47,18 @@ export default function DocsPanel(props: { onClose: () => void }) {
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [selected, setSelected] = createSignal<DocEntry | null>(null);
-  const [lines, setLines] = createSignal<string[]>([]);
+  const [content, setContent] = createSignal("");
+  const lines = createMemo(() => (content() === "" ? [] : content().split("\n")));
+  const blocks = createMemo(() => parseMarkdownBlocks(content()));
   const [readError, setReadError] = createSignal<string | null>(null);
+  // Rendered preview vs. raw markdown text; persisted so the choice sticks across opens. Both
+  // modes still *send* raw source — preview just selects whole blocks instead of single lines.
+  const preview = () => settings.docsPreview;
+  function setPreview(on: boolean) {
+    if (on === preview()) return;
+    clearSelection(); // row indices mean different things per mode (lines vs blocks)
+    setSetting("docsPreview", on);
+  }
 
   // ---- line selection → send-to-terminal (a contiguous row range; drag or shift-click) ----
   const [anchor, setAnchor] = createSignal<number | null>(null);
@@ -69,9 +81,21 @@ export default function DocsPanel(props: { onClose: () => void }) {
     const r = selRange();
     return !!r && i >= r.lo && i <= r.hi;
   };
+  /** The selected row range expressed as 0-based *source* line indices: raw rows are lines
+   *  directly; preview rows are blocks, so use each block's source span. Both modes send source. */
+  const selLineRange = createMemo(() => {
+    const r = selRange();
+    if (!r) return null;
+    if (!preview()) return { lo: r.lo, hi: r.hi };
+    const bs = blocks();
+    const a = bs[r.lo];
+    const b = bs[r.hi];
+    if (!a || !b) return null;
+    return { lo: a.lo, hi: b.hi };
+  });
   /** The selected passage: its raw text + 1-based line range + line count (null when empty). */
   const selMeta = createMemo(() => {
-    const r = selRange();
+    const r = selLineRange();
     if (!r) return null;
     const text = lines().slice(r.lo, r.hi + 1).join("\n");
     return { text, start: r.lo + 1, end: r.hi + 1, count: r.hi - r.lo + 1 };
@@ -135,13 +159,13 @@ export default function DocsPanel(props: { onClose: () => void }) {
 
   async function openEntry(entry: DocEntry) {
     setSelected(entry);
-    setLines([]);
+    setContent("");
     setReadError(null);
     clearSelection();
     try {
       const text = await readDoc(entry.path);
       // Normalise CRLF and drop a single trailing newline so the last row isn't a blank line.
-      setLines(text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n"));
+      setContent(text.replace(/\r\n/g, "\n").replace(/\n$/, ""));
     } catch (e) {
       setReadError(String(e));
     }
@@ -267,12 +291,38 @@ export default function DocsPanel(props: { onClose: () => void }) {
             >
               <div class="git-diff-path">
                 <span>{selected()!.rel}</span>
-                <span class="git-diff-hint">drag to select lines → send to a pane</span>
+                <span class="docs-path-right">
+                  <span class="git-diff-hint">
+                    drag to select {preview() ? "blocks" : "lines"} → send to a pane
+                  </span>
+                  <span class="docs-modes">
+                    <button classList={{ on: preview() }} onClick={() => setPreview(true)} title="Rendered markdown">Preview</button>
+                    <button classList={{ on: !preview() }} onClick={() => setPreview(false)} title="Raw markdown source (line-precise)">Raw</button>
+                  </span>
+                </span>
               </div>
               <Show when={readError()}>
                 <div class="git-empty">{readError()}</div>
               </Show>
               <Show when={!readError()}>
+                <Show
+                  when={!preview()}
+                  fallback={
+                    <div class="docs-preview">
+                      <For each={blocks()}>
+                        {(b, i) => (
+                          <div
+                            class="docs-block"
+                            classList={{ sel: isRowSel(i()) }}
+                            innerHTML={b.html}
+                            onMouseDown={(e) => rowDown(i(), e)}
+                            onMouseEnter={() => rowEnter(i())}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  }
+                >
                 <div class="docs-reader">
                   <For each={lines()}>
                     {(line, i) => (
@@ -293,6 +343,7 @@ export default function DocsPanel(props: { onClose: () => void }) {
                     )}
                   </For>
                 </div>
+                </Show>
               </Show>
 
               <Show when={selMeta()}>

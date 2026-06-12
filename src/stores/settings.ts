@@ -48,6 +48,9 @@ export interface Settings {
   broadcastGroups: { name: string; pattern: string }[];
   /** Delay (ms) between panes when broadcasting; 0 = all at once (no stagger). */
   broadcastStaggerMs: number;
+  // ---- Docs reader ----
+  /** Show the Docs panel rendered (preview) vs. raw markdown text; persists across opens. */
+  docsPreview: boolean;
   // ---- Session logging ----
   /** Append each pane's raw output to a per-pane file under <config>/logs/ (opt-in). */
   sessionLogging: boolean;
@@ -76,6 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
   broadcastHistory: [],
   broadcastGroups: [],
   broadcastStaggerMs: 0,
+  docsPreview: true,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
   railWidth: 168,

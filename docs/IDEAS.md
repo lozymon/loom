@@ -120,8 +120,13 @@ selection tint; the selection is sent as **raw markdown** (`rel:lines` + a ```ma
 optional instruction) via bracketed paste. A **"to targets"** toggle fans the passage to
 `broadcastTargets(ws)` instead of just the focused pane ("all of you read this"); **"Open file…"**
 uses the native dialog for files outside the folder. Opened from the title bar's 📖 **Docs** button,
-the command palette, or **Ctrl+Shift+R** (new `docs` keybinding action). Shipped the plain-text
-renderer; rendered-markdown remains a later option.
+the command palette, or **Ctrl+Shift+R** (new `docs` keybinding action).
+
+A **Raw / Preview** toggle (persisted as `settings.docsPreview`) now covers *both* rendering
+options: Raw is the line-precise grid; Preview renders the markdown via a small self-contained
+parser (`lib/markdown.ts`, no dep — like the unified-diff parser) where each block carries its
+**source line range**, so block drag-select still reconstructs and sends the *raw* markdown — the
+"selection maps back to source lines" path the open question called the nicer-but-more-work option.
 
 ---
 
