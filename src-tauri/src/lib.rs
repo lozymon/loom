@@ -4,6 +4,7 @@ mod docs;
 mod git;
 mod logs;
 mod pty;
+mod tray;
 mod workspace;
 
 use std::sync::Arc;
@@ -72,6 +73,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        // The global summon/hide hotkey is registered from TS (it's a user setting); the plugin
+        // just needs to be present so those JS register/unregister calls have a backend.
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             pty_spawn,
             pty_write,
@@ -96,6 +100,10 @@ pub fn run() {
         .setup(move |app| {
             // Start the inter-pane control bus once the app handle exists (ADR-0007).
             control::start(app.handle().clone(), pending.clone());
+            // System tray (summon/hide). A missing tray host (some Linux sessions) is non-fatal.
+            if let Err(e) = tray::build(app) {
+                eprintln!("termhaus: system tray unavailable ({e})");
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

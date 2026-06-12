@@ -5,8 +5,9 @@
 // Rendering waits for init() to hydrate persisted state, so panes spawn exactly once against
 // the restored layout (no spawn-then-replace), then startPersistence() autosaves changes.
 
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import TitleBar from "./components/TitleBar";
 import WorkspaceRail from "./components/WorkspaceRail";
 import LayoutView from "./components/LayoutNode";
@@ -24,6 +25,7 @@ import {
 } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings, settings } from "./stores/settings";
+import { applyGlobalHotkey } from "./lib/globalHotkey";
 import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import "./App.css";
@@ -151,12 +153,22 @@ export default function App() {
   onCleanup(() => window.removeEventListener("keydown", onEsc, true));
 
   // Flush any debounced state, then close. preventDefault() must run synchronously so the
-  // window waits for us; we destroy it ourselves once the final save resolves.
+  // window waits for us; we destroy it ourselves once the final save resolves. With "close to
+  // tray" on, the close button just hides the window instead (Quit from the tray still exits).
+  const quitApp = async () => { try { await flushPersistence(); } finally { await win.destroy(); } };
   const unlistenClose = win.onCloseRequested(async (event) => {
     event.preventDefault();
-    try { await flushPersistence(); } finally { await win.destroy(); }
+    if (settings.closeToTray) { await win.hide(); return; }
+    await quitApp();
   });
   onCleanup(() => { void unlistenClose.then((u) => u()); });
+
+  // The tray's "Quit" menu item routes here so it flushes state like the close path does.
+  const unlistenQuit = listen("termhaus://quit", () => { void quitApp(); });
+  onCleanup(() => { void unlistenQuit.then((u) => u()); });
+
+  // Keep the global summon/hide hotkey in sync with the setting (re-registers on change; ""=off).
+  createEffect(() => { void applyGlobalHotkey(settings.globalHotkey); });
 
   return (
     <div class="shell" classList={{ flush: flush() }}>

@@ -31,7 +31,7 @@
     "longDescription": "Termhaus is a Linux-first desktop terminal multiplexer: many real PTYs arranged in resizable split grids and a left workspace rail, tuned for driving fleets of CLI agents — including broadcast-input to prompt many panes at once.",
     "linux": {
       "deb": {
-        "depends": ["gnome-screenshot"]
+        "depends": ["gnome-screenshot", "libayatana-appindicator3-1"]
       }
     },
     "icon": [

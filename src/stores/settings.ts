@@ -36,6 +36,11 @@ export interface Settings {
   // ---- Notifications ----
   /** Pop a desktop notification when a pane raises attention while Termhaus is unfocused. */
   notifyOnAttention: boolean;
+  // ---- Window / tray ----
+  /** Global hotkey that summons/hides the window from anywhere (Tauri accelerator; "" = off). */
+  globalHotkey: string;
+  /** Close button hides to the tray instead of quitting (Quit from the tray menu still exits). */
+  closeToTray: boolean;
   // ---- Broadcast ----
   /** Append Enter (carriage return) to each broadcast message so it runs immediately. */
   broadcastNewline: boolean;
@@ -74,6 +79,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultCwd: "",
   confirmClose: true,
   notifyOnAttention: false,
+  globalHotkey: "CommandOrControl+Alt+Backquote",
+  closeToTray: false,
   broadcastNewline: true,
   broadcastSnippets: [],
   broadcastHistory: [],

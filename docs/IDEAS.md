@@ -215,7 +215,12 @@ it to the whole pane.
 
 ## Bigger bets (post-v1 — flagged out-of-scope in PLAN)
 
-- **System tray + global hotkey** to summon/hide the window. 🔴
+- **System tray + global hotkey** to summon/hide the window. 🔴 ✅ shipped — a tray icon
+  (`src-tauri/src/tray.rs`, behind tauri's `tray-icon` feature) with a Show/Hide + Quit menu;
+  left-click toggles the window. A configurable global hotkey (`settings.globalHotkey`, default
+  `Ctrl+Alt+`` `) registered from TS via `tauri-plugin-global-shortcut` summons/hides from
+  anywhere. An opt-in `settings.closeToTray` makes the close button hide instead of quit (tray
+  "Quit" emits `termhaus://quit` so the frontend flushes state first, like the close path).
 - **Multi-window / tear-off panes** — currently a pane lives in one workspace in one window. 🔴
 - **Right-side browser / preview panel** — the dropped reference-app feature (localhost/docs
   preview); users currently alt-tab to a real browser. 🔴

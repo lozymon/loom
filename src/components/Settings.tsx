@@ -287,6 +287,30 @@ export default function Settings(props: { onClose: () => void }) {
             <p class="settings-hint muted">Only fires when the Termhaus window isn't focused — when it's up front the amber pane border is enough. Your OS may ask permission the first time.</p>
           </section>
 
+          {/* ---- Window & tray ---- */}
+          <section class="settings-section">
+            <h3>Window &amp; tray</h3>
+            <label class="settings-row toggle">
+              <input
+                type="checkbox"
+                checked={settings.closeToTray}
+                onChange={(e) => setSetting("closeToTray", e.currentTarget.checked)}
+              />
+              <span class="settings-label">Close to tray <span class="muted">— the window's close button hides Termhaus instead of quitting (Quit from the tray menu still exits)</span></span>
+            </label>
+            <label class="settings-row">
+              <span class="settings-label">Global summon hotkey</span>
+              <input
+                class="settings-input"
+                value={settings.globalHotkey}
+                placeholder="e.g. CommandOrControl+Alt+Backquote"
+                spellcheck={false}
+                onChange={(e) => setSetting("globalHotkey", e.currentTarget.value.trim())}
+              />
+            </label>
+            <p class="settings-hint muted">Summons or hides the window from anywhere. A Tauri accelerator — modifiers <code>CommandOrControl</code>/<code>Alt</code>/<code>Shift</code>/<code>Super</code> joined with <code>+</code> (e.g. <code>Alt+Space</code>). Leave empty to disable. The tray icon (left-click) does the same.</p>
+          </section>
+
           {/* ---- Session logging ---- */}
           <section class="settings-section">
             <h3>Session logging</h3>
