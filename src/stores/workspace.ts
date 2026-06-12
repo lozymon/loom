@@ -41,6 +41,10 @@ export interface Preset {
   paneCount: number;
   /** Per-pane launch commands in row-major order (empty/omitted = plain shell). */
   commands?: (string | undefined)[];
+  /** The captured split tree + per-pane specs, so relaunch rebuilds the hand-tuned layout
+   *  (shape, gutter ratios, per-pane cwd) faithfully. Absent on older presets → balanced grid. */
+  tree?: LayoutNode;
+  panes?: Record<PaneId, PaneSpec>;
 }
 
 interface AppState {
@@ -82,9 +86,47 @@ export interface NewWorkspaceOpts {
   cwds?: (string | undefined)[];
   /** Preselect every pane as a broadcast target (one prompt → many panes from launch). */
   broadcastAll?: boolean;
+  /** A saved layout to rebuild verbatim (preset relaunch / duplicate) instead of a balanced grid.
+   *  When set with `panes`, the tree shape + gutter ratios are preserved and each leaf is remapped
+   *  to a fresh PaneId; `paneCount`/`commands`/`cwds` are then ignored. */
+  tree?: LayoutNode;
+  panes?: Record<PaneId, PaneSpec>;
+}
+
+/**
+ * Deep-clone a split tree with fresh PaneIds, copying each leaf's spec (command/cwd/env/title)
+ * from `srcPanes`. Returns the new tree + its panes map. Shared by duplicate-workspace and faithful
+ * preset relaunch — both need the exact shape/ratios with brand-new PaneIds (→ brand-new PTYs).
+ */
+function cloneTreeWithFreshPanes(
+  srcTree: LayoutNode,
+  srcPanes: Record<PaneId, PaneSpec>,
+): { tree: LayoutNode; panes: Record<PaneId, PaneSpec> } {
+  const panes: Record<PaneId, PaneSpec> = {};
+  const usedTitles: string[] = [];
+  const clone = (node: LayoutNode): LayoutNode => {
+    if (node.kind === "leaf") {
+      const paneId = nextPaneId();
+      const srcSpec = srcPanes[node.paneId];
+      const spec: PaneSpec = srcSpec ? { ...srcSpec } : { title: allocName(usedTitles) };
+      if (spec.env) spec.env = { ...spec.env }; // don't share env with the source
+      if (!spec.title) spec.title = allocName(usedTitles);
+      usedTitles.push(spec.title);
+      panes[paneId] = spec;
+      return { kind: "leaf", paneId };
+    }
+    return { kind: "split", dir: node.dir, ratio: node.ratio, a: clone(node.a), b: clone(node.b) };
+  };
+  return { tree: clone(srcTree), panes };
 }
 
 function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
+  // Faithful path: rebuild a saved tree verbatim (preset relaunch / duplicate), fresh PaneIds.
+  if (opts.tree && opts.panes) {
+    const { tree, panes } = cloneTreeWithFreshPanes(opts.tree, opts.panes);
+    const broadcast = opts.broadcastAll ? leafIds(tree) : [];
+    return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, broadcast };
+  }
   const panes: Record<PaneId, PaneSpec> = {};
   let i = 0;
   const makeLeaf = (): LayoutNode => {
@@ -354,21 +396,7 @@ export function switchWorkspaceIndex(i: number) {
 export function duplicateWorkspace(id: string): string | undefined {
   const src = app.workspaces.find((w) => w.id === id);
   if (!src) return;
-  const panes: Record<PaneId, PaneSpec> = {};
-  const usedTitles: string[] = [];
-  const cloneNode = (node: LayoutNode): LayoutNode => {
-    if (node.kind === "leaf") {
-      const paneId = nextPaneId();
-      const srcSpec = src.panes[node.paneId];
-      const spec: PaneSpec = srcSpec ? { ...srcSpec } : { title: allocName(usedTitles) };
-      if (spec.env) spec.env = { ...spec.env }; // deep-copy so the clone doesn't share env
-      usedTitles.push(spec.title);
-      panes[paneId] = spec;
-      return { kind: "leaf", paneId };
-    }
-    return { kind: "split", dir: node.dir, ratio: node.ratio, a: cloneNode(node.a), b: cloneNode(node.b) };
-  };
-  const tree = cloneNode(src.tree);
+  const { tree, panes } = cloneTreeWithFreshPanes(src.tree, src.panes);
   const ws: WorkspaceUI = {
     id: nextWsId(),
     name: `${src.name} copy`,
@@ -490,7 +518,10 @@ export function flaggedTargets(ws: WorkspaceUI): PaneId[] {
 
 // ---- Presets (saved workspace templates) --------------------------------------------
 
-/** Snapshot the active workspace as a relaunchable preset (cwd + layout size + commands). */
+/** Snapshot the active workspace as a relaunchable preset: the full split tree + per-pane specs
+ *  (so the hand-tuned layout, gutter ratios, and per-pane cwd round-trip), plus cwd + paneCount +
+ *  commands for display and older-style fallback. The tree/panes are deep-copied so later edits to
+ *  the live workspace don't mutate the saved preset. */
 export function saveCurrentAsPreset(): Preset | undefined {
   const ws = activeWorkspace();
   if (!ws) return;
@@ -502,6 +533,8 @@ export function saveCurrentAsPreset(): Preset | undefined {
     cwd: ws.cwd,
     paneCount: order.length,
     commands: commands.some(Boolean) ? commands : undefined,
+    tree: JSON.parse(JSON.stringify(ws.tree)) as LayoutNode,
+    panes: JSON.parse(JSON.stringify(ws.panes)) as Record<PaneId, PaneSpec>,
   };
   // Replace a same-name preset rather than piling up duplicates.
   const others = app.presets.filter((p) => p.name !== preset.name);
@@ -509,13 +542,16 @@ export function saveCurrentAsPreset(): Preset | undefined {
   return preset;
 }
 
-/** Create + activate a fresh workspace from a saved preset. */
+/** Create + activate a fresh workspace from a saved preset — rebuilding the captured layout
+ *  verbatim when present, else (older presets) a balanced grid from paneCount + commands. */
 export function launchPreset(preset: Preset): string {
   return createWorkspace({
     name: preset.name,
     cwd: preset.cwd,
     paneCount: preset.paneCount,
     commands: preset.commands,
+    tree: preset.tree,
+    panes: preset.panes,
   });
 }
 

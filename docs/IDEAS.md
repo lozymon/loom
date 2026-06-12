@@ -132,13 +132,19 @@ parser (`lib/markdown.ts`, no dep — like the unified-diff parser) where each b
 
 ## Tier 2 — workspace & layout polish
 
-### 5. Presets capture the real layout  🟡
+### 5. Presets capture the real layout  🟡 ✅ shipped
 Today a `Preset` stores `cwd` + `paneCount` + `commands` (`stores/workspace.ts`) — **not** the
 tree shape, gutter ratios, or per-pane cwd. So a relaunched preset rebuilds a *balanced* grid,
 losing any hand-tuned splits. Make "Save as preset" snapshot the actual `LayoutNode` tree (and the
 per-pane `cwd` we added to the launcher) so relaunch is faithful.
 
 *(Known gap, noted when we added the launcher's per-pane cwd — that override currently can't round-trip through a preset.)*
+
+**✅ Built as:** `Preset` now carries a deep-copied `tree` + `panes` snapshot; `saveCurrentAsPreset`
+records them, `launchPreset` rebuilds them verbatim via a new `NewWorkspaceOpts.tree/panes` path in
+`buildWorkspace` (older presets without a tree still fall back to a balanced grid). The clone logic
+is factored into `cloneTreeWithFreshPanes`, shared with `duplicateWorkspace` (#7) — both remap every
+leaf to a fresh PaneId. The wizard tile shows "· layout" when a preset captured its shape.
 
 ### 6. Quick workspace switch (Ctrl+1…9)  🟢 ✅ shipped
 You have prev/next (`switchWorkspaceRelative`, PageUp/PageDown). Add direct jumps to workspace N.
@@ -160,9 +166,14 @@ fresh PTYs). One rail action; reuses `buildWorkspace`-style construction.
 (command/cwd/env/title, env deep-copied), names it "<name> copy", and makes it active — panes
 respawn like any launch. Triggered by a ⧉ button on each rail row.
 
-### 8. Drag-to-reorder panes in overview  🟡
+### 8. Drag-to-reorder panes in overview  🟡 ✅ shipped
 `swapLeaves` already exists (`lib/layout.ts`) and powers programmatic swaps. Wire it to
 drag-and-drop between tiles in overview mode (`overview-hit` overlay in `LayoutNode.tsx`).
+
+**✅ Built as:** the `.overview-hit` tiles are now `draggable` with the same `text/plain` PaneId
+dataTransfer protocol as the in-grid pane grip; dropping one tile on another calls `swapPanes`
+(→ `swapLeaves`) and the overview re-tiles from the new leaf order. A `drag-over` highlight marks
+the drop target.
 
 ---
 
@@ -178,10 +189,16 @@ the focus-vs-no-focus shortcut gap on its own.
 actions show automatically. Flows into balanced columns. Opened from the title bar's ⌨ button, the
 command palette, or **Ctrl+Shift+?** (new `shortcuts` action).
 
-### 10. Session-log viewer  🟡
+### 10. Session-log viewer  🟡 ✅ shipped
 `sessionLog.ts` already writes per-pane raw output to disk (opt-in, `settings.sessionLogging`).
 Add a small in-app reader/tail to review what an agent did without re-running it. This is the
 natural on-ramp to the deferred searchable-scrollback / SQLite idea (PLAN "Out of scope").
+
+**✅ Built as:** Rust `logs.rs` (`list_logs` lists the logs dir newest-first; `read_log_tail` tails
+the last N bytes so multi-MB logs stay responsive, confined to the logs dir). `SessionLogViewer.tsx`
+(mirrors the Git/Docs panels) lists logs + shows the selected tail, with raw terminal escapes run
+through a new `lib/ansi.ts` `stripAnsi` (tested) so it reads as plain text. Opened from a pane's ≣
+title-bar button (preselects that pane's log) or the command palette.
 
 ### 11. Per-agent border tint  🟢 ✅ shipped
 Agent defs carry colors (`lib/agents.ts`). Tint each pane's focus ring / title bar by its detected

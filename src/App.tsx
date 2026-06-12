@@ -16,6 +16,7 @@ import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
 import ShortcutsOverlay from "./components/ShortcutsOverlay";
+import SessionLogViewer from "./components/SessionLogViewer";
 import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
@@ -33,6 +34,8 @@ export default function App() {
   const [gitOpen, setGitOpen] = createSignal(false);
   const [docsOpen, setDocsOpen] = createSignal(false);
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
+  const [logsOpen, setLogsOpen] = createSignal(false);
+  const [logPreselect, setLogPreselect] = createSignal<string | null>(null);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
@@ -81,6 +84,15 @@ export default function App() {
   const openShortcuts = () => setShortcutsOpen((v) => !v);
   window.addEventListener("termhaus:shortcuts", openShortcuts);
   onCleanup(() => window.removeEventListener("termhaus:shortcuts", openShortcuts));
+
+  // A pane's "view log" button (or the palette) opens the session-log viewer; the event may carry
+  // a path to preselect that pane's log.
+  const openLogs = (e: Event) => {
+    setLogPreselect((e as CustomEvent).detail?.path ?? null);
+    setLogsOpen(true);
+  };
+  window.addEventListener("termhaus:view-session-log", openLogs);
+  onCleanup(() => window.removeEventListener("termhaus:view-session-log", openLogs));
 
   // Ctrl+Shift+, from a focused pane opens Settings.
   const openSettings = () => setSettingsOpen(true);
@@ -188,6 +200,9 @@ export default function App() {
       <Show when={shortcutsOpen()}>
         <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />
       </Show>
+      <Show when={logsOpen()}>
+        <SessionLogViewer preselectPath={logPreselect()} onClose={() => setLogsOpen(false)} />
+      </Show>
       <Show when={paletteOpen()}>
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -196,6 +211,7 @@ export default function App() {
           onGit={() => setGitOpen(true)}
           onDocs={() => setDocsOpen(true)}
           onShortcuts={() => setShortcutsOpen(true)}
+          onLogs={() => { setLogPreselect(null); setLogsOpen(true); }}
         />
       </Show>
     </div>

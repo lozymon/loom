@@ -1176,6 +1176,16 @@ body,
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+.overview-hit[draggable="true"] {
+  cursor: grab;
+}
+
+/* Drop target while dragging another tile onto this one (swap). */
+.overview-hit.drag-over {
+  box-shadow: inset 0 0 0 2px var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 18%, transparent);
+}
+
 /* The pane chrome: title bar above, terminal below. */
 .pane {
   display: flex;
@@ -2157,6 +2167,22 @@ body,
 }
 .docs-line.sel {
   box-shadow: inset 0 0 0 9999px rgba(90, 140, 255, 0.24);
+}
+
+/* Session-log viewer: the ANSI-stripped tail in a plain scrollable monospace block. */
+.log-view {
+  margin: 0;
+  padding: 10px 14px;
+  font:
+    12px ui-monospace,
+    monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg-dim);
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Raw/Preview toggle in the docs panel's path header. */

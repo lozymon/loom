@@ -541,6 +541,15 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           <button title="Zoom (Ctrl+Shift+Enter)" onClick={() => toggleZoom(props.paneId)}>
             {props.ws.zoomed === props.paneId ? "▢" : "⤢"}
           </button>
+          <Show when={settings.sessionLogging}>
+            <button
+              title="View this pane's session log"
+              onClick={async () => {
+                const path = await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId);
+                window.dispatchEvent(new CustomEvent("termhaus:view-session-log", { detail: { path: path ?? undefined } }));
+              }}
+            >≣</button>
+          </Show>
           <button title="Close (Ctrl+Shift+W)" onClick={() => closePane(props.paneId)}>✕</button>
         </span>
       </div>

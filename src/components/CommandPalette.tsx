@@ -40,6 +40,7 @@ export default function CommandPalette(props: {
   onGit: () => void;
   onDocs: () => void;
   onShortcuts: () => void;
+  onLogs: () => void;
 }) {
   const [query, setQuery] = createSignal("");
   const [sel, setSel] = createSignal(0);
@@ -57,6 +58,7 @@ export default function CommandPalette(props: {
       { label: "Open source control", key: kb("source-control"), run: props.onGit },
       { label: "Open docs reader", key: kb("docs"), run: props.onDocs },
       { label: "Keyboard shortcuts cheat-sheet", key: kb("shortcuts"), run: props.onShortcuts },
+      { label: "View session logs", hint: "Recorded pane output", run: props.onLogs },
       { label: "Toggle overview (fleet glance)", key: kb("overview"), run: () => toggleOverview() },
       { label: "Save workspace as preset", run: () => saveCurrentAsPreset() },
       { label: "Next workspace", key: kb("next-workspace"), run: () => switchWorkspaceRelative(1) },

@@ -3,8 +3,8 @@
 // panes plus a layer of draggable gutters. That flat layer is what keeps a leaf's PTY alive
 // across splits/closes — a recursive renderer would remount the <Terminal> and respawn it.
 
-import { createMemo, For, Show, type JSX } from "solid-js";
-import { appState, focusPane, setOverview, setRatio, type WorkspaceUI } from "../stores/workspace";
+import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
+import { appState, focusPane, setOverview, setRatio, swapPanes, type WorkspaceUI } from "../stores/workspace";
 import { computeLayout, type GutterBox, type Rect } from "../lib/layout";
 import type { PaneId } from "../ipc/protocol";
 import TerminalPane from "./Terminal";
@@ -17,6 +17,8 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
   const rectOf = (id: PaneId): Rect | undefined => layout().leaves.find((l) => l.paneId === id)?.rect;
 
   const overview = () => appState.overview;
+  // Which overview tile a drag is currently hovering (for the drop highlight).
+  const [dragOverId, setDragOverId] = createSignal<PaneId | null>(null);
 
   // Overview ("fleet glance"): reflow every pane into a uniform tile grid, ordered top-to-bottom
   // then left-to-right (reading order) by their tree position so the wall is stable. Pure
@@ -90,14 +92,29 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
       </For>
 
       {/* In overview, a transparent hit-target over each tile: click focuses that pane and drops
-          back to the split grid (and stops a stray click from typing into the xterm beneath). */}
+          back to the split grid (and stops a stray click from typing into the xterm beneath).
+          Dragging one tile onto another swaps their grid positions (reuses swapPanes). */}
       <Show when={overview()}>
         <For each={paneIds()}>
           {(id) => (
             <button
               class="overview-hit"
+              classList={{ "drag-over": dragOverId() === id }}
               style={paneStyle(id)}
-              title="Focus this pane"
+              title="Click to focus · drag onto another tile to swap"
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer?.setData("text/plain", String(id));
+                if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => { e.preventDefault(); if (dragOverId() !== id) setDragOverId(id); }}
+              onDragLeave={() => { if (dragOverId() === id) setDragOverId(null); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverId(null);
+                const src = Number(e.dataTransfer?.getData("text/plain"));
+                if (src) swapPanes(src, id);
+              }}
               onClick={() => { focusPane(id); setOverview(false); }}
             />
           )}

@@ -184,7 +184,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                       <div class="wizard-preset">
                         <button class="wizard-preset-go" onClick={() => launchSaved(p.id)}>
                           <span>{p.name}</span>
-                          <span class="muted">{p.paneCount} panes{p.commands?.some(Boolean) ? " · agents" : ""}</span>
+                          <span class="muted">{p.paneCount} panes{p.commands?.some(Boolean) ? " · agents" : ""}{p.tree ? " · layout" : ""}</span>
                         </button>
                         <button class="wizard-preset-del" title="Delete preset" onClick={() => deletePreset(p.id)}>✕</button>
                       </div>
