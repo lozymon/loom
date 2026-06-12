@@ -14,6 +14,7 @@ import appIcon from '../assets/app-icon.png';
 export default function TitleBar(props: {
   onSettings: () => void;
   onGit: () => void;
+  onDocs: () => void;
 }) {
   const win = getCurrentWindow();
   const openPalette = () =>
@@ -48,6 +49,13 @@ export default function TitleBar(props: {
           onClick={() => props.onGit()}
         >
           <span class="tb-ico">⎇</span> Git
+        </button>
+        <button
+          class="tb-btn"
+          title="Docs reader — mark a passage → send to a pane (Ctrl+Shift+R)"
+          onClick={() => props.onDocs()}
+        >
+          <span class="tb-ico">📖</span> Docs
         </button>
         <button
           class="tb-btn"

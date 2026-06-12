@@ -1,5 +1,6 @@
 mod capture;
 mod control;
+mod docs;
 mod git;
 mod pty;
 mod workspace;
@@ -83,6 +84,8 @@ pub fn run() {
             git::git_status,
             git::git_branch,
             git::git_diff,
+            docs::list_docs,
+            docs::read_doc,
             workspace::state_save,
             workspace::state_load,
             workspace::session_log_path,

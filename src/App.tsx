@@ -14,6 +14,7 @@ import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
 import BroadcastBar from "./components/BroadcastBar";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
+import DocsPanel from "./components/DocsPanel";
 import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
@@ -29,6 +30,7 @@ export default function App() {
   const [wizardOpen, setWizardOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [gitOpen, setGitOpen] = createSignal(false);
+  const [docsOpen, setDocsOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
@@ -68,6 +70,11 @@ export default function App() {
   window.addEventListener("termhaus:source-control", openGit);
   onCleanup(() => window.removeEventListener("termhaus:source-control", openGit));
 
+  // Ctrl+Shift+R from a focused pane opens the Docs reader (mark a passage → send to a pane).
+  const openDocs = () => setDocsOpen(true);
+  window.addEventListener("termhaus:docs", openDocs);
+  onCleanup(() => window.removeEventListener("termhaus:docs", openDocs));
+
   // Ctrl+Shift+, from a focused pane opens Settings.
   const openSettings = () => setSettingsOpen(true);
   window.addEventListener("termhaus:settings", openSettings);
@@ -87,6 +94,7 @@ export default function App() {
     "new-workspace": () => setWizardOpen(true),
     "settings": () => setSettingsOpen(true),
     "source-control": () => setGitOpen(true),
+    "docs": () => setDocsOpen(true),
     "command-palette": () => setPaletteOpen((v) => !v),
     "overview": () => toggleOverview(),
     "prev-workspace": () => switchWorkspaceRelative(-1),
@@ -131,6 +139,7 @@ export default function App() {
       <TitleBar
         onSettings={() => setSettingsOpen(true)}
         onGit={() => setGitOpen(true)}
+        onDocs={() => setDocsOpen(true)}
       />
       <div class="body">
       <WorkspaceRail onNew={() => setWizardOpen(true)} />
@@ -160,12 +169,16 @@ export default function App() {
       <Show when={gitOpen()}>
         <GitPanel onClose={() => setGitOpen(false)} />
       </Show>
+      <Show when={docsOpen()}>
+        <DocsPanel onClose={() => setDocsOpen(false)} />
+      </Show>
       <Show when={paletteOpen()}>
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
           onNewWorkspace={() => setWizardOpen(true)}
           onSettings={() => setSettingsOpen(true)}
           onGit={() => setGitOpen(true)}
+          onDocs={() => setDocsOpen(true)}
         />
       </Show>
     </div>

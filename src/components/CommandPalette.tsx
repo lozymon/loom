@@ -38,6 +38,7 @@ export default function CommandPalette(props: {
   onNewWorkspace: () => void;
   onSettings: () => void;
   onGit: () => void;
+  onDocs: () => void;
 }) {
   const [query, setQuery] = createSignal("");
   const [sel, setSel] = createSignal(0);
@@ -53,6 +54,7 @@ export default function CommandPalette(props: {
       { label: "New workspace", key: kb("new-workspace"), run: props.onNewWorkspace },
       { label: "Open settings", hint: "Preferences", run: props.onSettings },
       { label: "Open source control", key: kb("source-control"), run: props.onGit },
+      { label: "Open docs reader", key: kb("docs"), run: props.onDocs },
       { label: "Toggle overview (fleet glance)", key: kb("overview"), run: () => toggleOverview() },
       { label: "Save workspace as preset", run: () => saveCurrentAsPreset() },
       { label: "Next workspace", key: kb("next-workspace"), run: () => switchWorkspaceRelative(1) },

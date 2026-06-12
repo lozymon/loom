@@ -373,6 +373,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
       "command-palette": () => window.dispatchEvent(new CustomEvent("termhaus:command-palette")),
       "source-control": () => window.dispatchEvent(new CustomEvent("termhaus:source-control")),
+      "docs": () => window.dispatchEvent(new CustomEvent("termhaus:docs")),
       "settings": () => window.dispatchEvent(new CustomEvent("termhaus:settings")),
       "overview": () => toggleOverview(),
       "prev-workspace": () => switchWorkspaceRelative(-1),

@@ -83,7 +83,7 @@ pill renders in `Terminal.tsx`'s title bar (and so in overview tiles for free, s
 repositions the full panes). `th status [pane] <text…> | --clear` added to the CLI:
 `th status "running tests"` labels the calling pane; `th status Cleo --clear` clears another's.
 
-### 4. Docs / README reader → mark & send to a Claude pane  🟡
+### 4. Docs / README reader → mark & send to a Claude pane  🟡 ✅ shipped
 **The flow:** open a markdown file (README, a spec, an ADR) in a side panel, read through it, mark
 a passage, optionally add an instruction ("explain this", "implement this section"), and send the
 selection into a Claude pane to discuss — exactly the gesture the Source Control panel already
@@ -112,6 +112,16 @@ read this") via the same broadcast targeting, not just the focused pane.
 
 **Open question:** send the **raw markdown** of the selection (best for an agent to act on) vs. the
 rendered text (nicer for humans). Lean raw — the agent wants the source.
+
+**✅ Built as:** new Rust `docs.rs` (`list_docs` walks the focused pane's live cwd for markdown,
+README-first, bounded depth/count; `read_doc` reads one file, capped at 2 MiB). `DocsPanel.tsx`
+mirrors `GitPanel.tsx`: a file list + a plain-text reader with the same drag-select gesture and
+selection tint; the selection is sent as **raw markdown** (`rel:lines` + a ```markdown fence` +
+optional instruction) via bracketed paste. A **"to targets"** toggle fans the passage to
+`broadcastTargets(ws)` instead of just the focused pane ("all of you read this"); **"Open file…"**
+uses the native dialog for files outside the folder. Opened from the title bar's 📖 **Docs** button,
+the command palette, or **Ctrl+Shift+R** (new `docs` keybinding action). Shipped the plain-text
+renderer; rendered-markdown remains a later option.
 
 ---
 

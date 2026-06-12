@@ -19,6 +19,7 @@ export type ActionId =
   | "next-workspace"
   | "command-palette"
   | "source-control"
+  | "docs"
   | "settings"
   | "overview"
   | "copy"
@@ -59,6 +60,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "search", label: "Find in scrollback", group: "Clipboard & search", defaultKey: "f" },
   { id: "capture-region", label: "Snapshot region → focused pane", group: "Capture", defaultKey: "s" },
   { id: "source-control", label: "Open source control", group: "Git", defaultKey: "g" },
+  { id: "docs", label: "Open docs reader", group: "General", defaultKey: "r" },
   // Ctrl+Shift+= reports key "+", and Ctrl+Shift+- reports "_" (shift transforms the key); the
   // PRETTY_KEY map below renders "_" back as "-" so the Settings list reads "Ctrl+Shift+-".
   { id: "font-increase", label: "Increase font size", group: "Appearance", defaultKey: "+" },

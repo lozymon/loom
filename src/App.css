@@ -2059,6 +2059,27 @@ body,
   white-space: pre-wrap;
 }
 
+/* Docs reader: plain markdown rendered as a selectable 2-col grid (line number + raw text),
+   reusing the diff panel's line gesture and selection tint (.git-ln.sel). */
+.docs-reader {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-content: start;
+  font-size: 12px;
+  line-height: 1.5;
+  user-select: none;
+  cursor: default;
+}
+.docs-line {
+  padding: 0 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  tab-size: 4;
+}
+.docs-line.sel {
+  box-shadow: inset 0 0 0 9999px rgba(90, 140, 255, 0.24);
+}
+
 .git-ln {
   padding: 0 10px;
   text-align: right;
