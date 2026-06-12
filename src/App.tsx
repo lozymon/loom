@@ -31,6 +31,21 @@ export default function App() {
   const [gitOpen, setGitOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
+  // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
+  // borderless, transparent-cornered window; when it fills the screen those rounded corners would
+  // show the desktop through each corner. We drop the rounding/border in that state (.shell.flush).
+  const [flush, setFlush] = createSignal(false);
+  const win = getCurrentWindow();
+
+  const syncWindowChrome = async () => {
+    try {
+      const [max, full] = await Promise.all([win.isMaximized(), win.isFullscreen()]);
+      setFlush(max || full);
+    } catch { /* window API unavailable — leave rounded */ }
+  };
+  void syncWindowChrome();
+  const unlistenResize = win.onResized(() => void syncWindowChrome());
+  onCleanup(() => { void unlistenResize.then((u) => u()); });
 
   onMount(async () => {
     await Promise.all([initTheme(), initSettings(), init()]);
@@ -105,14 +120,14 @@ export default function App() {
 
   // Flush any debounced state, then close. preventDefault() must run synchronously so the
   // window waits for us; we destroy it ourselves once the final save resolves.
-  const unlistenClose = getCurrentWindow().onCloseRequested(async (event) => {
+  const unlistenClose = win.onCloseRequested(async (event) => {
     event.preventDefault();
-    try { await flushPersistence(); } finally { await getCurrentWindow().destroy(); }
+    try { await flushPersistence(); } finally { await win.destroy(); }
   });
   onCleanup(() => { void unlistenClose.then((u) => u()); });
 
   return (
-    <div class="shell">
+    <div class="shell" classList={{ flush: flush() }}>
       <TitleBar
         onSettings={() => setSettingsOpen(true)}
         onGit={() => setGitOpen(true)}
