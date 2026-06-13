@@ -12,6 +12,8 @@
 
 import { createStore } from "solid-js/store";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { registerPane } from "./paneRegistry";
+import { writePty, cwdPty } from "./ptyClient";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 
 interface DetachState {
@@ -47,6 +49,15 @@ export function forgetDetached(id: PaneId) {
  */
 export async function detachPaneToWindow(id: PaneId, handle: PtyHandle, title: string): Promise<void> {
   setDetached(id, { handle, redocking: false });
+  // The main window's <Terminal> just unmounted (and unregistered itself). Keep the pane reachable
+  // from here — broadcast and `th send` — by routing writes straight to the live PTY by handle.
+  // Scrollback reads aren't available (the xterm now lives in the other window), so `read` is empty.
+  registerPane(id, {
+    write: (data) => void writePty(handle, data),
+    isLive: () => true,
+    cwd: () => cwdPty(handle),
+    read: () => "",
+  });
   const label = `pane-${id}`;
   const url = `index.html?detach=${id}&handle=${handle}&title=${encodeURIComponent(title)}`;
   try {

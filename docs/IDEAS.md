@@ -228,8 +228,9 @@ it to the whole pane.
   which renders a single xterm (`DetachedPane.tsx`, entry branches on `?detach=` in `index.tsx`).
   The main grid shows a placeholder (`lib/detach.ts` state machine); closing the window re-docks the
   pane — the main `Terminal.start()` rebinds to the same handle (no respawn), gated so the detach
-  unmount doesn't kill the child. Known limitation: while detached, a pane is off the broadcast/`th`
-  registry (drive it from its own window); re-routing `th send` to detached panes is a follow-up.
+  unmount doesn't kill the child. A detached pane stays reachable from the main window's broadcast /
+  `th send` (the placeholder keeps a handle-routed registry entry); only scrollback `th read` is
+  unavailable while detached (its xterm lives in the other window).
 - **Right-side browser / preview panel** — the dropped reference-app feature (localhost/docs
   preview); users currently alt-tab to a real browser. 🔴 ✅ shipped — `PreviewPanel.tsx`, a docked
   right-side `<iframe>` with a URL bar (reload / go / open-externally / close), resizable + persisted
