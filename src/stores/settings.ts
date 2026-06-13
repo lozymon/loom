@@ -33,6 +33,9 @@ export interface Settings {
   // ---- Safety ----
   /** Ask before closing a pane/workspace that still has a live process. */
   confirmClose: boolean;
+  /** Ask before another pane's `th spawn` (ADR-0007 bus) opens a pane running its command —
+   *  the one cross-pane op that runs an arbitrary command with no visible keystrokes. */
+  confirmExternalSpawn: boolean;
   // ---- Notifications ----
   /** Pop a desktop notification when a pane raises attention while Termhaus is unfocused. */
   notifyOnAttention: boolean;
@@ -83,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultShell: "",
   defaultCwd: "",
   confirmClose: true,
+  confirmExternalSpawn: true,
   notifyOnAttention: false,
   globalHotkey: "CommandOrControl+Alt+Backquote",
   closeToTray: false,

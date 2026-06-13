@@ -19,14 +19,15 @@ import {
 } from "../stores/workspace";
 import { noteAttention, clearAttention, setStatus } from "../stores/activity";
 import { notifyAttention } from "./notify";
+import { settings } from "../stores/settings";
 
 /** Subscribe to relayed requests. Call once at startup; returns the unlisten fn. */
 export async function initPaneControl(): Promise<() => void> {
-  return listen<ControlEvent>(PANE_CMD_EVENT, (event) => {
+  return listen<ControlEvent>(PANE_CMD_EVENT, async (event) => {
     const { reqId, request } = event.payload;
     let response: ControlResponse;
     try {
-      response = dispatch(JSON.parse(request) as ControlRequest);
+      response = await dispatch(JSON.parse(request) as ControlRequest);
     } catch (err) {
       response = { ok: false, error: `bad request: ${String(err)}` };
     }
@@ -34,7 +35,7 @@ export async function initPaneControl(): Promise<() => void> {
   });
 }
 
-function dispatch(req: ControlRequest): ControlResponse {
+async function dispatch(req: ControlRequest): Promise<ControlResponse> {
   switch (req.op) {
     case "list":
       return {
@@ -60,6 +61,13 @@ function dispatch(req: ControlRequest): ControlResponse {
     case "spawn": {
       const command = (req.command ?? "").trim();
       if (!command) return { ok: false, error: "spawn needs a command" };
+      // Trust boundary (ADR-0007 / SECURITY_REVIEW Vuln 2): any process in any pane can request a
+      // spawn, and unlike send/broadcast it runs an arbitrary command in a fresh pane with no
+      // visible keystrokes — i.e. a silent-RCE primitive if an untrusted/poisoned agent holds the
+      // bus. Require explicit user consent before honouring it (toggleable in Settings → Safety).
+      if (settings.confirmExternalSpawn && !confirmExternalSpawn(command, req.cwd)) {
+        return { ok: false, error: "spawn declined by user" };
+      }
       const r = spawnPane({ title: req.name, command, cwd: req.cwd });
       if ("error" in r) return { ok: false, error: r.error };
       return { ok: true, data: { name: r.name } };
@@ -108,4 +116,14 @@ function dispatch(req: ControlRequest): ControlResponse {
     default:
       return { ok: false, error: `unknown op "${(req as { op?: string }).op}"` };
   }
+}
+
+/** Block on a native confirm before letting an external pane spawn a command-running pane. Uses
+ *  `window.confirm` (as the close-confirm path does) — synchronous, so dispatch's reply waits on
+ *  the user's choice and the requesting `th spawn` only returns once they've decided. */
+function confirmExternalSpawn(command: string, cwd?: string): boolean {
+  const where = cwd ? `\nin: ${cwd}` : "";
+  return window.confirm(
+    `Another pane wants to open a new terminal and run:\n\n${command}${where}\n\nAllow it?`,
+  );
 }

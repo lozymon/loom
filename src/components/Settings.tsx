@@ -251,6 +251,14 @@ export default function Settings(props: { onClose: () => void }) {
             <label class="settings-row toggle">
               <input
                 type="checkbox"
+                checked={settings.confirmExternalSpawn}
+                onChange={(e) => setSetting("confirmExternalSpawn", e.currentTarget.checked)}
+              />
+              <span class="settings-label">Confirm before another pane spawns a terminal <span class="muted">— the `th spawn` control bus</span></span>
+            </label>
+            <label class="settings-row toggle">
+              <input
+                type="checkbox"
                 checked={settings.broadcastNewline}
                 onChange={(e) => setSetting("broadcastNewline", e.currentTarget.checked)}
               />

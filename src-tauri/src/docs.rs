@@ -100,11 +100,33 @@ fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<DocEntry>) {
 }
 
 /// Read one UTF-8 text file (markdown). Capped at `MAX_BYTES`; lossily decoded so a stray
-/// non-UTF8 byte doesn't fail the read. Any path is allowed — this is a desktop app reading the
-/// user's own files (the native picker can hand back anything anyway).
+/// non-UTF8 byte doesn't fail the read.
+///
+/// Containment: this command is reachable from the webview, so it must not become an arbitrary-file
+/// read primitive (e.g. `~/.ssh/id_rsa`, `.env`). We restrict it to markdown files — the only thing
+/// the Docs panel ever opens — and re-check the extension *after* `canonicalize()` so a `foo.md`
+/// symlink can't point at a secret. The user-driven native picker is also markdown-filtered, so this
+/// doesn't constrain any legitimate flow.
 #[tauri::command]
 pub fn read_doc(path: String) -> Result<String, String> {
     let p = Path::new(&path);
+    let name_ok = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(is_markdown);
+    if !name_ok {
+        return Err(format!("not a markdown file: {path}"));
+    }
+    // Resolve symlinks/.. and confirm the real target is still a markdown file.
+    let real = fs::canonicalize(p).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let real_ok = real
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(is_markdown);
+    if !real_ok {
+        return Err(format!("not a markdown file: {path}"));
+    }
+    let p = real.as_path();
     let meta = fs::metadata(p).map_err(|e| format!("cannot read {path}: {e}"))?;
     if !meta.is_file() {
         return Err(format!("not a file: {path}"));

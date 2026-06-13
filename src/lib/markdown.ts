@@ -1,9 +1,10 @@
 // Minimal, self-contained markdown → HTML for the Docs panel's preview mode. We render our own
 // (the project favours small purpose-built parsers — see the unified-diff parser — over a dep) and,
 // crucially, each emitted block carries its *source line range* so the preview's block drag-select
-// can still send the **raw** markdown: DocsPanel sends source, never rendered text. Inputs are the
-// user's own local files, so innerHTML rendering is acceptable; text is still HTML-escaped before
-// inline formatting so a stray "<…>" can't break the layout.
+// can still send the **raw** markdown: DocsPanel sends source, never rendered text. The output is
+// rendered via innerHTML, and inputs are NOT trustworthy (a doc may come from a cloned repo), so all
+// text — including content interpolated into HTML attributes like title="…" — must be HTML-escaped
+// via escapeHtml() before any inline formatting runs. See escapeHtml() for the attribute caveat.
 
 export interface MdBlock {
   /** Rendered HTML for this block. */
@@ -19,7 +20,15 @@ const CODE_OPEN = String.fromCharCode(0xe000);
 const CODE_CLOSE = String.fromCharCode(0xe001);
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Escape quotes too, not just angle brackets: inline() interpolates the (already-escaped) link
+  // URL into a quoted title="…" attribute, so an unescaped " would break out of the attribute and
+  // inject live HTML (event handlers) when the block is rendered via innerHTML.
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /** Apply inline markdown (code, images, links, bold, italic) to an already HTML-escaped string. */

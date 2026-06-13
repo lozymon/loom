@@ -10,6 +10,7 @@
 //! there — keeping status paths and diff pathspecs in the same frame regardless of which
 //! subfolder a workspace's `cwd` points at.
 
+use std::path::Path;
 use std::process::Command;
 
 use serde::Serialize;
@@ -165,13 +166,25 @@ pub fn git_diff(
     let root = root_out.trim().to_string();
 
     if untracked {
+        // `git diff --no-index <path>` prints the FULL contents of any file it's handed, so an
+        // attacker-supplied `path` (this is a free-form command arg) would be an arbitrary-file-read
+        // primitive — including absolute paths and `..` escapes. Confine it to the repo: resolve the
+        // path against the root and require the canonical target to live inside the (canonical) root.
+        // (`join` with an absolute `path` replaces the base, so absolute paths are caught here too.)
+        let root_real =
+            std::fs::canonicalize(&root).map_err(|e| format!("cannot resolve repo root: {e}"))?;
+        let target = std::fs::canonicalize(Path::new(&root).join(&path))
+            .map_err(|e| format!("cannot read {path}: {e}"))?;
+        if !target.starts_with(&root_real) {
+            return Err(format!("path escapes repository: {path}"));
+        }
         // `--no-index` exits 1 when the files differ (the normal case here) — that's not an
         // error, so we return stdout regardless of the exit status.
         let out = Command::new("git")
             .arg("-C")
             .arg(&root)
             .args(["diff", "--no-index", "--color=never", "--", "/dev/null"])
-            .arg(&path)
+            .arg(&target)
             .output()
             .map_err(|e| format!("failed to run git: {e}"))?;
         return Ok(String::from_utf8_lossy(&out.stdout).into_owned());

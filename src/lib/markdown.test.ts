@@ -69,4 +69,18 @@ describe("parseMarkdownBlocks", () => {
     expect(html).not.toContain("href");
     expect(html).toContain('title="https://x.test"');
   });
+
+  it("escapes a double-quote in a link URL so it can't break out of the title attribute", () => {
+    // A malicious doc could carry a URL with a stray " to inject an event handler into the rendered
+    // <a title="…"> when the block HTML is mounted via innerHTML. The quote must be escaped.
+    const html = md('[click](x" onmouseover="alert(1)")')[0].html;
+    expect(html).not.toContain('onmouseover="alert(1)"');
+    expect(html).toContain("&quot;");
+  });
+
+  it("escapes quotes in body text rendered to HTML", () => {
+    const html = md(`he said "hi" and 'bye'`)[0].html;
+    expect(html).toContain("&quot;");
+    expect(html).toContain("&#39;");
+  });
 });
