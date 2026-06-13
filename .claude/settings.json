@@ -1,22 +1,43 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(npm test *)",
+      "Bash(npm run build *)",
+      "Bash(cargo check *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo fmt *)",
+      "Bash(cargo test *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch)",
+      "Bash(git branch -a*)",
+      "Bash(git branch -v*)",
+      "Bash(git branch -r*)",
+      "Bash(git branch --list*)"
+    ]
+  },
   "hooks": {
     "Notification": [
       {
+        "matcher": "",
         "hooks": [
           {
-            "command": "th attention",
-            "type": "command"
+            "type": "command",
+            "command": "th attention"
           }
-        ],
-        "matcher": ""
+        ]
       }
     ],
     "Stop": [
       {
         "hooks": [
           {
-            "command": "th status",
-            "type": "command"
+            "type": "command",
+            "command": "th status"
           }
         ]
       }
@@ -25,8 +46,19 @@
       {
         "hooks": [
           {
-            "command": "th status working",
-            "type": "command"
+            "type": "command",
+            "command": "th status working"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *src-tauri/*.rs) m=\"${f%%src-tauri/*}src-tauri/Cargo.toml\"; cargo fmt --manifest-path \"$m\" ;; esac; } 2>/dev/null || true"
           }
         ]
       }
