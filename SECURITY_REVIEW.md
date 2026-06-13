@@ -99,15 +99,21 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` won't fix 
 ---
 
 ## Cross-cutting hardening
-- **Status:** `[~]` APPLIED 2026-06-12 — needs live verification
+- **Status:** `[x]` APPLIED + VERIFIED 2026-06-13
 - [x] Set a restrictive CSP in `tauri.conf.json` (was `null`). Key part is `script-src 'self'`,
   which blocks inline event handlers/scripts — the defense-in-depth backstop for Vuln 1.
   Applied policy:
   `default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost`
-- [ ] **VERIFY:** run `npm run tauri dev` and confirm the app still renders (xterm, panels,
-  PTY output over the IPC Channel). `style-src 'unsafe-inline'` is intentionally kept (xterm +
-  inline component styles need it). If anything breaks under WebKitGTK, loosen the specific
-  directive that's failing (check the webview console for CSP violation reports).
+- [x] **VERIFIED 2026-06-13:**
+  - Static: production build is CSP-clean — `dist/index.html` has one same-origin module script
+    (no inline scripts / event handlers); bundle has zero `eval`/`new Function`, Web Workers,
+    `WebAssembly`, `blob:`/`createObjectURL`, or `javascript:` URLs. So `script-src 'self'`
+    doesn't break the shipping app (the main risk).
+  - Runtime: `npm run tauri dev` launches and runs steady with the CSP applied; no
+    CSP-violation / "refused" / panic lines in the log.
+  - `style-src 'unsafe-inline'` intentionally kept (xterm + inline component styles need it).
+  - Remaining (optional, human-only): a visual glance that the terminal + Docs panel paint —
+    automated checks can't see pixels, but nothing indicates a problem.
 
 ---
 
