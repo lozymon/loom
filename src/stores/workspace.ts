@@ -204,6 +204,14 @@ export function renamePane(paneId: PaneId, title: string) {
   if (i >= 0 && name) setApp("workspaces", i, "panes", paneId, "title", name);
 }
 
+/** Drop a pane's launch command so it (re)spawns as a plain login shell. The "Open shell
+ *  instead" escape hatch on a Dead pane whose agent command wasn't installed (exited 127).
+ *  Persisted, so a later restart/reload is a shell too — not the missing command again. */
+export function clearPaneCommand(paneId: PaneId) {
+  const i = wsIdxByPane(paneId);
+  if (i >= 0) setApp("workspaces", i, "panes", paneId, "command", undefined);
+}
+
 /** Rename a workspace (rail double-click). Blank input is ignored — keeps the old name. */
 export function renameWorkspace(id: string, name: string) {
   const i = wsIdxById(id);

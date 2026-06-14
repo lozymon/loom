@@ -79,7 +79,7 @@ SQLite is deferred to a later milestone only if searchable scrollback / session 
 ## Failure handling
 **One principle: every failure degrades to a Dead pane with a visible reason — never crash, never block sibling panes.**
 - **Best-effort spawn:** panes spawn independently; one failure doesn't stop the others. Rust never panics on a spawn failure — it emits a pane-error event the UI renders as a Dead pane.
-- **Command not found / immediate exit:** needs *no* special handling — a payoff of the login-shell launch (ADR-0004). `$SHELL -lc "claude"` with no `claude` prints `command not found` *into the pane* and exits → an ordinary Dead pane showing the error + restart.
+- **Command not found / immediate exit:** correct *by default* — a payoff of the login-shell launch (ADR-0004). `$SHELL -lc "claude"` with no `claude` prints `command not found` *into the pane* and exits → an ordinary Dead pane. On top of that we make the case legible rather than crash-like: a wizard pre-flight (`pty_check_command`, via `lib/agentAvailability.ts`) warns "⚠ not installed" on agents whose program isn't on PATH *before* launch, and the Dead pane's exit-127 overlay reads "command not found: …" with an **Open shell instead** button (`clearPaneCommand`) that respawns the pane as a plain shell. Both are advisory — never a launch gate.
 - **Missing working folder** (deleted/unmounted on respawn): don't refuse to open — surface a Workspace-level warning and fall back to spawning in `$HOME`, marked with the reason; restart lets you repoint it.
 - **OS-level spawn failure** (out of ptys, permissions): Dead pane carrying the OS error string, logged to stderr.
 

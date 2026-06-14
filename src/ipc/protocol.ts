@@ -58,6 +58,8 @@ export const Cmd = {
   retarget: "pty_retarget",
   busy: "pty_busy",
   foreground: "pty_foreground",
+  /** Advisory check that a command's program is installed/on PATH (wizard pre-flight). */
+  checkCommand: "pty_check_command",
   /** Hand a relayed inter-pane request's answer back to Rust (ADR-0007). */
   paneCmdReply: "pane_cmd_reply",
 } as const;

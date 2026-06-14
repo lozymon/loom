@@ -12,6 +12,7 @@ import {
 } from "../stores/workspace";
 import { settings } from "../stores/settings";
 import { AGENTS, detectAgent } from "../lib/agents";
+import { checkCommandAvailable } from "../lib/agentAvailability";
 import { allocName, balancedBands } from "../lib/grid";
 
 const PRESETS = [1, 2, 4, 6, 8, 10, 12];
@@ -57,6 +58,18 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   const [selected, setSelected] = createSignal<number | null>(null);
   const [saveAsPreset, setSaveAsPreset] = createSignal(false);
   const [broadcastAll, setBroadcastAll] = createSignal(false);
+  // Pre-flight: command string → is its program installed? (undefined = unchecked/checking).
+  // Filled async so we never block opening the wizard; drives the "⚠ not installed" hints.
+  const [avail, setAvail] = createSignal<Record<string, boolean>>({});
+  const checkAvail = (cmd: string) => {
+    const key = cmd.trim();
+    if (!key || key in avail()) return;
+    void checkCommandAvailable(key).then((ok) => setAvail((m) => ({ ...m, [key]: ok })));
+  };
+  /** A command we've confirmed isn't installed (false), as opposed to unchecked (undefined). */
+  const isMissing = (cmd: string | undefined) => avail()[(cmd ?? "").trim()] === false;
+  // Probe the built-in agents up front so the fleet chips can warn before any click.
+  onMount(() => AGENTS.forEach((a) => checkAvail(a.command)));
 
   // Auto-names exactly as buildWorkspace allocates them (Faye, Cleo, …) so the preview matches.
   const names = createMemo(() => {
@@ -70,6 +83,9 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   const bands = createMemo(() => balancedBands(count()));
   const agentCount = createMemo(() => commands().slice(0, count()).filter((c) => c?.trim()).length);
 
+  // No availability probe here: this fires on every keystroke of the free-text cmd field, and a
+  // probe spawns a login shell. The built-in agent commands are all probed up front (onMount);
+  // a hand-typed command is covered after the fact by the pane's dead-pane overlay instead.
   const setCommandAt = (i: number, cmd: string) =>
     setCommands((c) => { const n = [...c]; n[i] = cmd; return n; });
   const setCwdAt = (i: number, dir: string) =>
@@ -235,8 +251,15 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
               <div class="wiz-fleet">
                 <For each={AGENTS}>
                   {(a) => (
-                    <button class="wiz-chip" style={{ "--chip": a.color }} title={`Fill all with ${a.label}`} onClick={() => fillAll(a.command)}>
+                    <button
+                      class="wiz-chip"
+                      classList={{ "wiz-chip-missing": isMissing(a.command) }}
+                      style={{ "--chip": a.color }}
+                      title={isMissing(a.command) ? `${a.label} isn't installed or not on PATH` : `Fill all with ${a.label}`}
+                      onClick={() => fillAll(a.command)}
+                    >
                       <span class="wiz-chip-ic">{a.icon}</span>{a.label}
+                      <Show when={isMissing(a.command)}><span class="wiz-chip-warn" title="not installed">⚠</span></Show>
                     </button>
                   )}
                 </For>
@@ -261,11 +284,15 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                             return (
                               <button
                                 class="wiz-cell"
-                                classList={{ on: selected() === idx(), agent: !!agent() }}
+                                classList={{ on: selected() === idx(), agent: !!agent(), "wiz-cell-missing": isMissing(commands()[idx()]) }}
                                 style={agent() ? { "--cell-accent": agent()!.color } : undefined}
+                                title={isMissing(commands()[idx()]) ? `${commands()[idx()]} isn't installed or not on PATH` : undefined}
                                 onClick={() => setSelected(idx())}
                               >
-                                <span class="wiz-cell-name">{names()[idx()]}</span>
+                                <span class="wiz-cell-name">
+                                  {names()[idx()]}
+                                  <Show when={isMissing(commands()[idx()])}><span class="wiz-cell-warn" title="not installed">⚠</span></Show>
+                                </span>
                                 <span class="wiz-cell-agent">
                                   {agent() ? `${agent()!.icon} ${agent()!.label}` : "shell"}
                                   <Show when={cwds()[idx()]?.trim()}> · {basename(cwds()[idx()]!)}</Show>
@@ -295,10 +322,12 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                         {(a) => (
                           <button
                             class="wiz-chip" style={{ "--chip": a.color }}
-                            classList={{ on: detectAgent(commands()[i()])?.id === a.id }}
+                            classList={{ on: detectAgent(commands()[i()])?.id === a.id, "wiz-chip-missing": isMissing(a.command) }}
+                            title={isMissing(a.command) ? `${a.label} isn't installed or not on PATH` : a.label}
                             onClick={() => setCommandAt(i(), a.command)}
                           >
                             <span class="wiz-chip-ic">{a.icon}</span>{a.label}
+                            <Show when={isMissing(a.command)}><span class="wiz-chip-warn" title="not installed">⚠</span></Show>
                           </button>
                         )}
                       </For>

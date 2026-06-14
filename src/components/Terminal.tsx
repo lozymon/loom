@@ -38,6 +38,7 @@ import {
   focusDir,
   splitPane,
   closePane,
+  clearPaneCommand,
   toggleZoom,
   toggleOverview,
   toggleBroadcastTarget,
@@ -617,10 +618,32 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         </Show>
         <div ref={container} class="terminal-pane" />
         <Show when={dead() !== null}>
-          <div class="pane-dead">
-            <span>process exited ({dead()})</span>
-            <button onClick={() => { term.clear(); clearStatus(props.paneId); void start(); }}>Restart</button>
-          </div>
+          {(() => {
+            const cmd = () => spec()?.command?.trim() ?? "";
+            const prog = () => cmd().split(/\s+/)[0];
+            const restart = () => { term.clear(); clearStatus(props.paneId); void start(); };
+            const openShell = () => { clearPaneCommand(props.paneId); restart(); };
+            return (
+              <div class="pane-dead">
+                {/* Exit 127 from `$SHELL -lc "<cmd>"` means the program wasn't found — the common
+                    case of launching an agent (e.g. copilot) that isn't installed. Say so plainly
+                    instead of a bare "process exited (127)", which reads as a crash. */}
+                <Show
+                  when={dead() === 127 && cmd()}
+                  fallback={<span class="pane-dead-msg">process exited ({dead()})</span>}
+                >
+                  <span class="pane-dead-msg">command not found: {cmd()}</span>
+                  <span class="pane-dead-hint">“{prog()}” isn’t installed or not on your PATH</span>
+                </Show>
+                <div class="pane-dead-actions">
+                  <button onClick={restart}>Restart</button>
+                  <Show when={cmd()}>
+                    <button onClick={openShell}>Open shell instead</button>
+                  </Show>
+                </div>
+              </div>
+            );
+          })()}
         </Show>
       </div>
     </div>

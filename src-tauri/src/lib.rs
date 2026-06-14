@@ -73,6 +73,13 @@ fn pty_foreground(mgr: State<PtyManager>, id: u32) -> Result<Option<String>, Str
     pty::foreground(&mgr, id)
 }
 
+/// Advisory: would this command's program resolve in a launched pane? Used by the wizard to
+/// warn before spawning an agent that isn't installed. Never blocks a launch (see pty docs).
+#[tauri::command]
+fn pty_check_command(command: String, shell: Option<String>) -> bool {
+    pty::check_command(&command, shell.as_deref())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pending = Arc::new(PendingReplies::new());
@@ -95,6 +102,7 @@ pub fn run() {
             pty_retarget,
             pty_busy,
             pty_foreground,
+            pty_check_command,
             control::pane_cmd_reply,
             capture::capture_region,
             git::git_status,

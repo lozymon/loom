@@ -1154,6 +1154,22 @@ body,
   color: var(--fg-dim);
 }
 
+/* An agent whose program isn't installed / on PATH: dimmed, with a warning glyph. Still
+   clickable — it's an advisory hint, not a block (the pane would just land Dead at 127). */
+.wizard .wiz-chip-missing {
+  opacity: 0.55;
+}
+
+.wiz-chip-warn,
+.wiz-cell-warn {
+  margin-left: 4px;
+  color: #e0b85a;
+}
+
+.wiz-cell.wiz-cell-missing {
+  border-color: #e0b85a66;
+}
+
 /* Interactive preview grid. */
 .wiz-grid {
   display: flex;
@@ -1597,15 +1613,18 @@ body,
   background: var(--gutter-hover);
 }
 
-/* Shown when a pane's child has exited; offers a respawn. */
+/* Shown when a pane's child has exited; offers a respawn (and, for a missing command, a
+   "command not found" explanation + a fall-back-to-shell escape hatch). */
 .pane-dead {
   position: absolute;
   top: 8px;
   right: 8px;
   display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 10px;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  max-width: min(90%, 360px);
+  padding: 8px 10px;
   font:
     12px ui-monospace,
     monospace;
@@ -1613,6 +1632,22 @@ body,
   background: var(--overlay-strong);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
+}
+
+.pane-dead-msg {
+  align-self: stretch;
+}
+
+.pane-dead-hint {
+  align-self: stretch;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.pane-dead-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .pane-dead button {

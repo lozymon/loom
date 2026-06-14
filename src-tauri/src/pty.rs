@@ -85,6 +85,37 @@ fn resolve_shell(pref: Option<&str>) -> String {
     "/bin/sh".to_string()
 }
 
+/// Best-effort check that a command's program would actually resolve when launched. A pane
+/// runs `$SHELL -lc "<command>"` (ADR-0004), so a missing program just prints "command not
+/// found" and exits 127 — an ordinary Dead pane. This lets the new-workspace wizard warn
+/// *before* launch (e.g. picking GitHub Copilot CLI on a machine without it).
+///
+/// We resolve the program (the command's first token) through the *same* login shell that
+/// `spawn` would use, so PATH / rc files / version managers are seen identically. The program
+/// is passed as the shell's `$1` (never interpolated into the script) so it can't inject. An
+/// empty command is a plain shell — always available. Any error (shell missing, spawn failure)
+/// resolves to `true`: this is an advisory hint, never a gate, so it must not block a launch.
+pub fn check_command(command: &str, shell: Option<&str>) -> bool {
+    let prog = command.split_whitespace().next().unwrap_or("");
+    if prog.is_empty() {
+        return true; // plain shell
+    }
+    let shell = resolve_shell(shell);
+    let status = std::process::Command::new(&shell)
+        .arg("-lc")
+        .arg("command -v -- \"$1\" >/dev/null 2>&1")
+        .arg(&shell) // $0
+        .arg(prog) // $1
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    match status {
+        Ok(s) => s.success(),
+        Err(_) => true, // can't tell → don't block the launch
+    }
+}
+
 /// Spawn a login-interactive shell in a fresh PTY and start streaming its output.
 /// Returns the new PaneId. See ADR-0004 for why we launch via the login shell.
 #[allow(clippy::too_many_arguments)] // mirrors the IPC spawn payload (cols/rows/cmd/cwd/shell/channels)
