@@ -8,6 +8,7 @@ import { createEffect, onCleanup, onMount } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -17,6 +18,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@xterm/xterm/css/xterm.css";
 import "../App.css";
 import { retargetPty, writePty, resizePty } from "../lib/ptyClient";
+import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { settings } from "../stores/settings";
 import { currentTheme } from "../stores/theme";
 
@@ -24,6 +26,7 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
   let container!: HTMLDivElement;
   let term: Terminal;
   let fit: FitAddon;
+  let serialize: SerializeAddon;
 
   onMount(async () => {
     term = new Terminal({
@@ -36,7 +39,9 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
       theme: currentTheme().terminal,
     });
     fit = new FitAddon();
+    serialize = new SerializeAddon();
     term.loadAddon(fit);
+    term.loadAddon(serialize);
     term.loadAddon(new WebLinksAddon((_e, uri) => { void openUrl(uri); }));
     const uni = new Unicode11Addon();
     term.loadAddon(uni);
@@ -44,6 +49,11 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
     term.open(container);
     try { term.loadAddon(new CanvasAddon()); } catch (e) { console.error("canvas addon failed", e); }
     fit.fit();
+
+    // Replay the buffer the main window serialized on tear-off, so this window opens with the pane's
+    // painted history instead of blank — then claim the live stream so new output appends after it.
+    const snap = takeScrollback(props.handle);
+    if (snap) term.write(snap);
 
     // Claim the live PTY's stream (it kept running; the main window released it on tear-off).
     try {
@@ -61,6 +71,8 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
     // Belt-and-suspenders re-dock signal: besides the parent listening for this window's destroyed
     // event, emit one as the window closes so the main grid always reclaims the pane.
     const un = await getCurrentWindow().onCloseRequested(() => {
+      // Hand this window's painted buffer back so the re-mounted grid pane replays it (vs blank).
+      stashScrollback(props.handle, serialize);
       void emit("termhaus://redock", { paneId: props.paneId });
     });
     onCleanup(un);

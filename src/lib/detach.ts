@@ -89,11 +89,13 @@ export function redock(id: PaneId) {
 }
 
 /** Bring a torn-off pane home from the main grid: close its window (whose destroyed handler
- *  re-docks it). Falls back to a direct re-dock if the window is already gone. */
+ *  re-docks it). Uses a graceful `close()` (not `destroy()`) so the window's close-requested
+ *  handler runs first and stashes its scrollback for replay. Falls back to a direct re-dock if
+ *  the window is already gone. */
 export async function recallPane(id: PaneId) {
   try {
     const w = await WebviewWindow.getByLabel(`pane-${id}`);
-    if (w) { await w.destroy(); return; }
+    if (w) { await w.close(); return; }
   } catch (e) {
     console.error("recall pane failed", e);
   }

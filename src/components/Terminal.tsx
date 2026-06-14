@@ -12,6 +12,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { SearchAddon } from "@xterm/addon-search";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -25,6 +26,7 @@ import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
+import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
@@ -72,6 +74,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   let term!: Terminal;
   let fit!: FitAddon;
   let search!: SearchAddon;
+  // Serializes this pane's buffer for the scrollback handoff on tear-off / re-dock (see scrollback.ts).
+  let serialize!: SerializeAddon;
   let searchInput: HTMLInputElement | undefined;
   // The live PTY handle, or null before first spawn / after the child exits.
   let handle: PtyHandle | null = null;
@@ -135,6 +139,10 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     if (reattach !== null) {
       try {
         handle = reattach;
+        // Replay the buffer the detached window serialized on close, then resume the live stream so
+        // new output appends after the restored history (vs the grid coming back blank).
+        const snap = takeScrollback(reattach);
+        if (snap) term.write(snap);
         await retargetPty(reattach, onOutput, onExit);
         if (handle !== null) void resizePty(handle, term.cols, term.rows);
       } catch (e) {
@@ -175,6 +183,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   async function detachPane() {
     if (handle === null) return; // a dead pane has nothing to tear off
     detaching = true; // tell onCleanup not to kill the PTY when this Terminal unmounts
+    // Snapshot the painted buffer so the new window can replay it — retargetPty only moves the live
+    // stream, so without this the torn-off pane would start blank (history lives in xterm, not the PTY).
+    stashScrollback(handle, serialize);
     try {
       await detachPaneToWindow(props.paneId, handle, spec()?.title ?? displayName());
     } catch {
@@ -306,8 +317,10 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
     fit = new FitAddon();
     search = new SearchAddon();
+    serialize = new SerializeAddon();
     term.loadAddon(fit);
     term.loadAddon(search);
+    term.loadAddon(serialize);
     term.loadAddon(new WebLinksAddon((_e, uri) => { void openUrl(uri); }));
     const uni = new Unicode11Addon();
     term.loadAddon(uni);
