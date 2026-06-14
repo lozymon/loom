@@ -46,7 +46,7 @@ jobs:
         run: npm test
 
   rust-lint:
-    name: Rust lint (fmt + clippy)
+    name: Rust lint + test (fmt + clippy + unit)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
@@ -79,6 +79,12 @@ jobs:
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Pure-logic unit tests (transport line framing, shell resolution). The lib links
+      # WebKitGTK, so this reuses the deps + compilation the clippy step already set up.
+      - name: Rust unit tests
+        working-directory: src-tauri
+        run: cargo test --lib
 
   build:
     name: Build (.deb bundle)

@@ -564,3 +564,36 @@ pub fn kill(mgr: &PtyManager, id: u32) -> Result<(), String> {
     // Dropping `pane` here closes the master/writer; the reaper observes the child exit.
     Ok(())
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::{check_command, resolve_shell};
+
+    #[test]
+    fn resolve_shell_prefers_existing_pref() {
+        // An explicit shell that exists wins outright.
+        assert_eq!(resolve_shell(Some("/bin/sh")), "/bin/sh");
+    }
+
+    #[test]
+    fn resolve_shell_skips_missing_pref() {
+        // A non-existent pref is ignored; we fall through to a shell that actually exists.
+        let got = resolve_shell(Some("/nonexistent/zsh"));
+        assert_ne!(got, "/nonexistent/zsh");
+        assert!(
+            std::path::Path::new(&got).exists(),
+            "resolved shell should exist: {got}"
+        );
+    }
+
+    #[test]
+    fn resolve_shell_blank_pref_falls_through() {
+        assert!(std::path::Path::new(&resolve_shell(Some("   "))).exists());
+    }
+
+    #[test]
+    fn check_command_empty_is_available() {
+        // An empty command is a plain shell — always launchable.
+        assert!(check_command("", None));
+    }
+}

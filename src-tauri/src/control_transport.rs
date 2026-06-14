@@ -95,3 +95,31 @@ mod unix {
         Ok(listener)
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::{read_line, write_line};
+    use std::os::unix::net::UnixStream;
+
+    #[test]
+    fn line_framing_round_trips() {
+        let (a, b) = UnixStream::pair().unwrap();
+        let req = r#"{"op":"list"}"#;
+        write_line(&a, req).unwrap();
+        assert_eq!(read_line(&b).unwrap().as_deref(), Some(req));
+    }
+
+    #[test]
+    fn read_line_is_none_on_eof() {
+        let (a, b) = UnixStream::pair().unwrap();
+        drop(a); // close the write end → EOF on the read end
+        assert_eq!(read_line(&b).unwrap(), None);
+    }
+
+    #[test]
+    fn read_line_treats_blank_as_none() {
+        let (a, b) = UnixStream::pair().unwrap();
+        write_line(&a, "   ").unwrap(); // whitespace-only trims to empty → "nothing to do"
+        assert_eq!(read_line(&b).unwrap(), None);
+    }
+}

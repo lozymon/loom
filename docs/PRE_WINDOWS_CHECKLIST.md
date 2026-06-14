@@ -72,12 +72,16 @@ So M7's platform split is mechanical (additive `#[cfg(windows)]` arms), not arch
 So a Windows regression is detectable from a box we *can't* run Windows on (M7.4 says
 Windows verification can't be done from the Linux dev box).
 
-- [ ] **C8 — Add smoke-level Rust tests** for the cross-platform-testable pieces (socket
-  path resolution, shell resolution, PATH joining) so each `#[cfg]` arm is individually
-  testable. Today `src-tauri/` has zero tests.
-- [ ] **C9 — Confirm Linux CI is green + decide the Windows-job approach** (M7.3 pre-work).
-  Verify `cargo fmt --check` / `clippy` / `npm test` pass, and settle on the
-  `tauri.windows.conf.json` overlay so adding a `windows-latest` job is config-only.
+- [x] **C8 — Add smoke-level Rust tests.** **Done:** 7 unit tests — transport line framing
+  (`write_line`/`read_line` round-trip + EOF + blank-line over a `UnixStream` pair) and shell
+  resolution (`resolve_shell` pref/fallback, `check_command` empty). First Rust tests in the
+  repo; `cargo test --lib` builds the Tauri lib fine. All pass.
+- [x] **C9 — Confirm Linux CI is green + decide the Windows-job approach.** **Done:** added a
+  `cargo test --lib` step to the `rust-lint` CI job (reuses the clippy compile). Full Linux
+  gate verified locally — `cargo fmt --all --check`, `cargo clippy --all-targets -D warnings`,
+  `cargo test`, `npx tsc --noEmit`, `npm test` (59) all green. Windows-job approach is settled
+  by PLAN M7.3 (a `tauri.windows.conf.json` overlay + a `windows-latest` job running
+  `tauri build --bundles nsis`); **adding that job is M7.3 itself**, not pre-work.
 
 ## D. Optional polish
 
