@@ -34,10 +34,16 @@ Stale or incorrect docs/state that would otherwise mislead the Windows effort.
 
 So M7's platform split is mechanical (additive `#[cfg(windows)]` arms), not archaeology.
 
-- [ ] **B4 — Wrap `pty.rs` shell spawning in `#[cfg(unix)]`** (M7.1 pre-work).
-  `resolve_shell()` (~L66–86), PATH `:` join (L183), `$HOME` fallback (L159),
-  `TERM`/`COLORTERM` injection — all currently bare Unix. Guarding them keeps the Linux
-  build byte-identical and gives the Windows arm an obvious home.
+- [x] **B4 — Wrap `pty.rs` shell spawning in `#[cfg(unix)]`** (M7.1 pre-work). **Done:**
+  the launch model is now split into cfg-gated helpers — `resolve_shell`, `launch_command`
+  (login args), `apply_locale_env` (TERM/COLORTERM), `home_dir` (HOME vs USERPROFILE),
+  `command_resolves` (the `check_command` probe). Linux arms are the original behaviour,
+  byte-identical and fully compile-checked here; Windows arms follow PLAN M7.1 (PowerShell /
+  cmd, no login shell, USERPROFILE, advisory check skipped) and are **drafted but only
+  compile on a Windows build — unverified on the Linux dev box, verify at M7.4** per the
+  project's own deferral. The manual PATH `:` join was replaced with portable
+  `std::env::join_paths` (no cfg, fully verified). clippy + fmt clean; `th spawn`
+  round-trips a command pane through the new launch path unchanged.
 - [x] **B5 — Define a control-bus transport seam, move UDS impl behind it** (M7.5
   pre-work). **Done:** new std-only `src-tauri/src/control_transport.rs` owns the transport
   (`endpoint`/`connect`/`bind`/`probe_alive`/`Stream`/`Listener` + line framing) behind

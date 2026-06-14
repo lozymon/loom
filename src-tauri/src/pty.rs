@@ -62,10 +62,16 @@ impl PtyManager {
     }
 }
 
+// ---- Platform launch model -------------------------------------------------------------------
+// The shell, its launch args, and the locale/home env differ by OS. Unix is the original
+// login-interactive model (ADR-0004); the Windows arms follow PLAN M7.1 (no login-shell concept)
+// and are compiled only on a Windows build — unverifiable on the Linux dev box, verify at M7.4.
+
 /// Pick the shell to launch. An explicit `pref` (the Settings "default shell") wins when it
 /// names an existing binary; otherwise prefer `$SHELL` (set in any normal session); when that
 /// is unset or names a missing binary — possible for a bare desktop-launcher start (M6) —
 /// fall back to `/bin/bash`, then `/bin/sh`, which exist on every Linux target we support.
+#[cfg(unix)]
 fn resolve_shell(pref: Option<&str>) -> String {
     if let Some(p) = pref.map(str::trim).filter(|p| !p.is_empty()) {
         if std::path::Path::new(p).exists() {
@@ -85,6 +91,83 @@ fn resolve_shell(pref: Option<&str>) -> String {
     "/bin/sh".to_string()
 }
 
+/// Windows has no `$SHELL`/login-shell concept (PLAN M7.1): an explicit `pref` wins, else
+/// PowerShell (`powershell.exe`, on every Win10/11; `%COMSPEC%`/`cmd.exe` is the fallback). PATH
+/// resolution is handled by the spawner.
+#[cfg(windows)]
+fn resolve_shell(pref: Option<&str>) -> String {
+    if let Some(p) = pref.map(str::trim).filter(|p| !p.is_empty()) {
+        return p.to_string();
+    }
+    "powershell.exe".to_string()
+}
+
+/// Build the launch command: the shell plus the args that run `command`, or an interactive shell
+/// when `command` is `None`. Unix launches a login-interactive shell so PATH / rc files / version
+/// managers load (ADR-0004): `$SHELL -l`, or `$SHELL -lc "<cmd>"` for a command pane.
+#[cfg(unix)]
+fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
+    let mut cmd = CommandBuilder::new(shell);
+    cmd.arg("-l");
+    if let Some(c) = command {
+        cmd.arg("-c");
+        cmd.arg(c);
+    }
+    cmd
+}
+
+/// Windows has no login-shell concept (PLAN M7.1): PATH comes from the env/registry, not a sourced
+/// profile. PowerShell runs the command via `-Command`; `cmd.exe` via `/c`.
+#[cfg(windows)]
+fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
+    let mut cmd = CommandBuilder::new(shell);
+    let is_cmd = std::path::Path::new(shell)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.eq_ignore_ascii_case("cmd"))
+        .unwrap_or(false);
+    match command {
+        Some(c) if is_cmd => {
+            cmd.arg("/c");
+            cmd.arg(c);
+        }
+        Some(c) => {
+            cmd.arg("-NoLogo");
+            cmd.arg("-NoProfile");
+            cmd.arg("-Command");
+            cmd.arg(c);
+        }
+        None if !is_cmd => {
+            cmd.arg("-NoLogo");
+        }
+        None => {}
+    }
+    cmd
+}
+
+/// Locale env the child inherits. `TERM`/`COLORTERM` are a Unix idiom; on Windows ConPTY advertises
+/// its own capabilities, so they're skipped (PLAN M7.1).
+#[cfg(unix)]
+fn apply_locale_env(cmd: &mut CommandBuilder) {
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+}
+
+#[cfg(windows)]
+fn apply_locale_env(_cmd: &mut CommandBuilder) {}
+
+/// The user's home dir, used as the cwd fallback when the requested folder is gone: `$HOME` on
+/// Unix, `%USERPROFILE%` on Windows (PLAN M7.1).
+#[cfg(unix)]
+fn home_dir() -> Option<String> {
+    std::env::var("HOME").ok()
+}
+
+#[cfg(windows)]
+fn home_dir() -> Option<String> {
+    std::env::var("USERPROFILE").ok()
+}
+
 /// Best-effort check that a command's program would actually resolve when launched. A pane
 /// runs `$SHELL -lc "<command>"` (ADR-0004), so a missing program just prints "command not
 /// found" and exits 127 — an ordinary Dead pane. This lets the new-workspace wizard warn
@@ -101,10 +184,17 @@ pub fn check_command(command: &str, shell: Option<&str>) -> bool {
         return true; // plain shell
     }
     let shell = resolve_shell(shell);
-    let status = std::process::Command::new(&shell)
+    command_resolves(&shell, prog)
+}
+
+/// Whether `prog` resolves through the login shell `spawn` would use — the program is passed as the
+/// shell's `$1` (never interpolated) so it can't inject. Any error → `true` (advisory, never gate).
+#[cfg(unix)]
+fn command_resolves(shell: &str, prog: &str) -> bool {
+    let status = std::process::Command::new(shell)
         .arg("-lc")
         .arg("command -v -- \"$1\" >/dev/null 2>&1")
-        .arg(&shell) // $0
+        .arg(shell) // $0
         .arg(prog) // $1
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -114,6 +204,14 @@ pub fn check_command(command: &str, shell: Option<&str>) -> bool {
         Ok(s) => s.success(),
         Err(_) => true, // can't tell → don't block the launch
     }
+}
+
+/// Windows: a faithful PowerShell `Get-Command` probe needs real Windows testing (M7.1/M7.4), and
+/// this check is advisory-only — so skip it for now. A missing binary still surfaces in-pane as a
+/// "not recognized" error, exactly the unix "can't tell → don't block" fallback.
+#[cfg(windows)]
+fn command_resolves(_shell: &str, _prog: &str) -> bool {
+    true
 }
 
 /// Spawn a login-interactive shell in a fresh PTY and start streaming its output.
@@ -148,23 +246,17 @@ pub fn spawn(
     // PATH when Termhaus is started from a desktop launcher (M6): a bundled launch inherits
     // only the session env, so the login shell must re-source the profile.
     let shell = resolve_shell(shell.as_deref());
-    let mut cmd = CommandBuilder::new(&shell);
-    cmd.arg("-l");
-    if let Some(c) = command.as_deref().filter(|c| !c.trim().is_empty()) {
-        cmd.arg("-c");
-        cmd.arg(c);
-    }
-    // Start in the requested folder; fall back to $HOME if it's missing/unset (the wizard's
+    let command = command.as_deref().filter(|c| !c.trim().is_empty());
+    let mut cmd = launch_command(&shell, command);
+    // Start in the requested folder; fall back to the home dir if it's missing/unset (the wizard's
     // working folder may have been deleted between sessions — PLAN failure handling).
-    let home = std::env::var("HOME").ok();
     let dir = cwd
         .filter(|d| std::path::Path::new(d).is_dir())
-        .or_else(|| home.clone());
+        .or_else(home_dir);
     if let Some(dir) = dir {
         cmd.cwd(dir);
     }
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
+    apply_locale_env(&mut cmd);
 
     // Inter-pane control bus discovery (ADR-0007): tell the child where the socket is, what
     // its own pane is called (so an agent can address panes relative to itself), and make the
@@ -175,9 +267,14 @@ pub fn spawn(
     }
     if let Some(cli) = crate::control::cli_path() {
         cmd.env("TERMHAUS_CLI", cli.to_string_lossy().into_owned());
-        if let Some(dir) = cli.parent().map(|d| d.to_string_lossy().into_owned()) {
-            let path = std::env::var("PATH").unwrap_or_default();
-            cmd.env("PATH", format!("{dir}:{path}"));
+        if let Some(dir) = cli.parent() {
+            // Prepend the CLI's dir to PATH using the platform list separator (`:` unix, `;` win).
+            let existing = std::env::var_os("PATH").unwrap_or_default();
+            let mut entries = vec![dir.to_path_buf()];
+            entries.extend(std::env::split_paths(&existing));
+            if let Ok(joined) = std::env::join_paths(entries) {
+                cmd.env("PATH", joined);
+            }
         }
     }
     // The MCP server sits beside `th` (already on PATH above); also expose its absolute path so an
