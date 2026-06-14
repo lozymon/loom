@@ -231,6 +231,14 @@ it to the whole pane.
   unmount doesn't kill the child. A detached pane stays reachable from the main window's broadcast /
   `th send` (the placeholder keeps a handle-routed registry entry); only scrollback `th read` is
   unavailable while detached (its xterm lives in the other window).
+  **Scrollback handoff (added 2026-06-13):** `retargetPty` only moves the *live* stream, so a torn-off
+  (or re-docked) pane used to open blank — the painted history lives in the xterm buffer, not the PTY
+  (a full-screen TUI like `top` survived only because it repaints). Fixed with `@xterm/addon-serialize`
+  + `lib/scrollback.ts`: the source window serializes its buffer and the destination replays it before
+  the live stream resumes, handed off via same-origin `localStorage` (all-TS, no Rust change). "Bring it
+  back" now uses a graceful `window.close()` (not `destroy()`) so the close handler stashes first.
+  **Live-verified on Linux 2026-06-13:** tear-off, re-dock via "Bring it back", and re-dock via the
+  window ✕ all preserve scrollback; `top`-style live sessions transfer cleanly.
 - **Right-side browser / preview panel** — the dropped reference-app feature (localhost/docs
   preview); users currently alt-tab to a real browser. 🔴 ✅ shipped — `PreviewPanel.tsx`, a docked
   right-side `<iframe>` with a URL bar (reload / go / open-externally / close), resizable + persisted

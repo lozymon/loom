@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Implemented and shipping** (v0.5.0). The milestone plan (M0–M11) in [PLAN.md](PLAN.md) is done, and the whole [docs/IDEAS.md](docs/IDEAS.md) follow-up roadmap is shipped too: the fleet console (needs-input broadcast, saved groups, agent status), the docs reader, the agent-integration arc (`th hooks` + the `th-mcp` MCP server), workspace polish (Ctrl+Shift+1–9, duplicate, shortcuts cheat-sheet, per-agent tint), faithful-layout presets, overview drag-reorder, the session-log viewer, and the bigger bets (system tray + global hotkey, the right-side preview panel). Multi-window tear-off lives on the `feat/multiwindow-teardown` branch pending live verification.
+**Implemented and shipping** (v0.5.0). The milestone plan (M0–M11) in [PLAN.md](PLAN.md) is done, and the whole [docs/IDEAS.md](docs/IDEAS.md) follow-up roadmap is shipped too: the fleet console (needs-input broadcast, saved groups, agent status), the docs reader, the agent-integration arc (`th hooks` + the `th-mcp` MCP server), workspace polish (Ctrl+Shift+1–9, duplicate, shortcuts cheat-sheet, per-agent tint), faithful-layout presets, overview drag-reorder, the session-log viewer, and the bigger bets (system tray + global hotkey, the right-side preview panel). Multi-window tear-off is merged and shipping on `main` (`src/lib/detach.ts`, `DetachedPane.tsx`, the `pty_retarget` command).
 
 Treat **PLAN.md** (design/milestones) and the **ADRs** under [docs/adr/](docs/adr/) as the source of truth for the *why*; update them if the design changes. IDEAS.md tracks the post-v1 feature log (each item has a "✅ Built as" note).
 
