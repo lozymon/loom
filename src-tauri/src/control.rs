@@ -7,8 +7,6 @@
 //! distinct from ADR-0001's opacity rule, which forbids parsing pane *output*.
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, SyncSender};
@@ -17,6 +15,12 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
+
+use crate::control_transport::{self, Stream};
+
+/// The control-bus address, also injected to pane children as `$TERMHAUS_SOCK`. Re-exported from
+/// the transport seam so `pty.rs` keeps a single call site (`control::endpoint()`).
+pub use crate::control_transport::endpoint;
 
 /// How long a parked socket connection waits for the webview's reply before giving up.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -59,23 +63,6 @@ struct ControlEvent {
     request: String,
 }
 
-/// Where the control socket lives. Prefer `$XDG_RUNTIME_DIR` (a per-user, 0700 dir on every
-/// systemd Linux); fall back to a per-user name in `/tmp`. Same-user access is the whole
-/// trust boundary (ADR-0007) — the set of principals who can connect is exactly those who
-/// could already drive these terminals another way.
-pub fn socket_path() -> PathBuf {
-    if let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR") {
-        let p = PathBuf::from(dir);
-        if p.is_dir() {
-            return p.join("termhaus.sock");
-        }
-    }
-    let who = std::env::var("USER")
-        .or_else(|_| std::env::var("LOGNAME"))
-        .unwrap_or_else(|_| "user".to_string());
-    std::env::temp_dir().join(format!("termhaus-{who}.sock"))
-}
-
 /// Absolute path to the `th` CLI, which sits beside the running app binary in `target/…`
 /// (dev) or the install bindir (packaged). `None` if it isn't built yet — the bus still
 /// works, callers just have to invoke the socket directly.
@@ -101,28 +88,22 @@ pub fn mcp_path() -> Option<PathBuf> {
 /// unlink and bind; a successful connection means another instance owns the bus, so we bow out
 /// rather than steal its path and orphan its listener (the bug that left a dead socket behind).
 pub fn start(app: AppHandle, pending: Arc<PendingReplies>) {
-    let path = socket_path();
-    if UnixStream::connect(&path).is_ok() {
+    let addr = control_transport::endpoint();
+    if control_transport::probe_alive(&addr) {
         eprintln!(
-            "termhaus: another instance already owns the control socket at {}; bus disabled here",
-            path.display()
+            "termhaus: another instance already owns the control socket at {addr}; bus disabled here"
         );
         return;
     }
-    // No live listener answered — any file here is stale; clear it before binding.
-    let _ = std::fs::remove_file(&path);
-    let listener = match UnixListener::bind(&path) {
+    // No live listener answered — any endpoint left here is stale; `bind` clears it (and sets
+    // owner-only perms) before binding.
+    let listener = match control_transport::bind(&addr) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("termhaus: inter-pane control socket unavailable ({e}); bus disabled");
             return;
         }
     };
-    // Owner-only: belt-and-suspenders on top of the 0700 runtime dir.
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-    }
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(stream) = stream else { continue };
@@ -137,24 +118,18 @@ pub fn start(app: AppHandle, pending: Arc<PendingReplies>) {
 /// Read one newline-delimited request line, relay it to the webview, and write back the one
 /// response line the frontend produces. Errors and timeouts become an `ok:false` response so
 /// `th` never hangs a pane.
-fn handle_conn(stream: UnixStream, app: AppHandle, pending: Arc<PendingReplies>) {
-    let Ok(read_half) = stream.try_clone() else {
-        return;
+fn handle_conn(stream: Stream, app: AppHandle, pending: Arc<PendingReplies>) {
+    // `&Stream` reads and writes (UnixStream impls Read/Write for shared refs), so one handle
+    // serves the whole request/response exchange without cloning.
+    let request = match control_transport::read_line(&stream) {
+        Ok(Some(r)) => r,
+        _ => return, // EOF, blank line, or read error — nothing to relay
     };
-    let mut reader = BufReader::new(read_half);
-    let mut line = String::new();
-    if reader.read_line(&mut line).is_err() {
-        return;
-    }
-    let request = line.trim_end().to_string();
-    if request.is_empty() {
-        return;
-    }
 
     let (req_id, rx) = pending.register();
     if app.emit(EVENT, ControlEvent { req_id, request }).is_err() {
         pending.take(req_id);
-        write_line(&stream, r#"{"ok":false,"error":"app not ready"}"#);
+        let _ = control_transport::write_line(&stream, r#"{"ok":false,"error":"app not ready"}"#);
         return;
     }
     let response = match rx.recv_timeout(REPLY_TIMEOUT) {
@@ -164,14 +139,7 @@ fn handle_conn(stream: UnixStream, app: AppHandle, pending: Arc<PendingReplies>)
             r#"{"ok":false,"error":"timed out waiting for app"}"#.to_string()
         }
     };
-    write_line(&stream, &response);
-}
-
-fn write_line(stream: &UnixStream, payload: &str) {
-    let mut w = stream;
-    let _ = w.write_all(payload.as_bytes());
-    let _ = w.write_all(b"\n");
-    let _ = w.flush();
+    let _ = control_transport::write_line(&stream, &response);
 }
 
 /// The frontend's answer to a relayed request. `response` is an opaque JSON string Rust does

@@ -38,20 +38,28 @@ So M7's platform split is mechanical (additive `#[cfg(windows)]` arms), not arch
   `resolve_shell()` (~L66–86), PATH `:` join (L183), `$HOME` fallback (L159),
   `TERM`/`COLORTERM` injection — all currently bare Unix. Guarding them keeps the Linux
   build byte-identical and gives the Windows arm an obvious home.
-- [ ] **B5 — Define a control-bus transport trait, move UDS impl behind it** (M7.5
-  pre-work). `control.rs` / `control_sock.rs` / `bin/th.rs` use bare
-  `UnixListener`/`UnixStream`, `$XDG_RUNTIME_DIR`/`/tmp` socket path, and `PermissionsExt`
-  chmod. The trait (listener + connect + line read/write) is the highest-risk
-  abstraction; defining it and proving it on Linux alone, before any Windows code, de-risks
-  the whole port. **Highest-value item.**
-- [ ] **B6 — Settle the M9-vs-M7.6 capture decision.** PLAN says if native `xcap` capture
-  (M9) lands first, the Windows screenshot work (M7.6) collapses to nothing. Deciding
-  (and ideally doing) M9 before Windows removes an entire Windows blocker.
-- [ ] **B7 — Confirm `/proc`-reader degradation is acceptable for Windows v1** (no code,
-  just a decision). `pty_cwd`/`pty_busy`/`foreground` (`pty.rs` L341–434) already have
-  `#[cfg(not(unix))]` stubs returning `None` → git panel falls back to workspace folder,
-  attention auto-raise won't fire. Confirm that's "degraded but fine" rather than a
-  blocker.
+- [x] **B5 — Define a control-bus transport seam, move UDS impl behind it** (M7.5
+  pre-work). **Done:** new std-only `src-tauri/src/control_transport.rs` owns the transport
+  (`endpoint`/`connect`/`bind`/`probe_alive`/`Stream`/`Listener` + line framing) behind
+  `#[cfg(unix)]`; the Windows named-pipe arm drops into the same file at M7.5 with no change
+  to `control.rs` (relay) or `control_sock.rs` (client). Wired into `lib.rs` + both bins via
+  `#[path]` (mirrors `control_sock.rs`); `pty.rs` injects `control::endpoint()`. Linux build
+  byte-identical (same XDG/tmp path, 0600 perms, stale-socket detection). `cargo check`
+  (lib + th + th-mcp) + clippy + fmt all clean; **live-verified**: `th list` round-trips
+  against the running app across both workspaces.
+- [ ] **B6 — Settle the M9-vs-M7.6 capture decision. DECIDED (2026-06-13): do M9** (native
+  `xcap` capture), not the cheap Windows gate-off. Rationale: capture today is a per-platform
+  coin-flip on installed shell-out tools (unreliable even on Linux, absent on Windows/macOS);
+  `xcap` is pure-Rust, zero external binaries, one code path across X11/Wayland/Windows/macOS,
+  and it supersedes M7.6 + the macOS `screencapture -i` note while upgrading Linux too. Work:
+  (1) Rust — add `xcap` + `image`, rewrite `capture.rs` to grab frames in-process, keep the
+  command contract (PNG temp path / `"cancelled"`) so `Terminal.tsx` + `Ctrl+Shift+S` are
+  untouched; (2) a transparent always-on-top Tauri overlay region-selector (multi-monitor
+  coords, per-display DPI, freeze-frame, Esc-to-cancel — the real work).
+- [x] **B7 — Confirm `/proc`-reader degradation is acceptable for Windows v1.** **DECIDED
+  (2026-06-13): accept degraded for v1.** `pty_cwd`/`pty_busy`/`foreground` (`pty.rs` L341–434)
+  already have `#[cfg(not(unix))]` stubs returning `None` → git/docs panels fall back to the
+  workspace folder, no busy auto-flag, no live agent-badge. Zero extra work; not a blocker.
 
 ## C. Test / CI baseline
 

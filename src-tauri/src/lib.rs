@@ -1,5 +1,6 @@
 mod capture;
 mod control;
+mod control_transport;
 mod docs;
 mod git;
 mod logs;

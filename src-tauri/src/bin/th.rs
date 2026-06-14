@@ -28,9 +28,12 @@ use std::process::exit;
 
 use serde_json::{json, Value};
 
-// The unix-socket relay, shared with the `th-mcp` MCP server (two front-ends, one bus).
+// The bus client, shared with the `th-mcp` MCP server (two front-ends, one bus). `control_sock`
+// frames requests; `control_transport` is the platform transport it connects over (UDS today).
 #[path = "../control_sock.rs"]
 mod control_sock;
+#[path = "../control_transport.rs"]
+mod control_transport;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();

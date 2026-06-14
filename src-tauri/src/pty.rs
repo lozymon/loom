@@ -169,10 +169,7 @@ pub fn spawn(
     // Inter-pane control bus discovery (ADR-0007): tell the child where the socket is, what
     // its own pane is called (so an agent can address panes relative to itself), and make the
     // `th` CLI directly invokable by exposing its path and prepending its dir to PATH.
-    cmd.env(
-        "TERMHAUS_SOCK",
-        crate::control::socket_path().to_string_lossy().into_owned(),
-    );
+    cmd.env("TERMHAUS_SOCK", crate::control::endpoint());
     if let Some(name) = name.as_deref().filter(|n| !n.is_empty()) {
         cmd.env("TERMHAUS_PANE", name);
     }
