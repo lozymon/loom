@@ -53,15 +53,20 @@ So M7's platform split is mechanical (additive `#[cfg(windows)]` arms), not arch
   byte-identical (same XDG/tmp path, 0600 perms, stale-socket detection). `cargo check`
   (lib + th + th-mcp) + clippy + fmt all clean; **live-verified**: `th list` round-trips
   against the running app across both workspaces.
-- [ ] **B6 — Settle the M9-vs-M7.6 capture decision. DECIDED (2026-06-13): do M9** (native
-  `xcap` capture), not the cheap Windows gate-off. Rationale: capture today is a per-platform
-  coin-flip on installed shell-out tools (unreliable even on Linux, absent on Windows/macOS);
-  `xcap` is pure-Rust, zero external binaries, one code path across X11/Wayland/Windows/macOS,
-  and it supersedes M7.6 + the macOS `screencapture -i` note while upgrading Linux too. Work:
-  (1) Rust — add `xcap` + `image`, rewrite `capture.rs` to grab frames in-process, keep the
-  command contract (PNG temp path / `"cancelled"`) so `Terminal.tsx` + `Ctrl+Shift+S` are
-  untouched; (2) a transparent always-on-top Tauri overlay region-selector (multi-monitor
-  coords, per-display DPI, freeze-frame, Esc-to-cancel — the real work).
+- [x] **B6 — Settle the M9-vs-M7.6 capture decision. DECIDED (2026-06-14): keep the existing
+  shell-out capture for Linux; revisit capture tooling per-platform when that platform's port
+  begins.** We *attempted* M9 (native `xcap`) but reverted it. Findings worth keeping:
+  - `xcap` on Linux hard-depends on **PipeWire** (`libpipewire-0.3-dev` → `libspa-sys`/bindgen →
+    `libclang`, plus `libgbm`/`libegl`/Wayland dev libs) — a heavy new system + packaging
+    footprint, not the "zero external binaries" we expected.
+  - The region-selector overlay needs a **transparent always-on-top window**, but WebKitGTK
+    transparency on Linux is unreliable: the overlay rendered **opaque/black and trapped input**
+    (only killing the app recovered). An in-app modal avoids the trap but can only select on a
+    cramped, scaled-down multi-monitor preview. Neither was good enough to ship.
+  - **Conclusion:** the current `flameshot → gnome-screenshot → grim+slurp` shell-out (with the
+    missing-tool install hint) stays as the Linux path. For Windows (M7.6) pick a native Windows
+    capture path *then*; macOS likewise (`screencapture -i`). A single cross-platform xcap path is
+    not worth its Linux cost/instability. The `.deb` keeps its `gnome-screenshot` depends.
 - [x] **B7 — Confirm `/proc`-reader degradation is acceptable for Windows v1.** **DECIDED
   (2026-06-13): accept degraded for v1.** `pty_cwd`/`pty_busy`/`foreground` (`pty.rs` L341–434)
   already have `#[cfg(not(unix))]` stubs returning `None` → git/docs panels fall back to the
@@ -85,8 +90,10 @@ Windows verification can't be done from the Linux dev box).
 
 ## D. Optional polish
 
-- [ ] **D10 — De-Linux the capture error string** in `Terminal.tsx` (L217–218) which
-  hardcodes "flameshot or gnome-screenshot" (or let M9 remove it).
+- [ ] **D10 — De-Linux the capture error string** in `Terminal.tsx` which hardcodes "flameshot
+  or gnome-screenshot". Now that M9 is reverted (B6) and the shell-out capture stays, this hint
+  is *correct* on Linux and stays; only generalise it when the Windows/macOS capture path lands
+  (it can branch on platform then). Left as-is for now.
 
 ---
 
