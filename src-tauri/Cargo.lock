@@ -4088,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "termhaus"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "portable-pty",
@@ -4101,6 +4101,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
