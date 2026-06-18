@@ -4,20 +4,29 @@ name: CI
 # WebKitGTK); Windows support (PLAN M7) is brought up behind `#[cfg(windows)]` and guarded here
 # so it can't silently rot between the Windows-VM verification passes (M7.4).
 #
-# Jobs run in parallel for faster feedback:
+# Two tiers, split to keep PR feedback fast and cheap:
+#
+#   Every push/PR (fast feedback — these gate merges):
 #   • frontend      — typecheck + unit tests (node only; no apt/Rust, so it's quick)
-#   • rust-lint     — rustfmt + clippy
-#   • build         — full release build + .deb bundle
+#   • rust-lint     — rustfmt + clippy + unit tests
 #   • windows-check — cross-compile `cargo check` for the Windows target from Linux (the keystone:
 #                     catches `#[cfg(windows)]` code that doesn't compile, no Windows runner needed)
-#   • windows-build — full NSIS bundle on a real windows-latest runner
-# rust-lint and build each compile the Rust tree (clippy in the dev profile, the
-# bundle in release — they don't share artifacts anyway), so running them as
-# separate jobs costs a little extra runner time but roughly halves wall-clock.
+#
+#   Release tags (`v*`) and manual `workflow_dispatch` only (heavyweight — produce installers):
+#   • build         — full release build + .deb bundle (uploaded as a downloadable artifact)
+#   • windows-build — full NSIS bundle on a real windows-latest runner (the priciest runner)
+#
+# The full bundles are gated because they're expensive and don't add merge-gating signal
+# the lint/check tier doesn't already give: rust-lint compiles the whole tree (clippy
+# --all-targets) and windows-check compiles the Windows target, so a regression that would
+# break a bundle build almost always trips one of those first. Cut a release tag (or fire the
+# workflow manually) when you actually want the installable .deb / .exe artifacts.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,6 +40,7 @@ jobs:
   frontend:
     name: Frontend (typecheck + tests)
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -52,6 +62,7 @@ jobs:
   rust-lint:
     name: Rust lint + test (fmt + clippy + unit)
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
@@ -93,6 +104,9 @@ jobs:
   build:
     name: Build (.deb bundle)
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    # Heavyweight: only on release tags or manual dispatch (see header).
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
 
@@ -128,9 +142,19 @@ jobs:
       - name: Build (.deb bundle)
         run: npm run tauri build -- --bundles deb
 
+      # Make the Linux build downloadable from the Actions run, mirroring the
+      # Windows job — install on any Debian/Ubuntu box without a local toolchain.
+      - name: Upload Linux .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: termhaus-linux-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
   windows-check:
     name: Windows cross-check (cargo check from Linux)
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
@@ -173,6 +197,9 @@ jobs:
   windows-build:
     name: Windows build (NSIS bundle)
     runs-on: windows-latest
+    timeout-minutes: 60
+    # Heavyweight (priciest runner): only on release tags or manual dispatch (see header).
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
 

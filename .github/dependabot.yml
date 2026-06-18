@@ -1,0 +1,28 @@
+# Keep CI actions and dependencies patched so the pinned versions in ci.yml,
+# package.json, and Cargo.toml don't silently rot. Weekly, grouped to keep PR
+# noise low — patch/minor bumps land in one PR per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: cargo
+    directory: "/src-tauri"
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
