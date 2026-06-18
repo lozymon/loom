@@ -16,6 +16,10 @@ name: CI
 #   • build         — full release build + .deb bundle (uploaded as a downloadable artifact)
 #   • windows-build — full NSIS bundle on a real windows-latest runner (the priciest runner)
 #
+#   Release tags (`v*`) only:
+#   • release       — create the GitHub Release and attach the .deb + Windows installer as
+#                     permanent, public assets (workflow artifacts expire and don't show on Releases)
+#
 # The full bundles are gated because they're expensive and don't add merge-gating signal
 # the lint/check tier doesn't already give: rust-lint compiles the whole tree (clippy
 # --all-targets) and windows-check compiles the Windows target, so a regression that would
@@ -238,3 +242,37 @@ jobs:
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/termhaus.exe
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    # Only on a real version tag (v*), and only after both bundles built. The job
+    # pulls the .deb and Windows installer that build/windows-build uploaded as
+    # workflow artifacts and attaches them to the Release as permanent, public assets
+    # (workflow artifacts otherwise expire and aren't visible on the Releases page).
+    needs: [build, windows-build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write # create the release + upload assets (overrides the read-only default)
+    steps:
+      - name: Download Linux .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: termhaus-linux-deb
+          path: dist
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: termhaus-windows-nsis
+          path: dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          # Tags with a pre-release suffix (e.g. v0.5.1-rc.1) are marked pre-release.
+          prerelease: ${{ contains(github.ref_name, '-') }}
