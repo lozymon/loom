@@ -49,8 +49,12 @@ fn pty_kill(mgr: State<PtyManager>, id: u32) -> Result<(), String> {
     pty::kill(&mgr, id)
 }
 
+// Polled per visible pane every ~2s (Terminal.tsx refreshLoc). `async` so Tauri runs these on
+// its worker pool instead of the main (WebKitGTK UI) thread — a synchronous command blocks the
+// render thread, and 12 panes each doing a /proc read + git spawn at once froze the UI for 1-2s.
+// The bodies don't `.await`; `async` here only relocates them off the UI thread.
 #[tauri::command]
-fn pty_cwd(mgr: State<PtyManager>, id: u32) -> Result<Option<String>, String> {
+async fn pty_cwd(mgr: State<'_, PtyManager>, id: u32) -> Result<Option<String>, String> {
     pty::cwd(&mgr, id)
 }
 
@@ -65,12 +69,12 @@ fn pty_retarget(
 }
 
 #[tauri::command]
-fn pty_busy(mgr: State<PtyManager>, id: u32) -> Result<Option<bool>, String> {
+async fn pty_busy(mgr: State<'_, PtyManager>, id: u32) -> Result<Option<bool>, String> {
     pty::busy(&mgr, id)
 }
 
 #[tauri::command]
-fn pty_foreground(mgr: State<PtyManager>, id: u32) -> Result<Option<String>, String> {
+async fn pty_foreground(mgr: State<'_, PtyManager>, id: u32) -> Result<Option<String>, String> {
     pty::foreground(&mgr, id)
 }
 

@@ -70,6 +70,15 @@ function basename(dir: string): string {
   return i >= 0 ? p.slice(i + 1) || p : p;
 }
 
+// Per-pane metadata poll cadence (refreshLoc). The branch lookup is the costly bit — it spawns a
+// `git` subprocess — so it's throttled hard: re-run only when the cwd changes, or every
+// GIT_REFRESH_EVERY ticks to catch an in-pane `git checkout`. And pane interval starts are spread
+// across POLL_STAGGER_SLOTS so N panes don't poll /proc+git in lockstep (the burst that, with the
+// commands previously on the UI thread, froze the app for 1-2s every cycle).
+const POLL_INTERVAL_MS = 2000;
+const GIT_REFRESH_EVERY = 5; // ~10s at a stable cwd
+const POLL_STAGGER_SLOTS = 8;
+
 export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI }) {
   let container!: HTMLDivElement;
   let term!: Terminal;
@@ -83,6 +92,10 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // Set true while tearing this pane off into its own window, so onCleanup unmounts the xterm
   // WITHOUT killing the PTY — the detached window takes over the live stream.
   let detaching = false;
+  // git-branch poll throttle: the last cwd we ran `git` for, and a tick counter so the subprocess
+  // only fires on a cwd change or a slow refresh (the branch is rarely what changes).
+  let lastGitCwd: string | null = null;
+  let pollTick = 0;
   const [dead, setDead] = createSignal<number | null>(null);
   const [finding, setFinding] = createSignal(false);
   const [query, setQuery] = createSignal("");
@@ -247,7 +260,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
-    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); return; }
+    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); lastGitCwd = null; return; }
+    pollTick++;
     // Busy state (running a command vs. at the prompt) — a cheap foreground-pgrp read. A
     // busy→idle transition in a pane you're not watching means a command just finished and the
     // shell is back at its prompt → raise the sticky attention border (cleared when you look).
@@ -265,8 +279,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     let dir: string | null = null;
     try { dir = await cwdPty(handle); } catch { return; }
     setCwd(dir);
-    if (!dir) { setBranch(null); return; }
-    try { setBranch(await gitBranch(dir)); } catch { setBranch(null); }
+    if (!dir) { setBranch(null); lastGitCwd = null; return; }
+    // Only spawn `git` when the cwd changed, or every GIT_REFRESH_EVERY ticks as a slow refresh to
+    // catch an in-pane `git checkout`. Skips the per-tick subprocess for a pane sitting still.
+    if (dir !== lastGitCwd || pollTick % GIT_REFRESH_EVERY === 0) {
+      lastGitCwd = dir;
+      try { setBranch(await gitBranch(dir)); } catch { setBranch(null); }
+    }
   }
 
   // ---- Search overlay ----------------------------------------------------------------
@@ -357,12 +376,18 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
     // Poll the cwd/branch only while this workspace is on screen — hidden layers don't burn
     // /proc reads or git calls (CLAUDE.md: throttle hidden Workspaces). The effect re-runs on
-    // activeId changes, tearing down the old interval first via onCleanup.
+    // activeId changes, tearing down the old timers first via onCleanup. The first read fires
+    // right away (snappy title bar on switch); the recurring interval is offset per pane so the
+    // ticks don't all land in the same frame.
     createEffect(() => {
       if (appState.activeId !== props.ws.id) return;
       void refreshLoc();
-      const t = setInterval(() => void refreshLoc(), 2000);
-      onCleanup(() => clearInterval(t));
+      const stagger = (props.paneId % POLL_STAGGER_SLOTS) * (POLL_INTERVAL_MS / POLL_STAGGER_SLOTS);
+      let interval: ReturnType<typeof setInterval> | undefined;
+      const start = setTimeout(() => {
+        interval = setInterval(() => void refreshLoc(), POLL_INTERVAL_MS);
+      }, stagger);
+      onCleanup(() => { clearTimeout(start); if (interval) clearInterval(interval); });
     });
 
     // Repaint when this workspace is shown again. Hidden workspaces are display:none'd, and the

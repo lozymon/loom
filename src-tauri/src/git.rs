@@ -91,7 +91,7 @@ fn parse_porcelain_z(out: &str) -> Vec<GitFile> {
 
 /// List the changed files in the repo containing `cwd` (plus its root + branch).
 #[tauri::command]
-pub fn git_status(cwd: String) -> Result<GitStatus, String> {
+pub async fn git_status(cwd: String) -> Result<GitStatus, String> {
     let (ok, root_out, _) = git(&cwd, &["rev-parse", "--show-toplevel"])?;
     if !ok {
         // Not a git repo (or git missing) — a normal empty state, not an error.
@@ -128,7 +128,7 @@ pub fn git_status(cwd: String) -> Result<GitStatus, String> {
 /// polled per visible pane. Returns `None` when `cwd` isn't in a repo (or git is missing) —
 /// a normal "no badge" state, not an error. A detached HEAD reports as `(<short-sha>)`.
 #[tauri::command]
-pub fn git_branch(cwd: String) -> Result<Option<String>, String> {
+pub async fn git_branch(cwd: String) -> Result<Option<String>, String> {
     let (ok, out, _) = git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?;
     if !ok {
         return Ok(None);
@@ -153,7 +153,7 @@ pub fn git_branch(cwd: String) -> Result<Option<String>, String> {
 /// `staged` selects index-vs-HEAD (`--cached`) over worktree-vs-index; `untracked` files have
 /// no index entry, so they're diffed against `/dev/null` to render the whole file as additions.
 #[tauri::command]
-pub fn git_diff(
+pub async fn git_diff(
     cwd: String,
     path: String,
     staged: bool,
