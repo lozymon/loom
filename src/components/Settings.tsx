@@ -323,6 +323,11 @@ export default function Settings(props: { onClose: () => void }) {
             <h3>Broadcast</h3>
             <div class="settings-card">
               <ToggleRow
+                label={<>Show broadcast bar <span class="muted">— the prompt bar below the grid (still hidden when a workspace has no panes)</span></>}
+                checked={settings.showBroadcastBar}
+                onToggle={() => setSetting("showBroadcastBar", !settings.showBroadcastBar)}
+              />
+              <ToggleRow
                 label={<>Press Enter after sending <span class="muted">— append a newline so the message runs</span></>}
                 checked={settings.broadcastNewline}
                 onToggle={() => setSetting("broadcastNewline", !settings.broadcastNewline)}

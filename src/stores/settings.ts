@@ -77,6 +77,8 @@ export interface Settings {
   // ---- Layout ----
   /** Which top-bar nav items are visible (Settings is always shown and isn't listed here). */
   navVisible: Record<NavItemId, boolean>;
+  /** Show the broadcast bar below the grid (it still only appears when the workspace has panes). */
+  showBroadcastBar: boolean;
   /** Width (px) of the left workspace rail; drag its right edge to resize. */
   railWidth: number;
   /** Width (px) of the docked Source Control panel; drag its left edge to resize. */
@@ -115,6 +117,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
   navVisible: { overview: true, palette: true, git: true, docs: true, preview: true },
+  showBroadcastBar: true,
   railWidth: 212,
   gitWidth: 440,
   gitListHeight: 180,

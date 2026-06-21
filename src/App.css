@@ -445,6 +445,12 @@ body,
   padding: 0 9px;
   box-sizing: border-box;
 }
+/* With no broadcast bar, the grid would reach the stage bottom with only the 7px leaf-box inset,
+   leaving a smaller bottom gap than the 16px side gutters (9px stage pad + 7px inset). Add 9px so
+   the bottom gap matches the sides. */
+.stage.stage-no-bcast {
+  padding-bottom: 9px;
+}
 
 /* Holds the workspace layers; the broadcast bar docks below it. No horizontal padding (the
    .ws-layer would cover it); per-card gutters + the outer inset come from .leaf-box (7px). */
