@@ -81,6 +81,8 @@ export interface Settings {
   showBroadcastBar: boolean;
   /** Width (px) of the left workspace rail; drag its right edge to resize. */
   railWidth: number;
+  /** Collapse the workspace rail to a slim icon strip (toggle in the rail header). */
+  railCollapsed: boolean;
   /** Width (px) of the docked Source Control panel; drag its left edge to resize. */
   gitWidth: number;
   /** Height (px) of the Source Control changes list; drag the divider below it to resize. */
@@ -119,6 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   navVisible: { overview: true, palette: true, git: true, docs: true, preview: true },
   showBroadcastBar: true,
   railWidth: 212,
+  railCollapsed: false,
   gitWidth: 440,
   gitListHeight: 180,
   docsWidth: 480,

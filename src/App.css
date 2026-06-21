@@ -539,6 +539,90 @@ body,
   color: var(--text-bright);
 }
 
+/* Collapse/expand toggle (chevron) at the start of the rail header. */
+.rail-title {
+  flex: 1 1 auto;
+}
+.rail-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-faint);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.rail-collapse:hover {
+  background: var(--tint-weak);
+  color: var(--text-bright);
+}
+
+/* ---- Collapsed rail: a slim icon strip of workspace dots ---- */
+.rail.collapsed {
+  padding-left: 6px;
+  padding-right: 6px;
+  gap: 6px;
+}
+.rail.collapsed .rail-header {
+  justify-content: center;
+  padding: 6px 0 4px;
+}
+.rail.collapsed .rail-title,
+.rail.collapsed .rail-add,
+.rail.collapsed .rail-name,
+.rail.collapsed .rail-name-edit,
+.rail.collapsed .rail-badge,
+.rail.collapsed .wsact {
+  display: none;
+}
+.rail.collapsed .rail-item {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+/* Collapsed: swap the small dot for a first-letter avatar whose fill is the dot's state colour. */
+.rail.collapsed .rail-dot {
+  display: none;
+}
+.rail.collapsed .rail-initial {
+  display: inline-flex;
+}
+.rail-initial {
+  display: none;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  font: 700 12.5px var(--font-mono);
+  color: #15171a;
+  background: var(--state-idle);
+}
+.rail-initial[data-state='working'] {
+  background: var(--state-working);
+}
+.rail-initial[data-state='needs'] {
+  background: var(--state-needs);
+}
+/* New-workspace button becomes a centered + (the label is hidden via font-size:0). */
+.rail.collapsed .rail-new {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  font-size: 0;
+}
+.rail.collapsed .rail-new-plus {
+  font-size: 16px;
+}
+
 .rail-list {
   display: flex;
   flex-direction: column;

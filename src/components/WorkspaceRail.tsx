@@ -10,6 +10,7 @@ import { settings, setSetting } from "../stores/settings";
 
 const RAIL_MIN = 120;
 const RAIL_MAX = 420;
+const RAIL_COLLAPSED = 56;
 
 export default function WorkspaceRail(props: { onNew: () => void }) {
   // Which workspace row is mid-rename (double-click the name to enter, Enter/blur commits, Esc cancels).
@@ -35,11 +36,25 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
     window.addEventListener("pointerup", up);
   }
 
+  const collapsed = () => settings.railCollapsed;
+  const railWidth = () => (collapsed() ? RAIL_COLLAPSED : settings.railWidth);
+  const toggleCollapse = () => setSetting("railCollapsed", !collapsed());
+
   return (
-    <nav class="rail" style={{ "flex-basis": `${settings.railWidth}px`, width: `${settings.railWidth}px` }}>
+    <nav
+      class="rail"
+      classList={{ collapsed: collapsed() }}
+      style={{ "flex-basis": `${railWidth()}px`, width: `${railWidth()}px` }}
+    >
       <div class="rail-header">
         <span class="rail-title">Workspaces</span>
-        <button class="rail-add" title="New workspace (Ctrl+Shift+T)" onClick={() => props.onNew()}>＋</button>
+        <button
+          class="rail-collapse"
+          title={collapsed() ? "Expand rail" : "Collapse rail"}
+          onClick={toggleCollapse}
+        >
+          {collapsed() ? "»" : "«"}
+        </button>
       </div>
       <div class="rail-list">
         <For each={appState.workspaces}>
@@ -62,8 +77,11 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
                 onClick={() => switchWorkspace(ws.id)}
                 title={ws.cwd || ws.name}
               >
-                {/* Live state dot, leading the row. */}
+                {/* Live state dot (expanded) / first-letter avatar tinted by state (collapsed). */}
                 <span class="rail-dot" data-state={dotState()} />
+                <span class="rail-initial" data-state={dotState()}>
+                  {(ws.name.trim()[0] ?? "?").toUpperCase()}
+                </span>
                 <Show
                   when={editingId() === ws.id}
                   fallback={
@@ -113,7 +131,9 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
           <span class="rail-new-plus">＋</span> New workspace
         </button>
       </div>
-      <div class="rail-resizer" title="Drag to resize" onPointerDown={onResizeDown} />
+      <Show when={!collapsed()}>
+        <div class="rail-resizer" title="Drag to resize" onPointerDown={onResizeDown} />
+      </Show>
     </nav>
   );
 }
