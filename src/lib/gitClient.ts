@@ -39,22 +39,16 @@ export const gitDiff = (
   untracked: boolean,
 ): Promise<string> => invoke<string>("git_diff", { cwd, path, staged, untracked });
 
-// ---- unified-diff parsing → side-by-side rows ----
+// ---- unified-diff parsing → single-column rows ----
 
-/** One side of a side-by-side row. `kind: "empty"` is the blank gutter opposite an add/del. */
-export interface DiffCell {
-  /** Line number in that file, or null for empty/filler cells. */
-  no: number | null;
-  text: string;
-  kind: "ctx" | "del" | "add" | "empty";
-}
-
-/** A rendered row: either a hunk header band, or a left/right line pair. */
+/**
+ * One rendered row of a unified diff: a hunk header band, or one context/removed/added line.
+ * `sign` is the diff marker (` ` context, `-` removed, `+` added); `oldNo`/`newNo` are the
+ * 1-based line numbers on each side (null on the side a line doesn't exist).
+ */
 export type DiffRow =
   | { kind: "hunk"; header: string }
-  | { kind: "pair"; left: DiffCell; right: DiffCell };
-
-const EMPTY: DiffCell = { no: null, text: "", kind: "empty" };
+  | { kind: "line"; sign: " " | "-" | "+"; oldNo: number | null; newNo: number | null; text: string };
 
 /** Parse the `@@ -a,b +c,d @@` header; returns the 1-based old/new start line numbers. */
 function parseHunkHeader(line: string): { oldStart: number; newStart: number } | null {
@@ -64,21 +58,17 @@ function parseHunkHeader(line: string): { oldStart: number; newStart: number } |
 }
 
 /**
- * Turn `git diff` output for a single file into side-by-side rows. Runs of removed/added lines
- * within a hunk are paired positionally (del[i] ↔ add[i]); any overflow becomes one-sided rows
- * with an empty cell opposite. Context lines mirror on both sides. File/index headers and
- * "\ No newline at end of file" markers are skipped.
+ * Turn `git diff` output for a single file into a flat list of unified rows — one row per
+ * source line, the way the diff is rendered (and selected) in the panel. File/index headers
+ * (everything before the first hunk) and "\ No newline at end of file" markers are skipped.
  */
 export function parseUnifiedDiff(diff: string): DiffRow[] {
   const rows: DiffRow[] = [];
   const lines = diff.split("\n");
   let oldNo = 0;
   let newNo = 0;
-  let i = 0;
 
-  while (i < lines.length) {
-    const line = lines[i];
-
+  for (const line of lines) {
     if (line.startsWith("@@")) {
       const h = parseHunkHeader(line);
       if (h) {
@@ -86,50 +76,21 @@ export function parseUnifiedDiff(diff: string): DiffRow[] {
         newNo = h.newStart;
         rows.push({ kind: "hunk", header: line });
       }
-      i++;
       continue;
     }
 
     // Skip everything before the first hunk (diff --git / index / --- / +++) and stray markers.
-    if (oldNo === 0 && newNo === 0) {
-      i++;
-      continue;
-    }
-    if (line.startsWith("\\")) {
-      i++; // "\ No newline at end of file" — no line number consumed
-      continue;
-    }
+    if (oldNo === 0 && newNo === 0) continue;
+    if (line.startsWith("\\")) continue; // "\ No newline at end of file" — no line number consumed
 
     if (line.startsWith(" ")) {
-      const text = line.slice(1);
-      rows.push({
-        kind: "pair",
-        left: { no: oldNo++, text, kind: "ctx" },
-        right: { no: newNo++, text, kind: "ctx" },
-      });
-      i++;
-      continue;
+      rows.push({ kind: "line", sign: " ", oldNo: oldNo++, newNo: newNo++, text: line.slice(1) });
+    } else if (line.startsWith("-")) {
+      rows.push({ kind: "line", sign: "-", oldNo: oldNo++, newNo: null, text: line.slice(1) });
+    } else if (line.startsWith("+")) {
+      rows.push({ kind: "line", sign: "+", oldNo: null, newNo: newNo++, text: line.slice(1) });
     }
-
-    if (line.startsWith("-") || line.startsWith("+")) {
-      const dels: string[] = [];
-      const adds: string[] = [];
-      while (i < lines.length && lines[i].startsWith("-")) dels.push(lines[i++].slice(1));
-      // tolerate "\ No newline" markers interleaved between the - and + runs
-      while (i < lines.length && lines[i].startsWith("\\")) i++;
-      while (i < lines.length && lines[i].startsWith("+")) adds.push(lines[i++].slice(1));
-      const n = Math.max(dels.length, adds.length);
-      for (let k = 0; k < n; k++) {
-        const left: DiffCell =
-          k < dels.length ? { no: oldNo++, text: dels[k], kind: "del" } : EMPTY;
-        const right: DiffCell =
-          k < adds.length ? { no: newNo++, text: adds[k], kind: "add" } : EMPTY;
-        rows.push({ kind: "pair", left, right });
-      }
-      continue;
-    }
-
-    i++; // anything else (blank trailing line) — ignore
+    // anything else (a blank trailing element from the split) — ignore
   }
 
   return rows;
@@ -148,24 +109,18 @@ export interface DiffSelection {
 
 /**
  * Rebuild raw unified-diff text for the given `rows` at `indices` (a contiguous user
- * selection; non-pair rows are ignored). A paired replace row emits both its `-old` and
- * `+new`; the line range prefers new-side numbers, falling back to old-side for pure deletes.
+ * selection; hunk-header rows are ignored). The line range prefers new-side numbers, falling
+ * back to old-side for pure deletes.
  */
 export function formatDiffSelection(rows: DiffRow[], indices: number[]): DiffSelection {
   const lines: string[] = [];
   const nums: number[] = [];
   for (const i of indices) {
     const row = rows[i];
-    if (!row || row.kind !== "pair") continue;
-    const { left, right } = row;
-    if (left.kind === "ctx") {
-      lines.push(" " + left.text);
-    } else {
-      if (left.kind === "del") lines.push("-" + left.text);
-      if (right.kind === "add") lines.push("+" + right.text);
-    }
-    if (right.no != null) nums.push(right.no);
-    else if (left.no != null) nums.push(left.no);
+    if (!row || row.kind !== "line") continue;
+    lines.push(row.sign + row.text);
+    const no = row.newNo ?? row.oldNo;
+    if (no != null) nums.push(no);
   }
   return {
     text: lines.join("\n"),

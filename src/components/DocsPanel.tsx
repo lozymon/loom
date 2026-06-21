@@ -1,25 +1,19 @@
 // Docs panel (IDEAS #4): open a markdown file (README, a spec, an ADR), read it, drag-select a
-// passage, optionally add an instruction, and send the raw selection into a pane — exactly the
-// gesture the Source Control panel gives for diff lines, only the content source is a file instead
-// of a `git diff`. The send target is the focused pane or, toggled, the broadcast targets ("all of
-// you read this"). Opened from the title bar's 📖 button or Ctrl+Shift+R.
+// passage, and send the raw selection into the focused pane — exactly the gesture the Source
+// Control panel gives for diff lines, only the content source is a file instead of a `git diff`.
+// The send target is the last active (focused) pane. Opened from the title bar's 📖 button or
+// Ctrl+Shift+R.
 //
 // Plain-text + drag-select rendering (matches GitPanel's line gesture 1:1); we send the *raw*
 // markdown of the selection — the agent wants the source, not rendered prose. Strictly read-only.
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
-import { activeWorkspace, broadcastTargets } from "../stores/workspace";
+import { activeWorkspace } from "../stores/workspace";
 import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
 import { listDocs, readDoc, type DocEntry } from "../lib/docsClient";
 import { parseMarkdownBlocks } from "../lib/markdown";
 import { settings, setSetting } from "../stores/settings";
-
-/** Split a relative path into a dimmed directory + a bold basename (VSCode-style, like GitPanel). */
-function splitPath(path: string): { dir: string; base: string } {
-  const i = path.lastIndexOf("/");
-  return i < 0 ? { dir: "", base: path } : { dir: path.slice(0, i), base: path.slice(i + 1) };
-}
 
 /** A synthetic entry for a file picked via the native dialog (outside the scanned folder). Its
  *  `rel` is the full path — a real locator for the agent, since it's outside the workspace root. */
@@ -63,10 +57,6 @@ export default function DocsPanel(props: { onClose: () => void }) {
   // ---- line selection → send-to-terminal (a contiguous row range; drag or shift-click) ----
   const [anchor, setAnchor] = createSignal<number | null>(null);
   const [head, setHead] = createSignal<number | null>(null);
-  const [instruction, setInstruction] = createSignal("");
-  const [submitOnSend, setSubmitOnSend] = createSignal(true);
-  // Fan the passage out to the broadcast targets instead of just the focused pane.
-  const [toTargets, setToTargets] = createSignal(false);
   const [flash, setFlash] = createSignal<string | null>(null);
   let dragging = false;
   let flashTimer: ReturnType<typeof setTimeout> | undefined;
@@ -103,12 +93,8 @@ export default function DocsPanel(props: { onClose: () => void }) {
   const rangeStr = (s: { start: number; end: number }) =>
     s.start === s.end ? `${s.start}` : `${s.start}-${s.end}`;
 
-  /** Live panes the send will reach: the broadcast targets, or just the focused pane. */
+  /** The send goes to the last active (focused) pane, same as Source Control. */
   const targetIds = (): number[] => {
-    if (toTargets()) {
-      const w = activeWorkspace();
-      return w ? broadcastTargets(w) : [];
-    }
     const id = activeWorkspace()?.focused ?? null;
     return id != null ? [id] : [];
   };
@@ -129,31 +115,68 @@ export default function DocsPanel(props: { onClose: () => void }) {
   onMount(() => window.addEventListener("mouseup", endDrag));
   onCleanup(() => window.removeEventListener("mouseup", endDrag));
 
+  // Drag the left edge to resize the panel width; clamp + persist (mirrors GitPanel).
+  function onResizeDown(e: PointerEvent) {
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startW = settings.docsWidth;
+    const move = (ev: PointerEvent) => {
+      const w = Math.max(360, Math.min(1000, startW + (startX - ev.clientX)));
+      setSetting("docsWidth", w);
+    };
+    const up = (ev: PointerEvent) => {
+      handle.releasePointerCapture(ev.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  // Drag the divider below the file list to re-split list vs. content height; clamp + persist.
+  function onListResizeDown(e: PointerEvent) {
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const startH = settings.docsListHeight;
+    const move = (ev: PointerEvent) => {
+      const h = Math.max(72, Math.min(640, startH + (ev.clientY - startY)));
+      setSetting("docsListHeight", h);
+    };
+    const up = (ev: PointerEvent) => {
+      handle.releasePointerCapture(ev.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
   function showFlash(msg: string) {
     clearTimeout(flashTimer);
     setFlash(msg);
     flashTimer = setTimeout(() => setFlash(null), 2200);
   }
 
-  /** Send the selected passage (+ optional instruction) into the target pane(s) as raw markdown. */
+  /** Send the selected passage into the target pane(s) as raw markdown (one bracketed paste + submit). */
   function sendToTerminal() {
     const sel = selMeta();
     if (!sel) return;
     const ids = targetIds();
     const rel = selected()?.rel ?? "";
-    const instr = instruction().trim();
-    let body = `${rel}:${rangeStr(sel)}\n\`\`\`markdown\n${sel.text}\n\`\`\``;
-    if (instr) body += `\n${instr}`;
-    // Bracketed paste so the multi-line block lands as one paste (not line-by-line Enters); an
-    // optional trailing CR submits it so the agent acts on it immediately.
-    const payload = `\x1b[200~${body}\x1b[201~` + (submitOnSend() ? "\r" : "");
+    const body = `${rel}:${rangeStr(sel)}\n\`\`\`markdown\n${sel.text}\n\`\`\``;
+    // Bracketed paste so the multi-line block lands as one paste (not line-by-line Enters); the
+    // trailing CR submits it so the agent acts on it immediately.
+    const payload = `\x1b[200~${body}\x1b[201~\r`;
     const n = writeToPanes(ids, payload);
     if (n > 0) {
       clearSelection();
-      setInstruction("");
       props.onClose();
     } else {
-      showFlash(toTargets() ? "no live target panes" : "no live terminal focused");
+      showFlash("no live terminal focused");
     }
   }
 
@@ -220,87 +243,65 @@ export default function DocsPanel(props: { onClose: () => void }) {
   onMount(() => window.addEventListener("keydown", onKey, true));
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
-  const fileRow = (file: DocEntry) => {
-    const { dir, base } = splitPath(file.rel);
-    return (
-      <button
-        class="git-file"
-        classList={{ on: selected()?.path === file.path }}
-        onClick={() => void openEntry(file)}
-        title={file.path}
-      >
-        <span class="git-file-name">
-          <span class="git-file-base">{base}</span>
-          <Show when={dir}>
-            <span class="git-file-dir">{dir}</span>
-          </Show>
-        </span>
-      </button>
-    );
-  };
+  const fileRow = (file: DocEntry) => (
+    <button
+      class="git-file"
+      classList={{ on: selected()?.path === file.path }}
+      onClick={() => void openEntry(file)}
+      title={file.path}
+    >
+      <span class="git-file-path">{file.rel}</span>
+    </button>
+  );
 
   return (
-    <div class="settings-backdrop" onClick={() => props.onClose()}>
-      <div class="git-panel" onClick={(e) => e.stopPropagation()}>
-        <header class="settings-head">
-          <span class="settings-title">
-            📖 Docs
-            <Show when={cwd()}>
-              <span class="git-cwd" title={cwd()}>{cwd()}</span>
-            </Show>
+    <aside
+      class="side-panel git-panel docs-panel git-scm"
+      style={{ "flex-basis": `${settings.docsWidth}px`, width: `${settings.docsWidth}px` }}
+    >
+        <div class="git-resizer" title="Drag to resize" onPointerDown={onResizeDown} />
+        <header class="git-head">
+          <span class="git-title" title={cwd()}>Docs</span>
+          <span class="docs-modes">
+            <button classList={{ on: preview() }} onClick={() => setPreview(true)} title="Rendered markdown">Preview</button>
+            <button classList={{ on: !preview() }} onClick={() => setPreview(false)} title="Raw markdown source (line-precise)">Raw</button>
           </span>
           <span class="git-head-actions">
-            <button class="settings-btn" title="Open a file…" onClick={() => void pickFile()}>
-              ＋ Open file…
-            </button>
-            <button class="settings-btn" title="Refresh" onClick={() => void refresh()}>
-              ⟳ Refresh
-            </button>
-            <button class="settings-x" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
+            <button class="git-icon-btn" title="Open a file…" onClick={() => void pickFile()}>＋</button>
+            <button class="git-icon-btn" title="Refresh" onClick={() => void refresh()}>↻</button>
+            <button class="git-icon-btn" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
           </span>
         </header>
 
-        <div class="git-body">
-          <aside class="git-files">
-            <Show
-              when={!loading() && !error()}
-              fallback={
-                <div class="git-empty">
-                  <Show when={loading()}>Loading…</Show>
-                  <Show when={!loading() && error()}>{error()}</Show>
-                </div>
-              }
-            >
-              <Show when={files().length === 0}>
-                <div class="git-empty">
-                  No markdown here.
-                  <div class="git-empty-sub">Use “Open file…” to pick one anywhere.</div>
-                </div>
-              </Show>
-              <Show when={files().length > 0}>
-                <div class="git-group-head">Markdown <span class="git-count">{files().length}</span></div>
-                <For each={files()}>{(f) => fileRow(f)}</For>
-              </Show>
+        <Show
+          when={!loading() && !error()}
+          fallback={
+            <div class="git-empty git-empty-fill">
+              <Show when={loading()}>Loading…</Show>
+              <Show when={!loading() && error()}>{error()}</Show>
+            </div>
+          }
+        >
+          <div class="git-list" style={{ height: `${settings.docsListHeight}px` }}>
+            <Show when={files().length === 0}>
+              <div class="git-empty">
+                No markdown here.
+                <div class="git-empty-sub">Use “Open file…” to pick one anywhere.</div>
+              </div>
             </Show>
-          </aside>
+            <Show when={files().length > 0}>
+              <div class="git-group-head">MARKDOWN · {files().length}</div>
+              <For each={files()}>{(f) => fileRow(f)}</For>
+            </Show>
+          </div>
 
-          <section class="git-diff">
+          <div class="git-list-resizer" title="Drag to resize" onPointerDown={onListResizeDown} />
+
+          <section class="git-diff docs-content">
             <Show
               when={selected()}
               fallback={<div class="git-empty">Select a file to read it.</div>}
             >
-              <div class="git-diff-path">
-                <span>{selected()!.rel}</span>
-                <span class="docs-path-right">
-                  <span class="git-diff-hint">
-                    drag to select {preview() ? "blocks" : "lines"} → send to a pane
-                  </span>
-                  <span class="docs-modes">
-                    <button classList={{ on: preview() }} onClick={() => setPreview(true)} title="Rendered markdown">Preview</button>
-                    <button classList={{ on: !preview() }} onClick={() => setPreview(false)} title="Raw markdown source (line-precise)">Raw</button>
-                  </span>
-                </span>
-              </div>
               <Show when={readError()}>
                 <div class="git-empty">{readError()}</div>
               </Show>
@@ -346,56 +347,42 @@ export default function DocsPanel(props: { onClose: () => void }) {
                 </Show>
               </Show>
 
-              <Show when={selMeta()}>
-                <div class="git-send">
-                  <span class="git-send-info">
-                    {selMeta()!.count} line{selMeta()!.count === 1 ? "" : "s"}
-                    <span class="git-send-loc"> · {selected()!.rel}:{rangeStr(selMeta()!)}</span>
-                  </span>
-                  <input
-                    class="git-send-input"
-                    placeholder="Add an instruction for the agent… (optional)"
-                    value={instruction()}
-                    onInput={(e) => setInstruction(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") { e.preventDefault(); sendToTerminal(); }
-                      else if (e.key === "Escape") { e.stopPropagation(); clearSelection(); }
-                    }}
-                  />
-                  <label class="git-send-enter" title="Fan out to the broadcast targets instead of just the focused pane">
-                    <input
-                      type="checkbox"
-                      checked={toTargets()}
-                      onChange={(e) => setToTargets(e.currentTarget.checked)}
-                    />
-                    to targets
-                  </label>
-                  <label class="git-send-enter" title="Press Enter in the pane after pasting (submit)">
-                    <input
-                      type="checkbox"
-                      checked={submitOnSend()}
-                      onChange={(e) => setSubmitOnSend(e.currentTarget.checked)}
-                    />
-                    submit
-                  </label>
-                  <button
-                    class="git-send-btn primary"
-                    disabled={liveReach() === 0}
-                    title={liveReach() === 0 ? "No live target pane" : `Send to ${liveReach()} pane${liveReach() === 1 ? "" : "s"}`}
-                    onClick={sendToTerminal}
-                  >
-                    Send to {toTargets() ? `${liveReach()} pane${liveReach() === 1 ? "" : "s"}` : "terminal"} ▸
-                  </button>
-                  <button class="git-send-clear" title="Clear selection (Esc)" onClick={clearSelection}>✕</button>
-                  <Show when={flash()}>
-                    <span class="git-send-flash">{flash()}</span>
-                  </Show>
-                </div>
-              </Show>
             </Show>
           </section>
-        </div>
-      </div>
-    </div>
+
+          <footer class="git-foot">
+            <Show
+              when={selMeta()}
+              fallback={
+                <span class="git-hint">
+                  <span class="git-hint-mark">⌖</span> drag to select {preview() ? "blocks" : "lines"} → send to a pane
+                </span>
+              }
+            >
+              <div class="git-send">
+                <span class="git-send-info">
+                  <Show when={flash()} fallback={
+                    <>
+                      {selMeta()!.count} line{selMeta()!.count === 1 ? "" : "s"}
+                      <span class="git-send-loc"> · {selected()!.rel}:{rangeStr(selMeta()!)}</span>
+                    </>
+                  }>
+                    <span class="git-send-flash">{flash()}</span>
+                  </Show>
+                </span>
+                <button
+                  class="git-send-btn"
+                  disabled={liveReach() === 0}
+                  title={liveReach() === 0 ? "No live terminal is focused" : "Send to the focused terminal"}
+                  onClick={sendToTerminal}
+                >
+                  Send ▸
+                </button>
+                <button class="git-send-clear" title="Clear selection (Esc)" onClick={clearSelection}>✕</button>
+              </div>
+            </Show>
+          </footer>
+        </Show>
+    </aside>
   );
 }

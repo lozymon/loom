@@ -8,14 +8,14 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-  createWorkspace, deletePreset, launchPreset, presets, recents, saveCurrentAsPreset,
+  createWorkspace, deletePreset, launchPreset, presets, recents,
 } from "../stores/workspace";
 import { settings } from "../stores/settings";
 import { AGENTS, detectAgent } from "../lib/agents";
 import { checkCommandAvailable } from "../lib/agentAvailability";
 import { allocName, balancedBands } from "../lib/grid";
 
-const PRESETS = [1, 2, 4, 6, 8, 10, 12];
+const PRESETS = [1, 2, 4, 6];
 const MAX_PANES = 16;
 
 /** Final path segment of a folder, for the workspace name. Handles both `/` (Unix) and `\`
@@ -57,8 +57,6 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   const [commands, setCommands] = createSignal<string[]>([]);
   const [cwds, setCwds] = createSignal<string[]>([]);
   const [selected, setSelected] = createSignal<number | null>(null);
-  const [saveAsPreset, setSaveAsPreset] = createSignal(false);
-  const [broadcastAll, setBroadcastAll] = createSignal(false);
   // Pre-flight: command string → is its program installed? (undefined = unchecked/checking).
   // Filled async so we never block opening the wizard; drives the "⚠ not installed" hints.
   const [avail, setAvail] = createSignal<Record<string, boolean>>({});
@@ -69,8 +67,12 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   };
   /** A command we've confirmed isn't installed (false), as opposed to unchecked (undefined). */
   const isMissing = (cmd: string | undefined) => avail()[(cmd ?? "").trim()] === false;
-  // Probe the built-in agents up front so the fleet chips can warn before any click.
-  onMount(() => AGENTS.forEach((a) => checkAvail(a.command)));
+  // Probe the built-in agents up front so the fleet warnings show before any click, and pre-fill
+  // every pane with the default fleet agent so the preview reflects it (matching the design).
+  onMount(() => {
+    AGENTS.forEach((a) => checkAvail(a.command));
+    fillAll(fleetAgent());
+  });
 
   // Auto-names exactly as buildWorkspace allocates them (Faye, Cleo, …) so the preview matches.
   const names = createMemo(() => {
@@ -82,7 +84,9 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     });
   });
   const bands = createMemo(() => balancedBands(count()));
-  const agentCount = createMemo(() => commands().slice(0, count()).filter((c) => c?.trim()).length);
+  // The agent the "Fill every pane with" dropdown applies (default Claude Code, matching the
+  // design). It's a pending selection — panes stay as-is until you hit "Apply to all".
+  const [fleetAgent, setFleetAgent] = createSignal(AGENTS[0]?.command ?? "");
 
   // No availability probe here: this fires on every keystroke of the free-text cmd field, and a
   // probe spawns a login shell. The built-in agent commands are all probed up front (onMount);
@@ -119,9 +123,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
       paneCount: count(),
       commands: cmds.some((c) => c?.trim()) ? cmds : undefined,
       cwds: dirs.some((c) => c?.trim()) ? dirs : undefined,
-      broadcastAll: broadcastAll(),
     });
-    if (saveAsPreset()) saveCurrentAsPreset();
     props.onClose();
   }
 
@@ -144,17 +146,15 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
       <div class="wizard wizard-wide" onClick={(e) => e.stopPropagation()}>
         <header class="wizard-head">
           <strong>New workspace</strong>
-          <span class="muted">
-            {count()} terminal{count() === 1 ? "" : "s"}
-            {agentCount() > 0 ? ` · ${agentCount()} agent${agentCount() === 1 ? "" : "s"}` : " · shells"}
-          </span>
+          <button class="wizard-x" title="Close (Esc)" onClick={() => props.onClose()}>×</button>
         </header>
 
         <div class="wiz-cols">
           {/* LEFT — where it runs */}
           <div class="wiz-left">
+            <div class="wiz-section">WHERE</div>
             <div>
-              <label class="wizard-label">Name</label>
+              <label class="wizard-label">Workspace name</label>
               <input
                 class="wizard-input"
                 placeholder="Workspace name"
@@ -174,100 +174,103 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                 />
                 <button onClick={browse}>Browse…</button>
               </div>
-            </div>
-
-            <Show when={recents().length > 0}>
-              <div>
-                <label class="wizard-label">Recent</label>
+              <Show when={recents().length > 0}>
                 <div class="wizard-recents">
                   <For each={recents()}>
                     {(r) => (
-                      <button class="wizard-recent" onClick={() => { applyCwd(r.cwd); setCount(r.count); }}>
-                        <span>{basename(r.cwd)}</span>
-                        <span class="muted">{r.cwd} · {r.count}</span>
+                      <button
+                        class="wizard-recent"
+                        title={`${r.cwd} · ${r.count} pane${r.count === 1 ? "" : "s"}`}
+                        onClick={() => { applyCwd(r.cwd); setCount(r.count); }}
+                      >
+                        {basename(r.cwd)}
                       </button>
                     )}
                   </For>
                 </div>
-              </div>
-            </Show>
+              </Show>
+            </div>
 
-            <Show when={presets().length > 0}>
-              <div>
-                <label class="wizard-label">Presets · one-click relaunch</label>
-                <div class="wizard-presets">
-                  <For each={presets()}>
-                    {(p) => (
-                      <div class="wizard-preset">
-                        <button class="wizard-preset-go" onClick={() => launchSaved(p.id)}>
-                          <span>{p.name}</span>
-                          <span class="muted">{p.paneCount} panes{p.commands?.some(Boolean) ? " · agents" : ""}{p.tree ? " · layout" : ""}</span>
-                        </button>
-                        <button class="wizard-preset-del" title="Delete preset" onClick={() => deletePreset(p.id)}>✕</button>
-                      </div>
-                    )}
-                  </For>
-                </div>
+            <div>
+              <label class="wizard-label">Presets</label>
+              <div class="wizard-presets">
+                <button
+                  class="wizard-preset-go"
+                  classList={{ on: count() === 4 && fleetAgent() === (AGENTS[0]?.command ?? "") }}
+                  onClick={() => { setCount(4); setFleetAgent(AGENTS[0]?.command ?? ""); fillAll(AGENTS[0]?.command ?? ""); }}
+                >
+                  Fleet ×4
+                </button>
+                <button
+                  class="wizard-preset-go"
+                  classList={{ on: count() === 2 && fleetAgent() === "" }}
+                  onClick={() => { setCount(2); setFleetAgent(""); fillAll(""); }}
+                >
+                  Web dev
+                </button>
+                <button
+                  class="wizard-preset-go"
+                  classList={{ on: count() === 1 && fleetAgent() === "" }}
+                  onClick={() => { setCount(1); setFleetAgent(""); fillAll(""); }}
+                >
+                  Blank
+                </button>
+                <For each={presets()}>
+                  {(p) => (
+                    <div class="wizard-preset">
+                      <button
+                        class="wizard-preset-go"
+                        title={`${p.paneCount} panes${p.commands?.some(Boolean) ? " · agents" : ""}${p.tree ? " · layout" : ""}`}
+                        onClick={() => launchSaved(p.id)}
+                      >
+                        {p.name}
+                      </button>
+                      <button class="wizard-preset-del" title="Delete preset" onClick={() => deletePreset(p.id)}>✕</button>
+                    </div>
+                  )}
+                </For>
               </div>
-            </Show>
-
-            <div class="wiz-opts">
-              <label class="wiz-opt">
-                <input type="checkbox" checked={broadcastAll()} onChange={(e) => setBroadcastAll(e.currentTarget.checked)} />
-                Preselect all panes for broadcast
-              </label>
-              <label class="wiz-opt">
-                <input type="checkbox" checked={saveAsPreset()} onChange={(e) => setSaveAsPreset(e.currentTarget.checked)} />
-                Save as preset on launch
-              </label>
             </div>
           </div>
 
           {/* RIGHT — what runs */}
           <div class="wiz-right">
+            <div class="wiz-section">WHAT RUNS</div>
             <div>
-              <label class="wizard-label">Layout</label>
+              <div class="wiz-row-head">
+                <label class="wizard-label">Layout</label>
+                <span class="wiz-panes-n">{count()} pane{count() === 1 ? "" : "s"}</span>
+              </div>
               <div class="wiz-ltiles">
                 <For each={PRESETS}>
                   {(n) => (
-                    <button class="wiz-ltile" classList={{ on: count() === n }} onClick={() => setCount(n)}>
+                    <button class="wiz-ltile" classList={{ on: count() === n }} title={`${n} panes`} onClick={() => setCount(n)}>
                       <MiniGrid n={n} />
-                      <span>{n}</span>
                     </button>
                   )}
                 </For>
-              </div>
-              <div class="wiz-slider">
-                <span class="muted">custom</span>
                 <input
+                  class="wiz-slider-inline"
                   type="range" min="1" max={MAX_PANES} value={count()}
+                  title="Custom pane count"
                   onInput={(e) => setCount(+e.currentTarget.value)}
                 />
-                <span class="wiz-slider-n">{count()}</span>
               </div>
             </div>
 
-            <div>
-              <label class="wizard-label">Fleet · fill every pane</label>
-              <div class="wiz-fleet">
+            <div class="wiz-fleet-row">
+              <span class="wiz-fleet-label">Fill every pane with</span>
+              <select
+                class="wiz-fleet-select"
+                value={fleetAgent()}
+                onChange={(e) => { setFleetAgent(e.currentTarget.value); fillAll(e.currentTarget.value); }}
+              >
+                <option value="">Shells</option>
                 <For each={AGENTS}>
-                  {(a) => (
-                    <button
-                      class="wiz-chip"
-                      classList={{ "wiz-chip-missing": isMissing(a.command) }}
-                      style={{ "--chip": a.color }}
-                      title={isMissing(a.command) ? `${a.label} isn't installed or not on PATH` : `Fill all with ${a.label}`}
-                      onClick={() => fillAll(a.command)}
-                    >
-                      <span class="wiz-chip-ic">{a.icon}</span>{a.label}
-                      <Show when={isMissing(a.command)}><span class="wiz-chip-warn" title="not installed">⚠</span></Show>
-                    </button>
-                  )}
+                  {(a) => <option value={a.command}>{a.label}{isMissing(a.command) ? " (not installed)" : ""}</option>}
                 </For>
-                <button class="wiz-chip wiz-chip-shell" title="All plain shells" onClick={() => fillAll("")}>
-                  <span class="wiz-chip-ic">⌗</span>Shells
-                </button>
-              </div>
+              </select>
+              <button class="wiz-fleet-apply" onClick={() => fillAll(fleetAgent())}>Apply to all</button>
             </div>
 
             <div>
@@ -295,7 +298,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                                   <Show when={isMissing(commands()[idx()])}><span class="wiz-cell-warn" title="not installed">⚠</span></Show>
                                 </span>
                                 <span class="wiz-cell-agent">
-                                  {agent() ? `${agent()!.icon} ${agent()!.label}` : "shell"}
+                                  {commands()[idx()]?.trim() || "shell"}
                                   <Show when={cwds()[idx()]?.trim()}> · {basename(cwds()[idx()]!)}</Show>
                                 </span>
                               </button>
@@ -357,14 +360,17 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                 );
               })()}
             </Show>
+
+            {/* Footer lives INSIDE the right column (margin-top:auto), per the prototype — so the
+                hint aligns under WHAT RUNS and the column divider runs the full height. */}
+            <footer class="wizard-foot">
+              <span class="wiz-foot-hint">Ctrl+Shift+T</span>
+              <span class="spacer" />
+              <button onClick={() => props.onClose()}>Cancel</button>
+              <button class="primary" onClick={launch}>Create workspace</button>
+            </footer>
           </div>
         </div>
-
-        <footer class="wizard-foot">
-          <button onClick={() => props.onClose()}>Cancel</button>
-          <span class="spacer" />
-          <button class="primary" onClick={launch}>Launch</button>
-        </footer>
       </div>
     </div>
   );

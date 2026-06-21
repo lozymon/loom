@@ -15,6 +15,10 @@ const STORE_KEY = "settings";
 
 export type CursorStyle = "block" | "bar" | "underline";
 
+/** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
+ *  so this config stays reachable). */
+export type NavItemId = "overview" | "palette" | "git" | "docs" | "preview";
+
 export interface Settings {
   // ---- Appearance (terminal text) ----
   fontFamily: string;
@@ -71,8 +75,18 @@ export interface Settings {
   /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */
   keybindings: Keybindings;
   // ---- Layout ----
+  /** Which top-bar nav items are visible (Settings is always shown and isn't listed here). */
+  navVisible: Record<NavItemId, boolean>;
   /** Width (px) of the left workspace rail; drag its right edge to resize. */
   railWidth: number;
+  /** Width (px) of the docked Source Control panel; drag its left edge to resize. */
+  gitWidth: number;
+  /** Height (px) of the Source Control changes list; drag the divider below it to resize. */
+  gitListHeight: number;
+  /** Width (px) of the docked Docs panel; drag its left edge to resize. */
+  docsWidth: number;
+  /** Height (px) of the Docs file list; drag the divider below it to resize. */
+  docsListHeight: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -100,7 +114,12 @@ export const DEFAULT_SETTINGS: Settings = {
   docsPreview: true,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
-  railWidth: 168,
+  navVisible: { overview: true, palette: true, git: true, docs: true, preview: true },
+  railWidth: 212,
+  gitWidth: 440,
+  gitListHeight: 180,
+  docsWidth: 480,
+  docsListHeight: 180,
 };
 
 const [settings, setStore] = createStore<Settings>({ ...DEFAULT_SETTINGS });
@@ -115,6 +134,12 @@ function persist() {
 /** Update one setting and persist. */
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
   setStore(key, value);
+  persist();
+}
+
+/** Show or hide a top-bar nav item. */
+export function setNavVisible(id: NavItemId, on: boolean) {
+  setStore("navVisible", id, on);
   persist();
 }
 
@@ -203,6 +228,8 @@ export async function initSettings() {
       // Deep-merge keybindings over defaults so actions added in a later version still get a
       // key when an older blob is loaded (and stray actions in the blob are dropped).
       merged.keybindings = { ...DEFAULT_KEYBINDINGS, ...(saved.keybindings ?? {}) };
+      // Deep-merge nav visibility too, so a nav item added in a later version defaults to shown.
+      merged.navVisible = { ...DEFAULT_SETTINGS.navVisible, ...(saved.navVisible ?? {}) };
       setStore(merged);
     }
   } catch (e) {

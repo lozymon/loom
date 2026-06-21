@@ -1,23 +1,35 @@
-// The Settings page (a modal over the stage), opened from the ⚙ button on the rail. It is
+// The Settings page (a centered overlay over the grid, like the command palette), opened from
+// the ⚙ button on the rail or Ctrl+Shift+,. It is
 // the single home for app preferences: the theme picker (moved here from the rail) plus the
 // `settings` store fields. Every control writes straight to its store, which persists and —
 // for terminal-shaping fields — restyles open panes live, so there is no Save/Apply step.
 
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import { themes, themeId, setTheme } from "../stores/theme";
 import {
   settings,
   setSetting,
+  setNavVisible,
   resetSettings,
   setKeybinding,
   resetKeybinding,
   resetKeybindings,
   type CursorStyle,
+  type NavItemId,
 } from "../stores/settings";
 import { ACTIONS, formatBinding, isModifierKey, type ActionId } from "../lib/keybindings";
 
 const CURSORS: CursorStyle[] = ["block", "bar", "underline"];
+
+// Top-bar nav items that can be shown/hidden (Settings is always shown, so it's not listed).
+const NAV_ITEMS: { id: NavItemId; label: string; hint: string }[] = [
+  { id: "overview", label: "Overview", hint: "fleet glance" },
+  { id: "palette", label: "Palette", hint: "command palette" },
+  { id: "git", label: "Git", hint: "source control" },
+  { id: "docs", label: "Docs", hint: "markdown reader" },
+  { id: "preview", label: "Preview", hint: "web preview" },
+];
 
 type TabId = "appearance" | "terminal" | "keys";
 const TABS: { id: TabId; label: string }[] = [
@@ -25,6 +37,23 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "terminal", label: "Terminal" },
   { id: "keys", label: "Key bindings" },
 ];
+
+/** A label + pill-toggle row for a boolean setting (used across the grouped settings cards). */
+function ToggleRow(p: { label: JSX.Element; checked: boolean; onToggle: () => void }) {
+  return (
+    <div class="settings-row">
+      <span class="settings-label">{p.label}</span>
+      <button
+        class="settings-toggle"
+        classList={{ on: p.checked }}
+        title={p.checked ? "On" : "Off"}
+        onClick={p.onToggle}
+      >
+        <span class="settings-toggle-knob" />
+      </button>
+    </div>
+  );
+}
 
 // Actions grouped (in declaration order) for the keybinding list's subheadings.
 const KB_GROUPS = [...new Set(ACTIONS.map((a) => a.group))].map((name) => ({
@@ -83,8 +112,8 @@ export default function Settings(props: { onClose: () => void }) {
   }
 
   return (
-    <div class="settings-backdrop" onClick={() => props.onClose()}>
-      <div class="settings" onClick={(e) => e.stopPropagation()}>
+    <div class="settings-overlay" onPointerDown={() => props.onClose()}>
+      <div class="settings" onPointerDown={(e) => e.stopPropagation()}>
         <header class="settings-head">
           <span class="settings-title">⚙ Settings</span>
           <button class="settings-x" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
@@ -109,6 +138,7 @@ export default function Settings(props: { onClose: () => void }) {
           {/* ---- Theme ---- */}
           <section class="settings-section">
             <h3>Theme</h3>
+            <p class="settings-sub">Click a theme to apply it live across the app.</p>
             <div class="settings-themes">
               <For each={themes}>
                 {(t) => (
@@ -122,7 +152,8 @@ export default function Settings(props: { onClose: () => void }) {
                       class="theme-swatch"
                       style={{ background: t.terminal.background, color: t.terminal.foreground }}
                     >
-                      <span style={{ color: t.terminal.cursor }}>▏</span>Ab
+                      Ab
+                      <span class="theme-dot" style={{ background: t.terminal.cursor }} />
                     </span>
                     <span class="theme-card-name">{t.name}</span>
                   </button>
@@ -131,9 +162,10 @@ export default function Settings(props: { onClose: () => void }) {
             </div>
           </section>
 
-          {/* ---- Appearance ---- */}
+          {/* ---- Terminal ---- */}
           <section class="settings-section">
-            <h3>Appearance</h3>
+            <h3>Terminal</h3>
+            <div class="settings-card">
             <label class="settings-row">
               <span class="settings-label">Font family</span>
               <input
@@ -155,24 +187,33 @@ export default function Settings(props: { onClose: () => void }) {
                 <span class="settings-val">{settings.fontSize}px</span>
               </span>
             </label>
-            <label class="settings-row">
+            <div class="settings-row">
               <span class="settings-label">Cursor style</span>
-              <select
-                class="settings-select"
-                value={settings.cursorStyle}
-                onChange={(e) => setSetting("cursorStyle", e.currentTarget.value as CursorStyle)}
+              <div class="settings-seg">
+                <For each={CURSORS}>
+                  {(c) => (
+                    <button
+                      class="settings-seg-opt"
+                      classList={{ on: settings.cursorStyle === c }}
+                      onClick={() => setSetting("cursorStyle", c)}
+                    >
+                      {c[0].toUpperCase() + c.slice(1)}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Cursor blink</span>
+              <button
+                class="settings-toggle"
+                classList={{ on: settings.cursorBlink }}
+                title={settings.cursorBlink ? "On" : "Off"}
+                onClick={() => setSetting("cursorBlink", !settings.cursorBlink)}
               >
-                <For each={CURSORS}>{(c) => <option value={c}>{c}</option>}</For>
-              </select>
-            </label>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
-                checked={settings.cursorBlink}
-                onChange={(e) => setSetting("cursorBlink", e.currentTarget.checked)}
-              />
-              <span class="settings-label">Blink the cursor</span>
-            </label>
+                <span class="settings-toggle-knob" />
+              </button>
+            </div>
             <label class="settings-row">
               <span class="settings-label">Scrollback lines</span>
               <input
@@ -185,6 +226,31 @@ export default function Settings(props: { onClose: () => void }) {
                 onChange={(e) => setSetting("scrollback", Math.max(0, e.currentTarget.valueAsNumber || 0))}
               />
             </label>
+            </div>
+          </section>
+
+          {/* ---- Top bar (show/hide nav items) ---- */}
+          <section class="settings-section">
+            <h3>Top bar</h3>
+            <p class="settings-sub">Show or hide items in the top menu. Settings stays visible, and every
+              item is still reachable by its shortcut.</p>
+            <div class="settings-card">
+              <For each={NAV_ITEMS}>
+                {(item) => (
+                  <div class="settings-row">
+                    <span class="settings-label">{item.label} <span class="muted">— {item.hint}</span></span>
+                    <button
+                      class="settings-toggle"
+                      classList={{ on: settings.navVisible[item.id] }}
+                      title={settings.navVisible[item.id] ? "Shown" : "Hidden"}
+                      onClick={() => setNavVisible(item.id, !settings.navVisible[item.id])}
+                    >
+                      <span class="settings-toggle-knob" />
+                    </button>
+                  </div>
+                )}
+              </For>
+            </div>
           </section>
           </Show>
 
@@ -192,81 +258,77 @@ export default function Settings(props: { onClose: () => void }) {
           {/* ---- Terminal behaviour ---- */}
           <section class="settings-section">
             <h3>Terminal behaviour</h3>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+            <div class="settings-card">
+              <ToggleRow
+                label={<>Copy on select <span class="muted">— selecting text copies it to the clipboard</span></>}
                 checked={settings.copyOnSelect}
-                onChange={(e) => setSetting("copyOnSelect", e.currentTarget.checked)}
+                onToggle={() => setSetting("copyOnSelect", !settings.copyOnSelect)}
               />
-              <span class="settings-label">Copy on select <span class="muted">— selecting text copies it to the clipboard</span></span>
-            </label>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+              <ToggleRow
+                label="Middle-click paste"
                 checked={settings.middleClickPaste}
-                onChange={(e) => setSetting("middleClickPaste", e.currentTarget.checked)}
+                onToggle={() => setSetting("middleClickPaste", !settings.middleClickPaste)}
               />
-              <span class="settings-label">Middle-click paste</span>
-            </label>
+            </div>
           </section>
 
           {/* ---- New terminals ---- */}
           <section class="settings-section">
             <h3>New terminals</h3>
-            <label class="settings-row">
-              <span class="settings-label">Default shell</span>
-              <input
-                class="settings-input"
-                placeholder="$SHELL (e.g. /usr/bin/fish)"
-                value={settings.defaultShell}
-                onChange={(e) => setSetting("defaultShell", e.currentTarget.value.trim())}
-              />
-            </label>
-            <label class="settings-row">
-              <span class="settings-label">Default folder</span>
-              <span class="settings-range">
+            <div class="settings-card">
+              <label class="settings-row">
+                <span class="settings-label">Default shell</span>
                 <input
                   class="settings-input"
-                  placeholder="$HOME"
-                  value={settings.defaultCwd}
-                  onChange={(e) => setSetting("defaultCwd", e.currentTarget.value.trim())}
+                  placeholder="$SHELL (e.g. /usr/bin/fish)"
+                  value={settings.defaultShell}
+                  onChange={(e) => setSetting("defaultShell", e.currentTarget.value.trim())}
                 />
-                <button class="settings-btn" onClick={browseDefaultCwd}>Browse…</button>
-              </span>
-            </label>
+              </label>
+              <label class="settings-row">
+                <span class="settings-label">Default folder</span>
+                <span class="settings-control">
+                  <input
+                    class="settings-input"
+                    placeholder="$HOME"
+                    value={settings.defaultCwd}
+                    onChange={(e) => setSetting("defaultCwd", e.currentTarget.value.trim())}
+                  />
+                  <button class="settings-btn" onClick={browseDefaultCwd}>Browse…</button>
+                </span>
+              </label>
+            </div>
             <p class="settings-hint muted">Applies to terminals you open from now on.</p>
           </section>
 
-          {/* ---- Safety + Broadcast ---- */}
+          {/* ---- Safety ---- */}
           <section class="settings-section">
-            <h3>Behaviour</h3>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+            <h3>Safety</h3>
+            <div class="settings-card">
+              <ToggleRow
+                label="Confirm before closing a running terminal"
                 checked={settings.confirmClose}
-                onChange={(e) => setSetting("confirmClose", e.currentTarget.checked)}
+                onToggle={() => setSetting("confirmClose", !settings.confirmClose)}
               />
-              <span class="settings-label">Confirm before closing a running terminal</span>
-            </label>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+              <ToggleRow
+                label={<>Confirm before another pane spawns a terminal <span class="muted">— the <code>th spawn</code> control bus</span></>}
                 checked={settings.confirmExternalSpawn}
-                onChange={(e) => setSetting("confirmExternalSpawn", e.currentTarget.checked)}
+                onToggle={() => setSetting("confirmExternalSpawn", !settings.confirmExternalSpawn)}
               />
-              <span class="settings-label">Confirm before another pane spawns a terminal <span class="muted">— the `th spawn` control bus</span></span>
-            </label>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+            </div>
+          </section>
+
+          {/* ---- Broadcast ---- */}
+          <section class="settings-section">
+            <h3>Broadcast</h3>
+            <div class="settings-card">
+              <ToggleRow
+                label={<>Press Enter after sending <span class="muted">— append a newline so the message runs</span></>}
                 checked={settings.broadcastNewline}
-                onChange={(e) => setSetting("broadcastNewline", e.currentTarget.checked)}
+                onToggle={() => setSetting("broadcastNewline", !settings.broadcastNewline)}
               />
-              <span class="settings-label">Broadcast presses Enter <span class="muted">— append a newline so the message runs</span></span>
-            </label>
-            <label class="settings-row">
-              <span class="settings-label">Broadcast stagger <span class="muted">— delay between panes (0 = all at once)</span></span>
-              <span class="settings-range">
+              <div class="settings-row">
+                <span class="settings-label">Stagger <span class="muted">— delay between panes (0 = all at once)</span></span>
                 <input
                   class="settings-input narrow"
                   type="number"
@@ -276,80 +338,77 @@ export default function Settings(props: { onClose: () => void }) {
                   value={settings.broadcastStaggerMs}
                   onChange={(e) => setSetting("broadcastStaggerMs", Math.max(0, e.currentTarget.valueAsNumber || 0))}
                 />
-                <span class="settings-val">ms</span>
-              </span>
-            </label>
+                <span class="settings-unit">ms</span>
+              </div>
+            </div>
           </section>
 
           {/* ---- Notifications ---- */}
           <section class="settings-section">
             <h3>Notifications</h3>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+            <div class="settings-card">
+              <ToggleRow
+                label={<>Notify when a pane needs you <span class="muted">— desktop notification when a command finishes (or an agent calls <code>th attention</code>) while Termhaus is in the background</span></>}
                 checked={settings.notifyOnAttention}
-                onChange={(e) => setSetting("notifyOnAttention", e.currentTarget.checked)}
+                onToggle={() => setSetting("notifyOnAttention", !settings.notifyOnAttention)}
               />
-              <span class="settings-label">Notify when a pane needs you <span class="muted">— desktop notification when a command finishes (or an agent calls <code>th attention</code>) while Termhaus is in the background</span></span>
-            </label>
+            </div>
             <p class="settings-hint muted">Only fires when the Termhaus window isn't focused — when it's up front the amber pane border is enough. Your OS may ask permission the first time.</p>
           </section>
 
           {/* ---- Window & tray ---- */}
           <section class="settings-section">
             <h3>Window &amp; tray</h3>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+            <div class="settings-card">
+              <ToggleRow
+                label={<>Close to tray <span class="muted">— the window's close button hides Termhaus instead of quitting (Quit from the tray menu still exits)</span></>}
                 checked={settings.closeToTray}
-                onChange={(e) => setSetting("closeToTray", e.currentTarget.checked)}
+                onToggle={() => setSetting("closeToTray", !settings.closeToTray)}
               />
-              <span class="settings-label">Close to tray <span class="muted">— the window's close button hides Termhaus instead of quitting (Quit from the tray menu still exits)</span></span>
-            </label>
-            <label class="settings-row">
-              <span class="settings-label">Global summon hotkey</span>
-              <input
-                class="settings-input"
-                value={settings.globalHotkey}
-                placeholder="e.g. CommandOrControl+Alt+Backquote"
-                spellcheck={false}
-                onChange={(e) => setSetting("globalHotkey", e.currentTarget.value.trim())}
-              />
-            </label>
+              <label class="settings-row">
+                <span class="settings-label">Global summon hotkey</span>
+                <input
+                  class="settings-input"
+                  value={settings.globalHotkey}
+                  placeholder="e.g. CommandOrControl+Alt+Backquote"
+                  spellcheck={false}
+                  onChange={(e) => setSetting("globalHotkey", e.currentTarget.value.trim())}
+                />
+              </label>
+            </div>
             <p class="settings-hint muted">Summons or hides the window from anywhere. A Tauri accelerator — modifiers <code>CommandOrControl</code>/<code>Alt</code>/<code>Shift</code>/<code>Super</code> joined with <code>+</code> (e.g. <code>Alt+Space</code>). Leave empty to disable. The tray icon (left-click) does the same.</p>
           </section>
 
           {/* ---- Session logging ---- */}
           <section class="settings-section">
             <h3>Session logging</h3>
-            <label class="settings-row toggle">
-              <input
-                type="checkbox"
+            <div class="settings-card">
+              <ToggleRow
+                label={<>Log pane output to disk <span class="muted">— append each pane's raw output under the app's logs/ folder</span></>}
                 checked={settings.sessionLogging}
-                onChange={(e) => setSetting("sessionLogging", e.currentTarget.checked)}
+                onToggle={() => setSetting("sessionLogging", !settings.sessionLogging)}
               />
-              <span class="settings-label">Log pane output to disk <span class="muted">— append each pane's raw output under the app's logs/ folder</span></span>
-            </label>
+            </div>
             <p class="settings-hint muted">Applies to terminals you open from now on. Useful for reviewing what a fleet of agents did; files can grow large.</p>
           </section>
           </Show>
 
           <Show when={tab() === "keys"}>
           {/* ---- Key bindings ---- */}
-          <section class="settings-section">
-            <div class="settings-row">
-              <p class="settings-hint muted" style={{ margin: "0", flex: "1 1 auto" }}>
-                Every app shortcut lives in the Ctrl+Shift namespace so plain keys still reach the
-                terminal. Click a shortcut, then press the new Ctrl+Shift combination (Esc cancels).
-              </p>
-              <button class="settings-btn" onClick={() => { setCapturing(null); resetKeybindings(); }}>
-                Reset shortcuts
-              </button>
-            </div>
+          <div class="settings-keys-intro">
+            <p class="settings-hint muted">
+              Every app shortcut lives in the Ctrl+Shift namespace so plain keys still reach the
+              terminal. Click a shortcut, then press the new Ctrl+Shift combination (Esc cancels).
+            </p>
+            <button class="settings-btn" onClick={() => { setCapturing(null); resetKeybindings(); }}>
+              Reset shortcuts
+            </button>
+          </div>
             <For each={KB_GROUPS}>
               {(group) => (
-                <>
-                  <h4 class="kb-group">{group.name}</h4>
+                <section class="settings-section">
+                  <h3>{group.name}</h3>
+                  <div class="settings-card">
                   <For each={group.actions}>
                     {(a) => {
                       const isDefault = () =>
@@ -380,10 +439,10 @@ export default function Settings(props: { onClose: () => void }) {
                       );
                     }}
                   </For>
-                </>
+                  </div>
+                </section>
               )}
             </For>
-          </section>
           </Show>
         </div>
 

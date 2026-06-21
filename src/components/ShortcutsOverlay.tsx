@@ -23,9 +23,9 @@ export default function ShortcutsOverlay(props: { onClose: () => void }) {
 
   return (
     <div class="settings-backdrop" onClick={() => props.onClose()}>
-      <div class="settings shortcuts" onClick={(e) => e.stopPropagation()}>
-        <header class="settings-head">
-          <span class="settings-title">⌨ Keyboard shortcuts</span>
+      <div class="dialog shortcuts" onClick={(e) => e.stopPropagation()}>
+        <header class="dialog-head">
+          <span class="dialog-title">⌨ Keyboard shortcuts</span>
           <button class="settings-x" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
         </header>
         <div class="shortcuts-body">

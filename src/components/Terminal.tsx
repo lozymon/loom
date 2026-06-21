@@ -118,6 +118,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const looking = () => appState.activeId === props.ws.id && isFocused();
   const act = () => activity[props.paneId];
 
+  // The single chip state dot (Frameless): one of working / idle / needs / dead, by precedence.
+  // Derived purely from existing metadata (exit code + the activity store) — never pane output,
+  // so it stays opacity-safe (ADR-0001). `needs` is the MCP/needs-input attention flag; `working`
+  // is a live foreground command; everything else is `idle`.
+  const paneState = (): "working" | "idle" | "needs" | "dead" => {
+    if (dead() !== null) return "dead";
+    if (act()?.attention) return "needs";
+    if (act()?.busy === true) return "working";
+    return "idle";
+  };
+
   // The name shown in the title bar is the live folder (cwd basename) — it tracks `cd` so the bar
   // always tells you *where* the pane is. The pool name (Faye…) is only the fallback before the
   // first cwd read, and stays the pane's routing handle for `th send`/broadcast (folder names
@@ -537,6 +548,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   return (
     <div
       class="pane"
+      data-state={paneState()}
       classList={{
         focused: isFocused(),
         attention: !isFocused() && (act()?.attention ?? false),
@@ -555,7 +567,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         if (src) swapPanes(src, props.paneId);
       }}
     >
-      <div class="pane-title">
+      {/* Floating identity chip (top-left). Glass card carrying the state dot + name + branch/status.
+          The chip is also the drag handle for swapping panes (drop target is the .pane below). */}
+      <div
+        class="pane-chip"
+        title={cwd() ? prettyCwd(cwd()!) : (spec()?.title ?? "")}
+        draggable={true}
+        onDragStart={(e) => {
+          e.dataTransfer?.setData("text/plain", String(props.paneId));
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+        }}
+      >
         <Show when={appState.broadcastSelecting}>
           <button
             class="bcast-toggle"
@@ -568,53 +590,57 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           </button>
         </Show>
         <span
-          class="pane-grip"
-          title="Drag to swap this pane with another"
-          draggable={true}
-          onPointerDown={(e) => e.stopPropagation()}
-          onDragStart={(e) => {
-            e.dataTransfer?.setData("text/plain", String(props.paneId));
-            if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-          }}
-        >
-          ⠿
-        </span>
-        <span
-          class="pane-status"
-          classList={{
-            bell: act()?.bell ?? false,
-            unseen: !(act()?.bell ?? false) && (act()?.unseen ?? false),
-            busy: !(act()?.bell ?? false) && !(act()?.unseen ?? false) && act()?.busy === true,
-          }}
+          class="pane-dot"
+          data-state={paneState()}
           title={
-            act()?.bell ? "Bell rang" :
-            act()?.unseen ? "New output" :
-            act()?.busy === true ? "Running a command" : "Idle"
+            paneState() === "dead" ? "Exited" :
+            paneState() === "needs" ? "Needs you" :
+            paneState() === "working" ? "Working" : "Idle"
           }
         />
+        {/* Secondary group-tint dot — the per-agent grouping signal in the fleet (overview) view,
+            where the icon badge is hidden for space. State (the dot above) stays primary. */}
+        <Show when={agent()}>
+          <span class="pane-tint-dot" title={`Group: ${agent()!.label}`} />
+        </Show>
         <Show when={agent()}>
           {(a) => (
-            <span
-              class="pane-agent"
-              style={{ "--agent-color": a().color }}
-              title={`Running ${a().label}`}
-            >
+            <span class="pane-agent" style={{ "--agent-color": a().color }} title={`Running ${a().label}`}>
               {a().icon}
             </span>
           )}
         </Show>
-        <span class="pane-name" title={cwd() ? prettyCwd(cwd()!) : (spec()?.title ?? "")}>
-          {displayName()}
-        </span>
-        <Show when={branch()}>
-          <span class="pane-branch" title={`git branch: ${branch()}`}>⎇ {branch()}</span>
-        </Show>
-        <Show when={act()?.status}>
+        <span class="pane-name">{displayName()}</span>
+        <Show
+          when={act()?.status}
+          fallback={
+            <Show when={branch()}>
+              <span class="pane-branch" title={`git branch: ${branch()}`}>⎇ {branch()}</span>
+            </Show>
+          }
+        >
           {(s) => (
-            <span class="pane-statuslabel" title={`agent status: ${s()}`}>{s()}</span>
+            <span class="pane-statuslabel" data-state={paneState()} title={`agent status: ${s()}`}>{s()}</span>
           )}
         </Show>
-        <span class="pane-controls">
+      </div>
+
+      {/* Uppercase state label (top-right) — the primary fleet signal; shown only in overview,
+          where the hit overlay intercepts the hover controls. */}
+      <span class="pane-state-label" data-state={paneState()}>
+        {paneState() === "dead"
+          ? `EXITED · ${dead() ?? ""}`.trim()
+          : paneState() === "needs" ? "NEEDS YOU" : paneState().toUpperCase()}
+      </span>
+
+      {/* Controls (top-right): revealed on pane hover only; a dead pane swaps in restart. */}
+      <div class="pane-ctl pctl">
+        <Show
+          when={dead() === null}
+          fallback={
+            <button class="pane-ctl-restart" title="Restart" onClick={() => { term.clear(); clearStatus(props.paneId); void start(); }}>↻</button>
+          }
+        >
           <button title="Launch Claude here" onClick={launchClaude}>✦</button>
           <button title="Find (Ctrl+Shift+F)" onClick={openSearch}>⌕</button>
           <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")}>▥</button>
@@ -632,8 +658,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
               }}
             >≣</button>
           </Show>
-          <button title="Close (Ctrl+Shift+W)" onClick={() => closePane(props.paneId)}>✕</button>
-        </span>
+        </Show>
+        <button title="Close (Ctrl+Shift+W)" onClick={() => closePane(props.paneId)}>✕</button>
       </div>
 
       <div class="pane-term-wrap">

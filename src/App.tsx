@@ -24,6 +24,7 @@ import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
   setOverview, toggleOverview, switchWorkspaceRelative, switchWorkspaceIndex,
+  activeWorkspace,
 } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings, settings } from "./stores/settings";
@@ -76,13 +77,27 @@ export default function App() {
   window.addEventListener("termhaus:new-workspace", openWizard);
   onCleanup(() => window.removeEventListener("termhaus:new-workspace", openWizard));
 
-  // Ctrl+Shift+G from a focused pane opens the Source Control (git diff) panel.
-  const openGit = () => setGitOpen(true);
+  // The three right-side panels (Git / Preview / Docs) share one docked slot — only one shows at a
+  // time, and toggling the open one closes it (Frameless: dock right, never replace the grid; the
+  // stage just narrows and panes refit). `showPanel`/`togglePanel` keep that mutual exclusion.
+  const showPanel = (which: "git" | "preview" | "docs" | null) => {
+    if (which !== null) setSettingsOpen(false); // opening a docked panel closes the Settings overlay
+    setGitOpen(which === "git");
+    setPreviewOpen(which === "preview");
+    setDocsOpen(which === "docs");
+  };
+  const togglePanel = (which: "git" | "preview" | "docs") => {
+    const isOpen = which === "git" ? gitOpen() : which === "preview" ? previewOpen() : docsOpen();
+    showPanel(isOpen ? null : which);
+  };
+
+  // Ctrl+Shift+G from a focused pane toggles the Source Control (git diff) panel.
+  const openGit = () => togglePanel("git");
   window.addEventListener("termhaus:source-control", openGit);
   onCleanup(() => window.removeEventListener("termhaus:source-control", openGit));
 
-  // Ctrl+Shift+R from a focused pane opens the Docs reader (mark a passage → send to a pane).
-  const openDocs = () => setDocsOpen(true);
+  // Ctrl+Shift+R from a focused pane toggles the Docs reader (mark a passage → send to a pane).
+  const openDocs = () => togglePanel("docs");
   window.addEventListener("termhaus:docs", openDocs);
   onCleanup(() => window.removeEventListener("termhaus:docs", openDocs));
 
@@ -101,12 +116,13 @@ export default function App() {
   onCleanup(() => window.removeEventListener("termhaus:view-session-log", openLogs));
 
   // Ctrl+Shift+B toggles the right-side preview panel (browser view).
-  const togglePreview = () => setPreviewOpen((v) => !v);
+  const togglePreview = () => togglePanel("preview");
   window.addEventListener("termhaus:preview", togglePreview);
   onCleanup(() => window.removeEventListener("termhaus:preview", togglePreview));
 
-  // Ctrl+Shift+, from a focused pane opens Settings.
-  const openSettings = () => setSettingsOpen(true);
+  // Ctrl+Shift+, from a focused pane opens Settings — a centered overlay over the grid (like the
+  // command palette). Opening it closes any docked panel.
+  const openSettings = () => { showPanel(null); setSettingsOpen(true); };
   window.addEventListener("termhaus:settings", openSettings);
   onCleanup(() => window.removeEventListener("termhaus:settings", openSettings));
 
@@ -122,13 +138,13 @@ export default function App() {
   // focused pane and stay terminal-only; only workspace/app actions are wired here.
   const GLOBAL_ACTIONS: Partial<Record<ActionId, () => void>> = {
     "new-workspace": () => setWizardOpen(true),
-    "settings": () => setSettingsOpen(true),
-    "source-control": () => setGitOpen(true),
-    "docs": () => setDocsOpen(true),
+    "settings": () => openSettings(),
+    "source-control": () => togglePanel("git"),
+    "docs": () => togglePanel("docs"),
     "command-palette": () => setPaletteOpen((v) => !v),
     "overview": () => toggleOverview(),
     "shortcuts": () => setShortcutsOpen((v) => !v),
-    "preview": () => setPreviewOpen((v) => !v),
+    "preview": () => togglePanel("preview"),
     "prev-workspace": () => switchWorkspaceRelative(-1),
     "next-workspace": () => switchWorkspaceRelative(1),
   };
@@ -200,11 +216,16 @@ export default function App() {
   return (
     <div class="shell" classList={{ flush: flush() }}>
       <TitleBar
-        onSettings={() => setSettingsOpen(true)}
-        onGit={() => setGitOpen(true)}
-        onDocs={() => setDocsOpen(true)}
+        onSettings={() => openSettings()}
+        onGit={() => togglePanel("git")}
+        onDocs={() => togglePanel("docs")}
         onShortcuts={() => setShortcutsOpen(true)}
-        onPreview={() => setPreviewOpen((v) => !v)}
+        onPreview={() => togglePanel("preview")}
+        gitOn={gitOpen}
+        docsOn={docsOpen}
+        previewOn={previewOpen}
+        settingsOn={settingsOpen}
+        paletteOn={paletteOpen}
       />
       <div class="body">
       <WorkspaceRail onNew={() => setWizardOpen(true)} />
@@ -220,12 +241,20 @@ export default function App() {
             </For>
           </Show>
         </div>
-        <Show when={ready()}>
+        <Show when={ready() && Object.keys(activeWorkspace()?.panes ?? {}).length > 0}>
           <BroadcastBar />
         </Show>
       </div>
+      {/* The right-side docked panels — flex siblings of .stage, so opening one narrows the grid
+          (panes refit via their ResizeObserver) rather than covering it. Mutually exclusive. */}
+      <Show when={gitOpen()}>
+        <GitPanel onClose={() => showPanel(null)} />
+      </Show>
       <Show when={previewOpen()}>
-        <PreviewPanel onClose={() => setPreviewOpen(false)} />
+        <PreviewPanel onClose={() => showPanel(null)} />
+      </Show>
+      <Show when={docsOpen()}>
+        <DocsPanel onClose={() => showPanel(null)} />
       </Show>
       </div>
       <Show when={wizardOpen()}>
@@ -233,12 +262,6 @@ export default function App() {
       </Show>
       <Show when={settingsOpen()}>
         <Settings onClose={() => setSettingsOpen(false)} />
-      </Show>
-      <Show when={gitOpen()}>
-        <GitPanel onClose={() => setGitOpen(false)} />
-      </Show>
-      <Show when={docsOpen()}>
-        <DocsPanel onClose={() => setDocsOpen(false)} />
       </Show>
       <Show when={shortcutsOpen()}>
         <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />
@@ -250,12 +273,12 @@ export default function App() {
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
           onNewWorkspace={() => setWizardOpen(true)}
-          onSettings={() => setSettingsOpen(true)}
-          onGit={() => setGitOpen(true)}
-          onDocs={() => setDocsOpen(true)}
+          onSettings={() => openSettings()}
+          onGit={() => showPanel("git")}
+          onDocs={() => showPanel("docs")}
           onShortcuts={() => setShortcutsOpen(true)}
           onLogs={() => { setLogPreselect(null); setLogsOpen(true); }}
-          onPreview={() => setPreviewOpen((v) => !v)}
+          onPreview={() => showPanel("preview")}
         />
       </Show>
     </div>

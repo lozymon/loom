@@ -7,8 +7,10 @@
 // listens for. (New workspace lives in the rail header; broadcasting in the docked bar;
 // save-as-preset in the palette — none need a button here.)
 
+import { Show } from 'solid-js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { appState, toggleOverview } from '../stores/workspace';
+import { appState, toggleOverview, setOverview } from '../stores/workspace';
+import { settings } from '../stores/settings';
 import appIcon from '../assets/app-icon.png';
 
 export default function TitleBar(props: {
@@ -17,6 +19,11 @@ export default function TitleBar(props: {
   onDocs: () => void;
   onShortcuts: () => void;
   onPreview: () => void;
+  gitOn: () => boolean;
+  docsOn: () => boolean;
+  previewOn: () => boolean;
+  settingsOn: () => boolean;
+  paletteOn: () => boolean;
 }) {
   const win = getCurrentWindow();
   const openPalette = () =>
@@ -24,61 +31,76 @@ export default function TitleBar(props: {
 
   return (
     <header class="titlebar" data-tauri-drag-region>
-      <div class="tb-brand" data-tauri-drag-region>
+      <button class="tb-brand" title="Overview" onClick={() => setOverview(false)}>
         <img class="tb-logo" src={appIcon} alt="" width="18" height="18" />
         <span class="tb-name">Termhaus</span>
-      </div>
+      </button>
 
       <nav class="tb-actions">
+        <Show when={settings.navVisible.overview}>
+          <button
+            class="tb-btn"
+            classList={{ on: appState.overview }}
+            title="Overview / fleet glance (Ctrl+Shift+O)"
+            onClick={() => toggleOverview()}
+          >
+            Overview
+          </button>
+        </Show>
+        <Show when={settings.navVisible.palette}>
+          <button
+            class="tb-btn"
+            classList={{ on: props.paletteOn() }}
+            title="Command palette (Ctrl+Shift+P)"
+            onClick={openPalette}
+          >
+            Palette
+          </button>
+        </Show>
+        <Show when={settings.navVisible.git}>
+          <button
+            class="tb-btn"
+            classList={{ on: props.gitOn() }}
+            title="Source control (Ctrl+Shift+G)"
+            onClick={() => props.onGit()}
+          >
+            Git
+          </button>
+        </Show>
+        <Show when={settings.navVisible.docs}>
+          <button
+            class="tb-btn"
+            classList={{ on: props.docsOn() }}
+            title="Docs reader — mark a passage → send to a pane (Ctrl+Shift+R)"
+            onClick={() => props.onDocs()}
+          >
+            Docs
+          </button>
+        </Show>
+        <Show when={settings.navVisible.preview}>
+          <button
+            class="tb-btn"
+            classList={{ on: props.previewOn() }}
+            title="Preview panel — localhost / docs (Ctrl+Shift+B)"
+            onClick={() => props.onPreview()}
+          >
+            Preview
+          </button>
+        </Show>
         <button
           class="tb-btn"
-          classList={{ on: appState.overview }}
-          title="Overview / fleet glance (Ctrl+Shift+O)"
-          onClick={() => toggleOverview()}
-        >
-          <span class="tb-ico">▦</span> Overview
-        </button>
-        <button
-          class="tb-btn"
-          title="Command palette (Ctrl+Shift+P)"
-          onClick={openPalette}
-        >
-          <span class="tb-ico">⌘</span> Palette
-        </button>
-        <button
-          class="tb-btn"
-          title="Source control (Ctrl+Shift+G)"
-          onClick={() => props.onGit()}
-        >
-          <span class="tb-ico">⎇</span> Git
-        </button>
-        <button
-          class="tb-btn"
-          title="Preview panel — localhost / docs (Ctrl+Shift+B)"
-          onClick={() => props.onPreview()}
-        >
-          <span class="tb-ico">▤</span> Preview
-        </button>
-        <button
-          class="tb-btn"
-          title="Docs reader — mark a passage → send to a pane (Ctrl+Shift+R)"
-          onClick={() => props.onDocs()}
-        >
-          <span class="tb-ico">📖</span> Docs
-        </button>
-        <button
-          class="tb-btn"
+          classList={{ on: props.settingsOn() }}
           title="Settings"
           onClick={() => props.onSettings()}
         >
-          <span class="tb-ico">⚙</span> Settings
+          Settings
         </button>
         <button
-          class="tb-btn"
+          class="tb-btn tb-btn-icon"
           title="Keyboard shortcuts (Ctrl+Shift+?)"
           onClick={() => props.onShortcuts()}
         >
-          <span class="tb-ico">⌨</span>
+          ⌨
         </button>
       </nav>
 

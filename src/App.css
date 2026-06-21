@@ -5,21 +5,60 @@
    To add a theme: add a block here + a matching entry in THEMES (lib/theme.ts). */
 :root {
   color-scheme: dark;
-  --bg: #1a1b1e;
-  --bg-sunken: #161719;
-  --surface: #1f2023;
-  --surface-hover: #26272b;
+
+  /* Typeface tokens (global; not theme-specific). Chrome is sans (IBM Plex Sans → system sans);
+     mono is used for terminals, paths, badges, counts, shortcuts (Plex Mono → the app's stack). */
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", monospace;
+
+  /* ---- Frameless tokens (design source of truth; docs/frameless-redesign-plan.md) ---------- */
+  --canvas: #0e0f12;
+  --surface: #191b20;
+  --surface-dead: #141518;
+  --text-bright: #e7e7ea;
+  --text-mid: #9a9da3;
+  --text-dim: #7b7e84;
+  --text-faint: #5f6268;
+  --accent: #5b8cff;
+  --accent-text: #9bbcff;
+  --accent-rgb: 91, 140, 255;
+  --well: #0f1013;
+  --chip: rgba(12, 13, 16, 0.72);
+  --chip-border: rgba(255, 255, 255, 0.07);
+  --hairline: rgba(255, 255, 255, 0.06);
+  --tint-weak: rgba(255, 255, 255, 0.04);
+  /* accent fill: active workspace / broadcast / selected row */
+  --accent-fill: linear-gradient(90deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.03));
+
+  /* state colours — constant meaning across themes (dark/midnight variant) */
+  --state-working: #5fb389;
+  --state-idle: #6b6e74;
+  --state-needs: #c89244;
+  --state-needs-rgb: 200, 146, 68;
+  --state-dead: #9a6b6b;
+
+  /* shadows + focus ring (dark variant — keeps the glow halo) */
+  --shadow-pane: 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  --ring-focus: 0 0 0 1.5px rgba(var(--accent-rgb), 0.7), 0 0 32px -6px rgba(var(--accent-rgb), 0.42),
+    0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  --shadow-bar: 0 16px 38px -18px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-panel: 0 18px 40px -22px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-overlay: 0 40px 100px -30px rgba(0, 0, 0, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+
+  /* ---- Legacy aliases (migrate per-surface in later phases, then drop) -------------------- */
+  --bg: var(--canvas);
+  --bg-sunken: #141518;
+  --surface-hover: #23262d;
   --surface-active: #2a2d36;
-  --title-bg: #232428;
-  --control: #2f3034;
-  --control-hover: #3a3b40;
+  --title-bg: #15171c;
+  --control: #2a2d34;
+  --control-hover: #353944;
   --border: #2a2b2e;
   --border-strong: #3a3b40;
-  --fg: #e6e6e6;
+  --fg: var(--text-bright);
   --fg-dim: #c8c8c8;
-  --fg-muted: #9a9a9a;
-  --fg-faint: #7a7a7a;
-  --accent: #5b8cff;
+  --fg-muted: var(--text-mid);
+  --fg-faint: var(--text-faint);
   --accent-strong: #3a5bdc;
   --accent-strong-hover: #4a6bec;
   --on-accent: #ffffff;
@@ -30,30 +69,62 @@
   --broadcast-bg: #1d1a14;
   --broadcast-tint: #2e2a1c;
   --on-broadcast: #1a1b1e;
-  --overlay: rgba(31, 32, 35, 0.97);
-  --overlay-strong: rgba(40, 41, 46, 0.95);
-  --scrim: rgba(0, 0, 0, 0.5);
+  --overlay: rgba(25, 27, 32, 0.97);
+  --overlay-strong: rgba(30, 33, 40, 0.95);
+  --scrim: rgba(8, 9, 11, 0.62);
   --gutter-hover: rgba(91, 140, 255, 0.4);
   --shadow: rgba(0, 0, 0, 0.5);
 }
 
 [data-theme='light'] {
   color-scheme: light;
-  --bg: #ffffff;
-  --bg-sunken: #f1f2f4;
-  --surface: #f6f7f9;
+
+  /* ---- Frameless tokens ------------------------------------------------------------------- */
+  --canvas: #eef1f6;
+  --surface: #ffffff;
+  --surface-dead: #f3f4f7;
+  --text-bright: #1c1e22;
+  --text-mid: #5b616c;
+  --text-dim: #767d89;
+  --text-faint: #aab0bb;
+  --accent: #2f6bff;
+  --accent-text: #2f6bff;
+  --accent-rgb: 47, 107, 255;
+  --well: #eef1f6;
+  --chip: rgba(255, 255, 255, 0.82);
+  --chip-border: rgba(0, 0, 0, 0.08);
+  --hairline: rgba(0, 0, 0, 0.07);
+  --tint-weak: rgba(0, 0, 0, 0.04);
+  --accent-fill: linear-gradient(90deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.03));
+
+  /* state colours (light variant) */
+  --state-working: #2e9e6b;
+  --state-idle: #9aa0ab;
+  --state-needs: #c07d1f;
+  --state-needs-rgb: 192, 125, 31;
+  --state-dead: #c0473f;
+
+  /* shadows + focus ring (light variant — NO glow halo, solid accent stroke) */
+  --shadow-pane: 0 14px 30px -20px rgba(30, 40, 70, 0.26), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  --ring-focus: 0 0 0 1.5px var(--accent), 0 14px 30px -20px rgba(30, 40, 70, 0.25);
+  --shadow-bar: 0 14px 30px -20px rgba(30, 40, 70, 0.26), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  --shadow-panel: 0 14px 30px -20px rgba(30, 40, 70, 0.26), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  --shadow-overlay: 0 40px 100px -30px rgba(30, 40, 70, 0.34), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+
+  /* ---- Legacy aliases --------------------------------------------------------------------- */
+  --bg: var(--canvas);
+  --bg-sunken: #e7eaf0;
   --surface-hover: #e9ebef;
   --surface-active: #e2e8ff;
-  --title-bg: #eef0f3;
+  --title-bg: #e7eaf0;
   --control: #e9ebef;
   --control-hover: #dde0e6;
   --border: #d7dae0;
   --border-strong: #c2c6cf;
-  --fg: #1c1e22;
+  --fg: var(--text-bright);
   --fg-dim: #3c4048;
-  --fg-muted: #6b7079;
-  --fg-faint: #969ba3;
-  --accent: #2f6bff;
+  --fg-muted: var(--text-mid);
+  --fg-faint: var(--text-faint);
   --accent-strong: #2f6bff;
   --accent-strong-hover: #1e57e6;
   --on-accent: #ffffff;
@@ -66,28 +137,61 @@
   --on-broadcast: #ffffff;
   --overlay: rgba(255, 255, 255, 0.98);
   --overlay-strong: rgba(246, 247, 249, 0.98);
-  --scrim: rgba(0, 0, 0, 0.35);
+  --scrim: rgba(40, 46, 60, 0.34);
   --gutter-hover: rgba(47, 107, 255, 0.35);
   --shadow: rgba(0, 0, 0, 0.18);
 }
 
 [data-theme='midnight'] {
   color-scheme: dark;
-  --bg: #0f1117;
-  --bg-sunken: #0b0d12;
-  --surface: #161a23;
+
+  /* ---- Frameless tokens ------------------------------------------------------------------- */
+  --canvas: #0b0d14;
+  --surface: #141826;
+  --surface-dead: #10131d;
+  --text-bright: #e3e8f0;
+  --text-mid: #9aa3b8;
+  --text-dim: #79839a;
+  --text-faint: #586273;
+  --accent: #6ea8fe;
+  --accent-text: #a9ccff;
+  --accent-rgb: 110, 168, 254;
+  --well: #0b0d14;
+  --chip: rgba(8, 10, 16, 0.72);
+  --chip-border: rgba(255, 255, 255, 0.08);
+  --hairline: rgba(255, 255, 255, 0.06);
+  --tint-weak: rgba(255, 255, 255, 0.05);
+  --accent-fill: linear-gradient(90deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.03));
+
+  /* state colours (dark variant) */
+  --state-working: #5fb389;
+  --state-idle: #6b6e74;
+  --state-needs: #c89244;
+  --state-needs-rgb: 200, 146, 68;
+  --state-dead: #9a6b6b;
+
+  /* shadows + focus ring (dark variant — glow halo) */
+  --shadow-pane: 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  --ring-focus: 0 0 0 1.5px rgba(var(--accent-rgb), 0.7), 0 0 32px -6px rgba(var(--accent-rgb), 0.42),
+    0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  --shadow-bar: 0 16px 38px -18px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-panel: 0 18px 40px -22px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-overlay: 0 40px 100px -30px rgba(0, 0, 0, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+
+  /* ---- Legacy aliases --------------------------------------------------------------------- */
+  --bg: var(--canvas);
+  --bg-sunken: #10131d;
   --surface-hover: #1e2330;
   --surface-active: #243049;
-  --title-bg: #141925;
+  --title-bg: #0f1320;
   --control: #1f2533;
   --control-hover: #2a3242;
   --border: #1c2230;
   --border-strong: #2d3548;
-  --fg: #e3e8f0;
+  --fg: var(--text-bright);
   --fg-dim: #b9c2d0;
-  --fg-muted: #8590a3;
-  --fg-faint: #5d6678;
-  --accent: #6ea8fe;
+  --fg-muted: var(--text-mid);
+  --fg-faint: var(--text-faint);
   --accent-strong: #3d6fe0;
   --accent-strong-hover: #5180f0;
   --on-accent: #ffffff;
@@ -98,30 +202,62 @@
   --broadcast-bg: #1a160e;
   --broadcast-tint: #2a2316;
   --on-broadcast: #0f1117;
-  --overlay: rgba(22, 26, 35, 0.97);
-  --overlay-strong: rgba(15, 17, 23, 0.96);
-  --scrim: rgba(0, 0, 0, 0.6);
+  --overlay: rgba(20, 24, 38, 0.97);
+  --overlay-strong: rgba(11, 13, 20, 0.96);
+  --scrim: rgba(8, 9, 11, 0.62);
   --gutter-hover: rgba(110, 168, 254, 0.4);
   --shadow: rgba(0, 0, 0, 0.6);
 }
 
 [data-theme='paper'] {
   color-scheme: light;
-  --bg: #faf7f0;
-  --bg-sunken: #efe9dd;
-  --surface: #f4efe6;
+
+  /* ---- Frameless tokens ------------------------------------------------------------------- */
+  --canvas: #ece4d4;
+  --surface: #faf7f0;
+  --surface-dead: #f0ebe0;
+  --text-bright: #2b2620;
+  --text-mid: #6b6253;
+  --text-dim: #857b6b;
+  --text-faint: #b0a892;
+  --accent: #5a55d6;
+  --accent-text: #5a55d6;
+  --accent-rgb: 90, 85, 214;
+  --well: #efe9dc;
+  --chip: rgba(250, 247, 240, 0.85);
+  --chip-border: rgba(43, 38, 32, 0.12);
+  --hairline: rgba(43, 38, 32, 0.1);
+  --tint-weak: rgba(43, 38, 32, 0.05);
+  --accent-fill: linear-gradient(90deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.03));
+
+  /* state colours (paper variant) */
+  --state-working: #3f8f5f;
+  --state-idle: #b0a892;
+  --state-needs: #b07d2e;
+  --state-needs-rgb: 176, 125, 46;
+  --state-dead: #b25444;
+
+  /* shadows + focus ring (light variant — NO glow halo, solid accent stroke) */
+  --shadow-pane: 0 14px 30px -20px rgba(60, 50, 30, 0.26), inset 0 0 0 1px rgba(43, 38, 32, 0.06);
+  --ring-focus: 0 0 0 1.5px var(--accent), 0 14px 30px -20px rgba(60, 50, 30, 0.25);
+  --shadow-bar: 0 14px 30px -20px rgba(60, 50, 30, 0.26), inset 0 0 0 1px rgba(43, 38, 32, 0.06);
+  --shadow-panel: 0 14px 30px -20px rgba(60, 50, 30, 0.26), inset 0 0 0 1px rgba(43, 38, 32, 0.06);
+  --shadow-overlay: 0 40px 100px -30px rgba(60, 50, 30, 0.34), inset 0 0 0 1px rgba(43, 38, 32, 0.06);
+
+  /* ---- Legacy aliases --------------------------------------------------------------------- */
+  --bg: var(--canvas);
+  --bg-sunken: #e4dcca;
   --surface-hover: #e9e1d2;
   --surface-active: #e8e0ee;
-  --title-bg: #eee7d9;
+  --title-bg: #e4dcca;
   --control: #e8e1d3;
   --control-hover: #dbd2c0;
   --border: #ddd4c3;
   --border-strong: #c7bba6;
-  --fg: #2b2620;
+  --fg: var(--text-bright);
   --fg-dim: #4a4338;
-  --fg-muted: #756b5c;
-  --fg-faint: #9c9384;
-  --accent: #5a55d6;
+  --fg-muted: var(--text-mid);
+  --fg-faint: var(--text-faint);
   --accent-strong: #5a55d6;
   --accent-strong-hover: #4842c0;
   --on-accent: #ffffff;
@@ -134,7 +270,7 @@
   --on-broadcast: #ffffff;
   --overlay: rgba(250, 247, 240, 0.98);
   --overlay-strong: rgba(244, 239, 230, 0.98);
-  --scrim: rgba(0, 0, 0, 0.3);
+  --scrim: rgba(40, 46, 60, 0.34);
   --gutter-hover: rgba(90, 85, 214, 0.3);
   --shadow: rgba(60, 50, 30, 0.18);
 }
@@ -188,13 +324,14 @@ body,
 }
 
 /* ---- Custom title bar (replaces the native window frame) ---- */
+/* ---- Top bar (Frameless): transparent 50px bar over the canvas ---- */
 .titlebar {
   display: flex;
-  align-items: stretch;
-  flex: 0 0 36px;
-  height: 36px;
-  background: var(--bg-sunken);
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  flex: 0 0 50px;
+  height: 50px;
+  padding: 0 18px;
+  background: transparent;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -202,60 +339,58 @@ body,
 .tb-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 10px;
+  gap: 9px;
+  padding: 0;
+  margin-right: 28px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
 
+/* App mark — the real app icon. */
 .tb-logo {
   display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
 
 .tb-name {
-  font:
-    600 12px ui-monospace,
-    monospace;
-  color: var(--fg);
-  letter-spacing: 0.02em;
+  font: 600 14.5px var(--font-ui, "IBM Plex Sans", system-ui, sans-serif);
+  color: var(--text-bright);
+  letter-spacing: -0.01em;
 }
 
 .tb-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 24px;
 }
 
 .tb-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 8px;
+  height: 30px;
+  padding: 0;
   border: none;
-  border-radius: 5px;
   background: transparent;
-  color: var(--fg-dim);
-  font:
-    12px ui-monospace,
-    monospace;
+  color: var(--text-dim);
+  font: 13px var(--font-ui, "IBM Plex Sans", system-ui, sans-serif);
   cursor: pointer;
   white-space: nowrap;
+  transition: color 0.12s ease;
 }
 
 .tb-btn:hover {
-  background: var(--surface-hover);
-  color: var(--fg);
+  color: #c9ccd1;
 }
 
 .tb-btn.on {
-  background: var(--surface-active);
-  color: var(--fg);
+  color: var(--text-bright);
 }
 
-/* The leading glyph reads larger than the label for a clearer menu icon. */
-.tb-ico {
-  font-size: 16px;
-  line-height: 1;
-  margin-right: 3px;
+.tb-btn-icon {
+  font-size: 15px;
 }
 
 /* The flexible drag handle — most of the bar is grabbable to move the window. */
@@ -265,45 +400,60 @@ body,
 
 .tb-window {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 4px;
 }
 
 .tb-wbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
+  width: 30px;
+  height: 30px;
   border: none;
+  border-radius: 8px;
   background: transparent;
-  color: var(--fg-dim);
+  color: var(--text-faint);
   font:
     13px ui-monospace,
     monospace;
   cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
 }
 
 .tb-wbtn:hover {
-  background: var(--surface-hover);
-  color: var(--fg);
+  background: var(--tint-weak);
+  color: var(--text-mid);
 }
 
 .tb-wbtn.close:hover {
-  background: #e81123;
+  background: var(--danger);
   color: #fff;
 }
 
+/* The outer margin lives HERE (not on stage-grid): the grid's .ws-layer is position:absolute
+   inset:0, so it fills stage-grid's padding box and would swallow any horizontal padding there.
+   Padding the stage instead insets BOTH the grid and the broadcast bar by the same amount, so
+   the bar's edges line up with the card columns. */
 .stage {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
+  padding: 0 9px;
+  box-sizing: border-box;
 }
 
-/* Holds the workspace layers; the broadcast bar docks below it. */
+/* Holds the workspace layers; the broadcast bar docks below it. No horizontal padding (the
+   .ws-layer would cover it); per-card gutters + the outer inset come from .leaf-box (7px). */
 .stage-grid {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  padding: 2px 0 0;
+  box-sizing: border-box;
 }
 
 /* Each workspace renders into its own filling layer; only the active is shown. */
@@ -314,20 +464,20 @@ body,
 
 /* ---- Workspace rail ---- */
 /* width/flex-basis are set inline from settings.railWidth; drag .rail-resizer to change it. */
+/* ---- Workspace rail (Frameless): slim, borderless, over the canvas ---- */
 .rail {
   position: relative;
   display: flex;
   flex-direction: column;
   flex-grow: 0;
   flex-shrink: 0;
-  background: var(--bg-sunken);
-  border-right: 1px solid var(--border);
-  padding: 6px;
+  background: transparent;
+  padding: 4px 10px 10px;
   box-sizing: border-box;
-  gap: 6px;
+  gap: 8px;
 }
 
-/* Invisible grab strip straddling the rail's right border. */
+/* Invisible grab strip straddling the rail's right edge. */
 .rail-resizer {
   position: absolute;
   top: 0;
@@ -339,29 +489,25 @@ body,
 }
 
 .rail-resizer:hover {
-  background: var(--accent, var(--border));
-  opacity: 0.5;
+  background: var(--accent);
+  opacity: 0.4;
 }
 
-/* Rail header: section title + a New-workspace button. */
+/* Rail header: section label + a New-workspace button. */
 .rail-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 2px 4px 8px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--border);
+  padding: 6px 6px 4px;
   flex: 0 0 auto;
 }
 
 .rail-title {
-  font:
-    600 11px ui-monospace,
-    monospace;
-  letter-spacing: 0.06em;
+  font: 500 10.5px var(--font-mono);
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--fg-muted);
+  color: var(--text-faint);
 }
 
 .rail-add {
@@ -370,24 +516,27 @@ body,
   justify-content: center;
   width: 24px;
   height: 24px;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
-  color: var(--fg-dim);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  color: var(--text-mid);
+  background: var(--tint-weak);
+  border: none;
+  border-radius: 7px;
   cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .rail-add:hover {
-  background: var(--surface-hover);
-  color: var(--fg);
+  background: var(--surface);
+  color: var(--text-bright);
 }
 
 .rail-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   overflow-y: auto;
   flex: 1 1 auto;
 }
@@ -395,47 +544,50 @@ body,
 .rail-item {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 9px 11px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  font:
-    12px ui-monospace,
-    monospace;
-  color: var(--fg-dim);
-  background: var(--surface);
+  gap: 11px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font: 500 13.5px var(--font-ui);
+  color: var(--text-mid);
+  background: transparent;
   cursor: pointer;
   user-select: none;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .rail-item:hover {
-  background: var(--surface-hover);
+  background: var(--tint-weak);
 }
 
 .rail-item.active {
-  background: var(--surface-active);
-  color: var(--fg);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  background: var(--accent-fill);
+  color: var(--text-bright);
 }
 
-/* A hidden workspace with unseen output / a bell: a soft ring around the row. Kept subtle —
-   thin, semi-transparent, no outer glow — so it reads as a hint, not an alarm. */
-.rail-item.attention {
-  border-color: rgba(217, 164, 65, 0.4);
-}
-
-/* Per-workspace colored icon chip (inline color/background/border-color set from hue). */
-.rail-icon {
+/* Live state dot leading each row (mirrors the pane chip dots). */
+.rail-dot {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  font-size: 12px;
-  line-height: 1;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state-idle);
+}
+.rail-dot[data-state='working'] {
+  background: var(--state-working);
+}
+.rail-dot[data-state='needs'] {
+  background: var(--state-needs);
+}
+/* The active row's dot glows (dark themes only). */
+.rail-item.active .rail-dot[data-state='working'] {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-working) 22%, transparent);
+}
+[data-theme='light'] .rail-item.active .rail-dot,
+[data-theme='paper'] .rail-item.active .rail-dot {
+  box-shadow: none;
 }
 
 .rail-name {
@@ -450,74 +602,239 @@ body,
   flex: 1 1 auto;
   min-width: 0;
   font: inherit;
-  color: var(--fg);
-  background: var(--bg-sunken);
+  color: var(--text-bright);
+  background: var(--well);
   border: 1px solid var(--accent);
-  border-radius: 4px;
-  padding: 1px 4px;
+  border-radius: 7px;
+  padding: 2px 6px;
 }
 
-/* Attention dot on a hidden workspace: a pane there has unseen output or rang the bell. */
-.rail-attn {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #d9a441;
-}
-
-/* Live terminal count — a circle for single digits, growing to a pill for multi-digit counts. */
+/* Live terminal count — mono, accent on the active row. */
 .rail-badge {
   flex: 0 0 auto;
+  font: 500 11px var(--font-mono);
+  color: var(--text-faint);
+}
+
+.rail-item.active .rail-badge {
+  color: var(--accent-text);
+}
+
+/* Inline row controls (duplicate / close) — fade in on row hover. */
+.wsact {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.rail-item:hover .wsact {
+  opacity: 1;
+}
+
+.rail-close,
+.rail-dup {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-sizing: border-box;
-  min-width: 18px;
+  width: 18px;
   height: 18px;
-  padding: 0 5px;
-  font-size: 10px;
-  color: var(--fg-muted);
-  background: var(--control);
-  border-radius: 999px;
-}
-
-.rail-close {
-  color: var(--fg-faint);
+  color: var(--text-faint);
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 0 2px;
-  font-size: 11px;
+  border-radius: 5px;
+  font-size: 12px;
+  transition:
+    color 0.1s ease,
+    background 0.1s ease;
 }
 
 .rail-close:hover {
   color: var(--danger);
-}
-
-.rail-dup {
-  color: var(--fg-faint);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0 2px;
-  font-size: 12px;
+  background: var(--tint-weak);
 }
 
 .rail-dup:hover {
   color: var(--accent);
+  background: var(--tint-weak);
+}
+
+/* Dashed "New" row at the foot of the list. */
+.rail-new {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 40px;
+  margin-top: 4px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--tint-weak);
+  border: 1px dashed var(--hairline);
+  color: var(--text-dim);
+  font: 500 13px var(--font-ui);
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.rail-new:hover {
+  color: var(--text-bright);
+  border-color: var(--text-faint);
+}
+
+.rail-new-plus {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Footer: avatar + username, pinned to the bottom. */
+.rail-footer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px 4px;
+  margin-top: auto;
+  flex: 0 0 auto;
+}
+
+.rail-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  font: 600 11px var(--font-mono);
+}
+
+.rail-user {
+  font: 500 12px var(--font-mono);
+  color: var(--text-faint);
+}
+
+/* ---- Empty / first-run workspace state (Frameless "Scratch") ---- */
+.empty-ws {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-ws-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 360px;
+  gap: 4px;
+}
+
+.empty-ws-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  border: 1.5px dashed var(--hairline);
+  color: var(--text-faint);
+}
+
+.empty-ws-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 3px;
+  width: 24px;
+  height: 24px;
+}
+.empty-ws-grid i {
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.empty-ws-title {
+  margin: 0;
+  font: 600 18px var(--font-ui);
+  color: var(--text-bright);
+}
+
+.empty-ws-help {
+  margin: 0 0 14px;
+  font: 13px var(--font-ui);
+  color: var(--text-mid);
+  line-height: 1.5;
+}
+
+.empty-ws-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.empty-ws-primary {
+  font: 500 13px var(--font-ui);
+  color: var(--on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: 11px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.empty-ws-primary:hover {
+  background: var(--accent-strong-hover);
+}
+
+.empty-ws-secondary {
+  font: 500 13px var(--font-ui);
+  color: var(--text-mid);
+  background: transparent;
+  border: none;
+  border-radius: 11px;
+  padding: 9px 16px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.empty-ws-secondary:hover {
+  color: var(--text-bright);
+  box-shadow: inset 0 0 0 1px var(--text-faint);
+}
+
+.empty-ws-hint {
+  margin-top: 12px;
+  font: 11.5px var(--font-mono);
+  color: var(--text-faint);
 }
 
 /* ---- Right-side preview panel (docked browser view) ---- */
 /* width/flex-basis are set inline from settings.previewWidth; drag .preview-resizer to change it. */
+/* Preview docks as a floating card too (width is inline from settings.previewWidth, resizable). */
 .preview-panel {
   position: relative;
   display: flex;
   flex-direction: column;
   flex-grow: 0;
   flex-shrink: 0;
-  background: var(--bg-sunken);
-  border-left: 1px solid var(--border);
+  /* Match the Source Control panel: no left margin (stage padding + leaf-box give the ~16px
+     gutter), top 8px, bottom 14px to line up with the broadcast bar. */
+  margin: 8px 16px 14px 0;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
   box-sizing: border-box;
   min-width: 0;
 }
@@ -531,49 +848,57 @@ body,
   z-index: 5;
 }
 .preview-resizer:hover {
-  background: var(--accent, var(--border));
-  opacity: 0.5;
+  background: var(--accent);
+  opacity: 0.4;
 }
 .preview-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 6px;
-  border-bottom: 1px solid var(--border);
+  gap: 6px;
+  height: 46px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--hairline);
   flex: 0 0 auto;
 }
 .preview-url {
   flex: 1 1 auto;
   min-width: 0;
-  font: inherit;
-  font-size: 12px;
-  color: var(--fg);
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 4px 8px;
+  font: 12px var(--font-mono);
+  color: var(--text-bright);
+  background: var(--well);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
 }
 .preview-url:focus {
   outline: none;
-  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .preview-btn {
   flex: 0 0 auto;
-  font: inherit;
-  color: var(--fg-dim);
-  background: var(--control);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font: 13px var(--font-mono);
+  color: var(--text-mid);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
   line-height: 1;
+  transition:
+    color 0.1s ease,
+    background 0.1s ease;
 }
 .preview-btn:hover {
-  background: var(--control-hover);
-  color: var(--fg);
+  background: var(--tint-weak);
+  color: var(--text-bright);
 }
 .preview-btn.close:hover {
   color: var(--danger);
+  background: var(--tint-weak);
 }
 .preview-frame {
   flex: 1 1 auto;
@@ -581,6 +906,19 @@ body,
   border: 0;
   background: #fff;
   min-height: 0;
+}
+
+/* Side-panel header (Git / Docs): 46px, hairline divider. The shared .settings-title is the big
+   24px page title on the Settings surface — scope it back down for the panel headers. */
+.side-panel .settings-head {
+  height: 46px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+.side-panel .settings-title {
+  font: 600 14px var(--font-ui);
+  letter-spacing: 0;
+  color: var(--accent-text);
 }
 
 /* ---- Torn-off pane window + its main-grid placeholder ---- */
@@ -630,59 +968,139 @@ body,
 }
 
 /* ---- Broadcast bar ---- */
+/* ---- Broadcast bar (Frameless): a detached floating card in the stage's bottom margin ---- */
 .bcast {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   flex: 0 0 auto;
-  height: 38px;
-  padding: 0 10px;
-  background: var(--bg-sunken);
-  border-top: 1px solid var(--border);
-  font:
-    12px ui-monospace,
-    monospace;
+  height: 54px;
+  /* 7px horizontal margin = the leaf-box gutter, so the bar's edges line up with the card columns
+     (the .stage padding supplies the shared outer inset). The 7px top adds to the bottom cards'
+     7px leaf-box for a ~14px grid→bar gap (matching the inter-card gutter rhythm). */
+  margin: 7px 7px 14px;
+  padding: 0 8px 0 16px;
+  background: var(--surface);
+  border-radius: 15px;
+  box-shadow: var(--shadow-bar);
+  font: 13px var(--font-ui);
 }
 
 .bcast.selecting {
-  background: var(--broadcast-bg);
-  border-top-color: var(--broadcast);
+  box-shadow: 0 0 0 1.5px var(--broadcast), var(--shadow-bar);
 }
 
+/* On/off toggle pill (32×18) — armed = accent, disarmed = inert track. */
+.bcast-power {
+  flex: 0 0 auto;
+  position: relative;
+  width: 32px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--tint-weak);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.bcast-power.on {
+  background: var(--accent);
+  box-shadow: none;
+}
+.bcast-power-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+.bcast-power.on .bcast-power-knob {
+  transform: translateX(14px);
+  background: #fff;
+}
+
+/* Toggle + label cluster — own 9px gap (the bar's 14px gap separates the bigger groups). */
+.bcast-lead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
 .bcast-label {
-  color: var(--fg-muted);
+  font: 13px var(--font-ui);
+  color: var(--text-mid);
   white-space: nowrap;
 }
-
 .bcast.selecting .bcast-label {
   color: var(--broadcast-bright);
+}
+.bcast.disarmed .bcast-label {
+  color: var(--text-faint);
+}
+
+/* Hairline divider after the label. */
+.bcast-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 24px;
+  background: var(--chip-border);
+}
+
+/* Snippet / group launchers — compact ghost icon buttons. */
+.bcast .bcast-snip-btn {
+  padding: 6px 7px;
+  font-size: 12px;
+  color: var(--text-faint);
+  background: transparent;
+}
+.bcast .bcast-snip-btn:hover {
+  color: var(--text-bright);
+  background: var(--tint-weak);
+}
+/* The two launchers sit tight together, not a full bar-gap apart. */
+.bcast-snip + .bcast-snip {
+  margin-left: -6px;
+}
+
+.bcast.disarmed .bcast-input {
+  opacity: 0.45;
 }
 
 .bcast-input {
   flex: 1 1 auto;
   min-width: 0;
-  font: inherit;
-  color: var(--fg);
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 5px 8px;
+  font: 12.5px var(--font-mono);
+  color: var(--text-bright);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 5px 0;
 }
-
+.bcast-input::placeholder {
+  color: var(--text-faint);
+}
+.bcast-input::placeholder {
+  color: var(--text-faint);
+}
 .bcast-input:focus {
   outline: none;
-  border-color: var(--accent);
 }
 
 /* Subset-by-name filter, shown in Targets select-mode. */
 .bcast-pattern {
   flex: 0 0 auto;
   width: 12ch;
-  font: inherit;
-  color: var(--fg);
-  background: var(--bg);
+  font: 13px var(--font-mono);
+  color: var(--text-bright);
+  background: var(--well);
   border: 1px solid var(--broadcast);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 5px 8px;
 }
 .bcast-pattern:focus {
@@ -697,16 +1115,15 @@ body,
 }
 .bcast-snip-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 10px);
   left: 0;
   width: 280px;
   max-height: 320px;
   overflow-y: auto;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px var(--shadow);
-  padding: 4px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel);
+  padding: 5px;
   z-index: 40;
 }
 .bcast-snip-save {
@@ -772,18 +1189,22 @@ body,
 }
 
 .bcast button {
-  font: inherit;
-  color: var(--fg);
-  background: var(--control);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 5px 10px;
+  font: 13px var(--font-ui);
+  color: var(--text-mid);
+  background: var(--tint-weak);
+  border: none;
+  border-radius: 10px;
+  padding: 9px 14px;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .bcast button:hover {
-  background: var(--control-hover);
+  background: var(--surface-dead);
+  color: var(--text-bright);
 }
 
 .bcast button:disabled {
@@ -791,16 +1212,112 @@ body,
   cursor: default;
 }
 
+/* Targets scope dropdown (All live / per-agent group / current pane), opens above the chip. */
+.bcast-scope-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+.bcast-scope-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  width: 236px;
+  padding: 5px;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel);
+  z-index: 40;
+}
+.bcast-scope-head {
+  padding: 8px 10px 6px;
+  font: 10px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.bcast-scope-row {
+  display: flex !important;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 10px !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--text-mid) !important;
+  font: 13px var(--font-ui) !important;
+  text-align: left;
+}
+.bcast-scope-ic {
+  flex: 0 0 auto;
+  width: 14px;
+  color: var(--text-mid);
+}
+.bcast-scope-ic.accent {
+  color: var(--accent-text);
+}
+.bcast-scope-row .bcast-scope-name {
+  flex: 1 1 auto;
+}
+.bcast-scope-row:hover {
+  background: var(--tint-weak) !important;
+  color: var(--text-bright) !important;
+}
+.bcast-scope-row.on {
+  background: var(--accent-fill) !important;
+  color: var(--text-bright) !important;
+}
+.bcast-scope-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bcast-scope-count {
+  flex: 0 0 auto;
+  font: 11px var(--font-mono);
+  color: var(--text-faint);
+}
+.bcast-scope-row.on .bcast-scope-count {
+  color: var(--accent-text);
+}
+.bcast-scope-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--hairline);
+}
+
+/* Targets chip — accent-text pill (the scope selector). */
+/* Targets chip — exact prototype values (mono 11.5px, gap 7px, padding 6px 13px). Higher
+   specificity than `.bcast button` (0,1,1) so the font + accent tint actually apply. */
+.bcast button.bcast-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 11.5px var(--font-mono);
+  color: var(--accent-text);
+  background: rgba(var(--accent-rgb), 0.14);
+  border-radius: 999px;
+  padding: 6px 13px;
+}
+.bcast button.bcast-scope:hover {
+  background: rgba(var(--accent-rgb), 0.2);
+  color: var(--accent-text);
+}
+.bcast-caret {
+  opacity: 0.7;
+}
 .bcast-scope.on {
-  background: var(--broadcast);
-  border-color: var(--broadcast);
-  color: var(--on-broadcast);
+  color: var(--broadcast-bright);
+  background: color-mix(in srgb, var(--broadcast) 18%, transparent);
 }
 
 .bcast-send.primary {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-  color: var(--on-accent);
+  font: 13px var(--font-ui);
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 11px !important;
+  padding: 10px 22px;
 }
 
 .bcast-send.primary:hover:not(:disabled) {
@@ -810,11 +1327,10 @@ body,
 /* Needs-input triage: reply once to every pane flagging for input. Amber, matching the
    "needs you" attention border so the gesture reads as "answer the lit panes". */
 .bcast-flagged {
-  color: #1a1505 !important;
-  background: #e0b85a !important;
-  border-color: #e0b85a !important;
+  color: var(--on-broadcast) !important;
+  background: var(--state-needs) !important;
   font-weight: 600;
-  animation: th-pulse 1.4s ease-in-out infinite;
+  animation: th-dot-pulse 1.4s ease-in-out infinite;
 }
 .bcast-flagged:hover:not(:disabled) {
   background: var(--broadcast-bright) !important;
@@ -824,8 +1340,9 @@ body,
 }
 
 .bcast-reach {
-  color: var(--fg-faint);
+  color: var(--text-faint);
   white-space: nowrap;
+  font: 11.5px var(--font-mono);
 }
 
 .bcast-reach.subset {
@@ -833,8 +1350,9 @@ body,
 }
 
 .bcast-flash {
-  color: var(--success);
+  color: var(--state-working);
   white-space: nowrap;
+  font: 11.5px var(--font-mono);
 }
 
 /* ---- Per-pane broadcast targeting ---- */
@@ -843,92 +1361,80 @@ body,
     12px ui-monospace,
     monospace;
   line-height: 1;
-  color: var(--fg-muted);
+  color: var(--text-mid);
   background: transparent;
   border: none;
-  border-radius: 3px;
-  padding: 2px 4px;
-  margin-right: 4px;
+  border-radius: 999px;
+  padding: 0;
+  margin-right: 1px;
   cursor: pointer;
 }
 
 .bcast-toggle.on {
-  color: var(--broadcast-bright);
+  color: var(--accent-text);
 }
 
-/* "Needs you" attention border — a command just finished in an unfocused pane, or a process
-   inside it called `th attention`. Amber, matching the bell dot. Cleared when you focus the
-   pane. Placed before .pane.bcast-target / .pane.focused so those borders win when they apply. */
-.pane.attention {
-  border-color: #e0b85a;
-  box-shadow:
-    inset 0 0 0 1px #e0b85a,
-    0 0 0 1px color-mix(in srgb, #e0b85a 45%, transparent);
-}
-
-.pane.attention .pane-title {
-  box-shadow: inset 2px 0 0 #e0b85a;
-}
-
+/* "Needs you" attention is handled by .pane[data-state='needs'] (amber ring + chip border); the
+   focused ring (later in source order) wins when the pane is focused. While selecting broadcast
+   targets, a chosen pane rings in the broadcast amber. */
 .pane.bcast-target {
-  border-color: var(--broadcast);
-  box-shadow: inset 0 0 0 1px var(--broadcast);
+  box-shadow: 0 0 0 1.5px var(--broadcast), var(--shadow-pane);
 }
 
-.pane.bcast-target .pane-title {
-  background: var(--broadcast-tint);
-}
-
-/* ---- New-workspace wizard ---- */
+/* ---- New-workspace launcher (Frameless overlay card) ---- */
 .wizard-backdrop {
   position: fixed;
   inset: 0;
   background: var(--scrim);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
+  animation: th-scrim-in 0.14s ease-out;
 }
 
 .wizard {
-  width: 540px;
-  max-width: 90vw;
+  width: 600px;
+  max-width: 92vw;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  color: var(--fg);
-  font:
-    13px ui-monospace,
-    monospace;
-  box-shadow: 0 12px 40px var(--shadow);
+  border-radius: 18px;
+  color: var(--text-bright);
+  font: 13px var(--font-ui);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+  animation: th-ov-in 0.16s ease-out;
 }
 
 .wizard-steps {
   display: flex;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  color: var(--fg-faint);
+  gap: 18px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-faint);
+  font: 500 12px var(--font-mono);
+  letter-spacing: 0.04em;
 }
 
 .wizard-steps .on {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
 .wizard-body {
-  padding: 16px;
+  padding: 20px 22px;
   min-height: 160px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .wizard-label {
   display: block;
-  margin-bottom: 7px;
-  color: var(--fg-muted);
-  font-size: 11px;
+  margin-bottom: 8px;
+  color: var(--text-mid);
+  font: 12.5px var(--font-ui);
 }
 
 .wizard-row {
@@ -939,48 +1445,74 @@ body,
 
 .wizard-input {
   flex: 1 1 auto;
-  font: inherit;
-  color: var(--fg);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 6px 8px;
+  height: 38px;
+  box-sizing: border-box;
+  font: 13.5px var(--font-mono);
+  color: var(--text-bright);
+  background: var(--well);
+  border: none;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  padding: 0 13px;
+}
+.wizard-input::placeholder {
+  color: var(--text-faint);
+}
+.wizard-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .wizard button {
-  font: inherit;
-  color: var(--fg);
-  background: var(--control);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 6px 10px;
+  font: 13px var(--font-ui);
+  color: var(--text-mid);
+  background: var(--tint-weak);
+  border: none;
+  border-radius: 9px;
+  padding: 8px 12px;
   cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .wizard button:hover {
-  background: var(--control-hover);
+  background: var(--surface-dead);
+  color: var(--text-bright);
 }
 
 .wizard button.primary {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  background: var(--accent);
+  border: none;
   color: var(--on-accent);
+  border-radius: 11px;
+}
+.wizard button.primary:hover {
+  background: var(--accent-strong-hover);
 }
 
 .wizard button.primary:hover {
   background: var(--accent-strong-hover);
 }
 
+/* Recents — wrapped pills (mono, well bg) directly under the folder field, per the prototype. */
 .wizard-recents {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
 }
 
-.wizard-recent {
-  display: flex !important;
-  justify-content: space-between;
-  text-align: left;
+.wizard .wizard-recent {
+  font: 11px var(--font-mono);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  border-radius: 7px;
+  padding: 5px 10px;
+}
+.wizard .wizard-recent:hover {
+  color: var(--text-bright);
 }
 
 .muted {
@@ -990,19 +1522,52 @@ body,
 
 /* ---- Single-page launcher (two columns: where | what) ---- */
 .wizard-wide {
-  width: 820px;
+  width: 880px;
 }
 
 .wizard-head {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--hairline);
 }
 
 .wizard-head strong {
-  color: var(--fg);
+  font: 600 16px var(--font-ui);
+  letter-spacing: -0.01em;
+  color: var(--text-bright);
+}
+.wizard-head .muted {
+  font: 12px var(--font-ui);
+  color: var(--text-mid);
+}
+.wizard .wizard-x {
+  margin-left: auto;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  cursor: pointer;
+}
+.wizard .wizard-x:hover {
+  color: var(--text-bright);
+}
+
+/* Layout row header — label on the left, live pane-count on the right. */
+.wiz-row-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.wiz-row-head .wizard-label {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+.wiz-panes-n {
+  font: 12px var(--font-mono);
+  color: var(--accent-text);
 }
 
 .wiz-cols {
@@ -1014,26 +1579,37 @@ body,
 .wiz-right {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  max-height: 64vh;
+  gap: 20px;
+  padding: 22px 24px;
+  max-height: 70vh;
   overflow-y: auto;
+  /* border-box so the 380px column width INCLUDES its padding + border (matching the prototype's
+     box-sizing reset) — otherwise the column renders ~49px too wide. */
+  box-sizing: border-box;
 }
 
 .wiz-left {
-  flex: 0 0 290px;
-  border-right: 1px solid var(--border);
+  flex: 0 0 380px;
+  border-right: 1px solid var(--hairline);
 }
 
 .wiz-right {
   flex: 1 1 auto;
   min-width: 0;
+  gap: 18px;
+}
+
+/* Column section header (WHERE / WHAT RUNS). */
+.wiz-section {
+  font: 10.5px var(--font-mono);
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
 }
 
 .wiz-opts {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-top: auto;
   padding-top: 4px;
 }
@@ -1041,21 +1617,74 @@ body,
 .wiz-opt {
   display: flex;
   align-items: center;
-  gap: 7px;
-  color: var(--fg-muted);
-  font-size: 11px;
+  gap: 9px;
+  color: var(--text-mid);
+  font: 12.5px var(--font-ui);
   cursor: pointer;
 }
 
 .wiz-opt input {
-  accent-color: var(--accent-strong);
+  accent-color: var(--accent);
 }
 
 /* Layout tiles — each tile renders a mini diagram of the real grid shape. */
 .wiz-ltiles {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Inline custom-count slider, sitting after the layout tiles. */
+.wiz-slider-inline {
+  flex: 0 0 110px;
+  margin-left: 4px;
+  accent-color: var(--accent);
+}
+
+/* Fleet "fill every pane with [agent ▾] [Apply to all]" row. */
+.wiz-fleet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--well);
+  border-radius: 11px;
+  padding: 12px 14px;
+}
+.wiz-fleet-label {
+  flex: 0 0 auto;
+  font: 13px var(--font-ui);
+  color: var(--text-bright);
+}
+.wizard .wiz-fleet-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 200px;
+  appearance: none;
+  -webkit-appearance: none;
+  font: 12.5px var(--font-mono);
+  color: var(--text-bright);
+  background: var(--surface)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%239a9da3' stroke-width='1.4'/></svg>")
+    no-repeat right 11px center;
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  border-radius: 8px;
+  padding: 6px 28px 6px 12px;
+  cursor: pointer;
+}
+.wizard .wiz-fleet-apply {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+  font: 500 12.5px var(--font-ui);
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  padding: 7px 15px;
+}
+.wizard .wiz-fleet-apply:hover {
+  background: var(--accent-strong-hover);
 }
 
 .wizard .wiz-ltile {
@@ -1063,22 +1692,27 @@ body,
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  width: 50px;
-  padding: 6px 4px;
+  width: 46px;
+  padding: 5px 4px;
+  background: var(--well);
+  border: none;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  color: var(--text-faint);
 }
 
 .wizard .wiz-ltile.on {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-  color: var(--on-accent);
+  background: var(--well);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .wiz-mini {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 32px;
-  height: 24px;
+  width: 30px;
+  height: 22px;
 }
 
 .wiz-mini-row {
@@ -1089,51 +1723,65 @@ body,
 
 .wiz-mini-cell {
   flex: 1 1 0;
-  background: var(--fg-faint);
-  border-radius: 1px;
+  background: var(--text-faint);
+  border-radius: 2px;
+  opacity: 0.6;
 }
 
 .wiz-ltile.on .wiz-mini-cell {
-  background: var(--on-accent);
-  opacity: 0.7;
+  background: var(--accent);
+  opacity: 0.8;
 }
 
 .wiz-slider {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.wiz-slider .muted {
+  font: 12.5px var(--font-ui);
+  color: var(--text-mid);
 }
 
 .wiz-slider input[type="range"] {
   flex: 1 1 auto;
-  accent-color: var(--accent-strong);
+  accent-color: var(--accent);
 }
 
 .wiz-slider-n {
   min-width: 2ch;
   text-align: right;
-  color: var(--fg);
+  font: 12px var(--font-mono);
+  color: var(--accent-text);
 }
 
-/* Agent chips — fleet-fill row and the per-pane editor share these. */
+/* Agent chips — fleet-fill list + the per-pane editor share these. */
 .wiz-fleet {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .wizard .wiz-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 9px 4px 5px;
-  border-radius: 14px;
-  font-size: 11px;
+  gap: 7px;
+  padding: 7px 11px 7px 7px;
+  border: none;
+  border-radius: 9px;
+  background: var(--well);
+  color: var(--text-mid);
+  font: 12.5px var(--font-ui);
+}
+.wizard .wiz-chip:hover {
+  color: var(--text-bright);
 }
 
 .wizard .wiz-chip.on {
-  border-color: var(--chip, var(--accent));
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--text-bright);
   box-shadow: inset 0 0 0 1px var(--chip, var(--accent));
 }
 
@@ -1141,21 +1789,21 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   border-radius: 5px;
-  background: var(--chip, var(--control-hover));
+  background: var(--chip, var(--tint-weak));
   color: #fff;
   font-size: 10px;
+  font-weight: 700;
 }
 
 .wizard .wiz-chip-shell .wiz-chip-ic {
-  background: var(--control-hover);
-  color: var(--fg-dim);
+  background: var(--tint-weak);
+  color: var(--text-mid);
 }
 
-/* An agent whose program isn't installed / on PATH: dimmed, with a warning glyph. Still
-   clickable — it's an advisory hint, not a block (the pane would just land Dead at 127). */
+/* An agent whose program isn't installed / on PATH: dimmed, with a warning glyph. */
 .wizard .wiz-chip-missing {
   opacity: 0.55;
 }
@@ -1163,69 +1811,73 @@ body,
 .wiz-chip-warn,
 .wiz-cell-warn {
   margin-left: 4px;
-  color: #e0b85a;
+  color: var(--state-needs);
 }
 
 .wiz-cell.wiz-cell-missing {
-  border-color: #e0b85a66;
+  box-shadow: inset 0 0 0 1px rgba(var(--state-needs-rgb), 0.4);
 }
 
 /* Interactive preview grid. */
 .wiz-grid {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px;
-  background: var(--border);
-  border-radius: 6px;
+  gap: 8px;
   min-height: 150px;
 }
 
 .wiz-grid-row {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   flex: 1 1 0;
 }
 
 .wizard .wiz-cell {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 52px;
+  min-height: 60px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
   gap: 3px;
-  padding: 6px 8px;
+  padding: 9px 12px;
   text-align: left;
-  background: var(--bg-sunken);
-  color: var(--fg-dim);
+  background: var(--well);
+  border: none;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  color: var(--text-mid);
 }
 
 .wizard .wiz-cell:hover {
-  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--text-faint);
 }
 
 .wizard .wiz-cell.on {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
 }
 
 .wizard .wiz-cell.agent {
-  border-left: 3px solid var(--cell-accent);
+  box-shadow: inset 3px 0 0 var(--cell-accent), inset 0 0 0 1px var(--chip-border);
+}
+.wizard .wiz-cell.agent.on {
+  box-shadow: 0 0 0 1.5px var(--accent);
 }
 
 .wiz-cell-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--fg);
+  font: 11.5px var(--font-mono);
+  color: var(--text-bright);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.wizard .wiz-cell.on .wiz-cell-name {
+  color: var(--accent-text);
+}
 
 .wiz-cell-agent {
-  font-size: 10px;
-  color: var(--fg-faint);
+  font: 11px var(--font-mono);
+  color: var(--text-mid);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1236,10 +1888,9 @@ body,
   display: flex;
   flex-direction: column;
   gap: 9px;
-  padding: 10px 12px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  padding: 12px 14px;
+  background: var(--well);
+  border-radius: 11px;
 }
 
 .wiz-editor-head {
@@ -1249,25 +1900,45 @@ body,
 }
 
 .wiz-editor-head strong {
-  color: var(--fg);
+  font: 600 13px var(--font-mono);
+  color: var(--text-bright);
 }
 
 .wizard .wiz-editor-x {
   padding: 2px 7px;
   background: transparent;
-  border-color: transparent;
+  color: var(--text-mid);
 }
 
 .wizard-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 6px;
 }
 
 .wizard-foot .spacer {
   flex: 1 1 auto;
+}
+
+.wiz-foot-hint {
+  font: 11.5px var(--font-mono);
+  color: var(--text-faint);
+}
+
+/* Footer Cancel = ghost; Create workspace stays the accent primary. */
+.wizard-foot button:not(.primary) {
+  background: transparent;
+  color: var(--text-mid);
+}
+.wizard-foot button:not(.primary):hover {
+  background: var(--tint-weak);
+  color: var(--text-bright);
+}
+.wizard-foot button.primary {
+  padding: 10px 22px;
+  border-radius: 10px;
 }
 
 /* The flat layer that holds absolutely-positioned panes + gutters (lib/layout). */
@@ -1275,13 +1946,17 @@ body,
   position: relative;
   height: 100%;
   width: 100%;
-  background: var(--border); /* shows through as gutter seams */
+  /* Frameless: cards float on the dark canvas, so the gutters between them ARE the canvas — not
+     the old grey grid-seam (--border) that the thin 1px gutters used to show. */
+  background: var(--canvas);
 }
 
 /* One positioned cell per leaf; inset by 1px so neighbours read as separate tiles. */
 .leaf-box {
   position: absolute;
-  padding: 1px;
+  /* Inset each card so adjacent panes float with a ~14px gutter (7px each side) and the card
+     shadow has room to breathe. The draggable gutter seams sit in this gap. */
+  padding: 7px;
   box-sizing: border-box;
 }
 
@@ -1299,18 +1974,21 @@ body,
 .overview-hit {
   position: absolute;
   margin: 0;
-  padding: 1px;
+  padding: 7px;
   box-sizing: border-box;
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: 14px;
   cursor: pointer;
   z-index: 5; /* above the panes/terminals so a click focuses rather than types */
 }
 
 .overview-hit:hover {
-  box-shadow: inset 0 0 0 2px var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  /* Frame the inner card (inset by the 7px padding) without covering it. */
+  outline: 2px solid var(--accent);
+  outline-offset: -7px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .overview-hit[draggable="true"] {
@@ -1319,266 +1997,353 @@ body,
 
 /* Drop target while dragging another tile onto this one (swap). */
 .overview-hit.drag-over {
-  box-shadow: inset 0 0 0 2px var(--accent-strong);
-  background: color-mix(in srgb, var(--accent-strong) 18%, transparent);
+  outline: 2px solid var(--accent);
+  outline-offset: -7px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
-/* The pane chrome: title bar above, terminal below. */
+/* ---- Frameless pane card ---------------------------------------------------------------------
+   The pane is a floating card (no title bar): a glass identity chip floats top-left, hover
+   controls float top-right, and the terminal fills the card with chip-clearance padding. */
 .pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: var(--surface);
+  border-radius: 14px;
+  /* overflow:hidden (NOT clip-path): clip-path would also clip the focused glow box-shadow.
+     The terminal mount is inset by the term-wrap padding, so it never reaches the rounded
+     corners — overflow:hidden is enough to contain it. */
   overflow: hidden;
-  /* Same as .shell: clip xterm's canvas to the rounded corners (overflow:hidden misses it in
-     WebKitGTK), so the terminal stops overflowing the pane's rounded bottom edge. */
-  clip-path: inset(0 round 4px);
   box-sizing: border-box;
-}
-
-.pane.focused {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.pane-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  height: 28px;
-  padding: 0 6px 0 8px;
-  font:
-    11px ui-monospace,
-    monospace;
-  color: var(--fg-dim);
-  background: linear-gradient(
-    var(--title-bg),
-    color-mix(in srgb, var(--title-bg) 92%, #000)
-  );
-  border-bottom: 1px solid var(--border);
-  user-select: none;
-  flex: 0 0 auto;
+  box-shadow: var(--shadow-pane);
   transition:
-    color 0.12s ease,
-    background 0.12s ease,
-    box-shadow 0.12s ease;
+    box-shadow 0.14s ease,
+    background 0.14s ease;
 }
 
-.pane.focused .pane-title {
-  color: var(--fg);
-  background: var(--surface-active);
-  box-shadow: inset 2px 0 0 var(--accent);
+/* State treatments (data-state mirrors the chip dot; set on the .pane in Terminal.tsx). */
+.pane[data-state='needs'] {
+  box-shadow: 0 0 0 1px rgba(var(--state-needs-rgb), 0.5), var(--shadow-pane);
+}
+.pane[data-state='dead'] {
+  background: var(--surface-dead);
+  box-shadow: inset 0 0 0 1px var(--hairline), var(--shadow-pane);
 }
 
-/* Per-agent tint (IDEAS #11): colour an agented pane's focus ring + title stripe by its detected
-   agent (--agent-color, set inline in Terminal.tsx) so a mixed fleet reads at a glance and overview
-   tiles are colour-coded. The at-rest stripe yields to attention (amber) and focus via :not(). */
-.pane.agented:not(.focused):not(.attention) .pane-title {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--agent-color) 60%, transparent);
+/* Focused ring — must outrank the state treatments, so it follows them. The dark themes' ring
+   carries a glow halo; light/paper resolve --ring-focus to a solid stroke (no blur). */
+.pane.focused {
+  box-shadow: var(--ring-focus);
 }
+
+/* Per-agent tint (IDEAS #11 / Frameless §4): a focused agented pane rings in its detected agent's
+   colour. The group tint ring (::after) composes with the state/focus box-shadow so a mixed fleet
+   reads at a glance — state stays the primary signal, the tint is secondary. */
 .pane.agented.focused {
-  border-color: var(--agent-color);
-  box-shadow: inset 0 0 0 1px var(--agent-color);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--agent-color) 80%, transparent),
+    var(--shadow-pane);
 }
-.pane.agented.focused .pane-title {
-  box-shadow: inset 2px 0 0 var(--agent-color);
+.pane.agented::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent-color) 33%, transparent);
+  pointer-events: none;
 }
 
-/* Drag handle: pick up the pane and drop it on another to swap their grid positions. */
-.pane-grip {
+/* Secondary group-tint dot in the chip (5px), in the agent's colour. */
+.pane-tint-dot {
   flex: 0 0 auto;
-  color: var(--fg-faint);
-  cursor: grab;
-  line-height: 1;
-}
-.pane-grip:hover {
-  color: var(--fg);
-}
-.pane-grip:active {
-  cursor: grabbing;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--agent-color, var(--accent));
 }
 
-/* Drop target highlight while a pane is being dragged over this one. */
+/* Uppercase state label (top-right). Hidden by default; the fleet (overview) view reveals it. */
+.pane-state-label {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 6;
+  display: none;
+  font: 500 9px var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--state-idle);
+}
+.pane-state-label[data-state='working'] {
+  color: var(--state-working);
+}
+.pane-state-label[data-state='needs'] {
+  color: var(--state-needs);
+}
+.pane-state-label[data-state='dead'] {
+  color: var(--state-dead);
+}
+
+/* ---- Fleet view (overview): compact tint-grouped tiles, uppercase state label as primary ---- */
+/* Hero (non-fleet) shows the agent icon badge, so the secondary tint dot is redundant there. */
+.layout-root:not(.overview) .pane-tint-dot {
+  display: none;
+}
+
+.layout-root.overview .pane {
+  border-radius: 12px;
+}
+.layout-root.overview .pane-term-wrap {
+  padding: 30px 12px 12px;
+}
+.layout-root.overview .pane-chip {
+  top: 8px;
+  left: 8px;
+  gap: 6px;
+  padding: 4px 9px;
+}
+.layout-root.overview .pane-chip .pane-name {
+  font-size: 10.5px;
+  max-width: 16ch;
+}
+/* Fleet tiles are tight: drop the branch/status text (state moves to the top-right label) and the
+   agent icon badge (the tint dot carries grouping). */
+.layout-root.overview .pane-chip .pane-branch,
+.layout-root.overview .pane-chip .pane-statuslabel,
+.layout-root.overview .pane-agent {
+  display: none;
+}
+.layout-root.overview .pane-state-label {
+  display: block;
+  top: 9px;
+  right: 11px;
+}
+/* The overview hit overlay intercepts hover, so the pane controls are unreachable here — hide them. */
+.layout-root.overview .pane-ctl {
+  display: none;
+}
+
+/* Drop target highlight while a pane is being dragged over this one (swap). */
 .pane.drag-over {
   outline: 2px dashed var(--accent);
-  outline-offset: -2px;
+  outline-offset: -3px;
 }
 
-/* Attention status dot, left of the pane name. Idle = faint; busy = green; unseen output =
-   blue; bell = amber pulse. Precedence (bell > unseen > busy) is decided in the component. */
-.pane-status {
+/* Floating identity chip (top-left): glass pill with state dot + name + branch/status. Also the
+   drag handle for swapping panes. */
+.pane-chip {
+  position: absolute;
+  top: 13px;
+  left: 14px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100% - 28px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font:
+    12px / 1 ui-monospace,
+    monospace;
+  color: var(--text-bright);
+  background: var(--chip);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  user-select: none;
+  cursor: grab;
+  transition: box-shadow 0.12s ease;
+}
+.pane-chip:active {
+  cursor: grabbing;
+}
+/* Needs-you tints the chip border amber to match the pane ring. */
+.pane[data-state='needs'] .pane-chip {
+  box-shadow: inset 0 0 0 1px rgba(var(--state-needs-rgb), 0.32);
+}
+
+/* State dot (6px). working pulses + glows (dark); needs = amber; dead = hollow ring; idle = grey. */
+.pane-dot {
   flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--border);
-  transition:
-    background 0.15s ease,
-    box-shadow 0.15s ease;
+  background: var(--state-idle);
 }
-.pane-status.busy {
-  background: #5fb96b;
-  box-shadow: 0 0 0 2px color-mix(in srgb, #5fb96b 25%, transparent);
+.pane-dot[data-state='working'] {
+  background: var(--state-working);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-working) 22%, transparent);
+  animation: th-dot-pulse 2.4s ease-in-out infinite;
 }
-.pane-status.unseen {
-  background: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+.pane-dot[data-state='needs'] {
+  background: var(--state-needs);
 }
-.pane-status.bell {
-  background: #e0b85a;
-  animation: th-pulse 1s ease-in-out infinite;
+.pane-dot[data-state='dead'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-dim);
 }
-@keyframes th-pulse {
+@keyframes th-dot-pulse {
   0%,
   100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 #e0b85a88;
   }
   50% {
-    opacity: 0.5;
-    box-shadow: 0 0 0 3px #e0b85a00;
+    opacity: 0.4;
+  }
+}
+/* Light/paper drop the live-dot glow (keep the solid dot). */
+[data-theme='light'] .pane-dot[data-state='working'],
+[data-theme='paper'] .pane-dot[data-state='working'] {
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pane-dot[data-state='working'] {
+    animation: none;
   }
 }
 
-/* AI-agent badge: a small coloured pill identifying the agent running in a pane. */
+/* AI-agent badge inside the chip: a small coloured pill identifying the agent running in a pane. */
 .pane-agent {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
   color: var(--agent-color, var(--accent));
-  background: color-mix(
-    in srgb,
-    var(--agent-color, var(--accent)) 16%,
-    transparent
-  );
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--agent-color, var(--accent)) 40%, transparent);
+  background: color-mix(in srgb, var(--agent-color, var(--accent)) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent-color, var(--accent)) 40%, transparent);
 }
 
-.pane-name {
+.pane-chip .pane-name {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 28ch;
+  max-width: 22ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
   letter-spacing: 0.01em;
+  color: var(--text-bright);
 }
 
-/* Git branch chip, shown after the (folder-derived) name. The full cwd path lives on the name's
-   hover tooltip now, so the bar stays compact. */
-.pane-branch {
+/* Git branch, shown after the name (mono 10.5, muted). Full cwd lives on the chip tooltip. */
+.pane-chip .pane-branch {
   flex: 0 0 auto;
-  margin-left: 2px;
-  color: var(--accent);
-  white-space: nowrap;
+  font-size: 10.5px;
   font-weight: 400;
+  white-space: nowrap;
+  color: var(--text-mid);
 }
 
-/* Agent-pushed status label (`th status "…"`) — a small pill, distinct from the git chip. Lets
-   overview tiles read as a fleet dashboard (building / blocked / idle) without parsing output. */
-.pane-statuslabel {
+/* Agent-pushed status word (`th status "…"`) — rendered in the pane's state colour, no pill. */
+.pane-chip .pane-statuslabel {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 24ch;
+  max-width: 18ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-left: 4px;
-  padding: 1px 7px;
-  border-radius: 5px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--broadcast-bright);
-  background: color-mix(in srgb, var(--broadcast-bright) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--broadcast-bright) 32%, transparent);
+  letter-spacing: 0.05em;
+  color: var(--state-idle);
+}
+.pane-chip .pane-statuslabel[data-state='working'] {
+  color: var(--state-working);
+}
+.pane-chip .pane-statuslabel[data-state='needs'] {
+  color: var(--state-needs);
+}
+.pane-chip .pane-statuslabel[data-state='dead'] {
+  color: var(--state-dead);
 }
 
-.pane-controls {
-  margin-left: auto; /* float the controls to the right edge now that nothing else grows */
+/* Hover controls (top-right): glass pill, revealed on pane hover/focus. */
+.pane-ctl {
+  position: absolute;
+  top: 11px;
+  right: 12px;
+  z-index: 6;
   display: flex;
   align-items: center;
-  gap: 1px;
-  flex: 0 0 auto;
-  /* Controls fade back until you hover the title bar — keeps the bar calm at rest. */
-  opacity: 0.55;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--chip);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  opacity: 0;
   transition: opacity 0.12s ease;
 }
-
-.pane-title:hover .pane-controls,
-.pane.focused .pane-controls {
+.pane:hover .pane-ctl {
   opacity: 1;
 }
 
-.pane-controls button {
+.pane-ctl button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   font:
     12px ui-monospace,
     monospace;
   line-height: 1;
-  color: var(--fg-muted);
+  color: var(--text-mid);
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 7px;
   cursor: pointer;
   transition:
     color 0.1s ease,
     background 0.1s ease;
 }
-
-.pane-controls button:hover {
-  color: var(--fg);
-  background: var(--control-hover);
+.pane-ctl button:hover {
+  color: var(--text-bright);
+  background: var(--tint-weak);
 }
-
-.pane-controls button:active {
+.pane-ctl button:active {
   transform: translateY(0.5px);
 }
-
-/* The close button (last control) turns red on hover — it's the one destructive action. */
-.pane-controls button:last-child:hover {
+/* The close button (last control) turns red on hover — the one destructive action. */
+.pane-ctl button:last-child:hover {
   color: #fff;
-  background: #d9534f;
+  background: var(--danger);
+}
+.pane-ctl-restart {
+  color: var(--state-dead) !important;
 }
 
-/* Terminal area fills the rest of the pane; positions the dead overlay. */
-/* The 4px breathing room lives here, NOT on the xterm mount node: FitAddon misreads a padded
-   mount as its full border-box in WebKitGTK and computes one row too many (which then gets
-   clipped). Padding the wrapper keeps the mount's fit math exact. bg == the xterm theme
-   background so the inset blends into the terminal. */
+/* Terminal area fills the rest of the pane; positions the dead overlay. The chip-clearance
+   padding (52px top / 20px sides / 18px bottom) lives HERE, NOT on the xterm mount node: FitAddon
+   misreads a padded mount as its full border-box in WebKitGTK and computes one row too many (which
+   then gets clipped). Padding the wrapper keeps the mount's fit math exact, and insets the terminal
+   clear of the chip and the card's rounded corners. bg == the card surface so the inset blends. */
 .pane-term-wrap {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 4px;
+  padding: 52px 20px 18px;
   box-sizing: border-box;
-  background: var(--bg);
+  background: var(--surface);
 }
 
 .terminal-pane {
   height: 100%;
   width: 100%;
   box-sizing: border-box;
-  background: var(--bg);
+  background: var(--surface);
   /* xterm's canvas ignores overflow:hidden in WebKitGTK; clip the subtree to the mount box so a
      transient over-fit can't spill onto the wrapper's padding. inset(0) = the box, so it never
      cuts a row (fit sizes the canvas to fit exactly now that the mount is padding-free). */
@@ -1617,21 +2382,23 @@ body,
    "command not found" explanation + a fall-back-to-shell escape hatch). */
 .pane-dead {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 48px;
+  right: 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   align-items: flex-end;
   max-width: min(90%, 360px);
-  padding: 8px 10px;
+  padding: 10px 12px;
   font:
     12px ui-monospace,
     monospace;
-  color: var(--fg);
-  background: var(--overlay-strong);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  color: var(--text-bright);
+  background: var(--chip);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  border-radius: 10px;
 }
 
 .pane-dead-msg {
@@ -1667,17 +2434,18 @@ body,
 /* ---- Per-pane search overlay (Ctrl+Shift+F) ---- */
 .pane-search {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 6;
+  top: 48px; /* clear the floating chip + controls */
+  right: 16px;
+  z-index: 7;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  background: var(--overlay);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px var(--shadow);
+  background: var(--chip);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px var(--chip-border), var(--shadow-panel);
+  border-radius: 10px;
 }
 
 .pane-search-input {
@@ -1715,73 +2483,107 @@ body,
   color: var(--fg);
 }
 
-/* ---- Wizard presets (one-click relaunch) ---- */
+/* ---- Wizard presets — wrapped pills with an inline delete ---- */
 .wizard-presets {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .wizard-preset {
-  display: flex;
-  gap: 4px;
+  display: inline-flex;
+  align-items: center;
 }
 
-.wizard-preset-go {
-  flex: 1 1 auto;
-  display: flex !important;
-  justify-content: space-between;
-  text-align: left;
+.wizard .wizard-preset-go {
+  font: 12.5px var(--font-ui);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  border-radius: 8px;
+  padding: 7px 13px;
+}
+.wizard .wizard-preset-go:hover {
+  color: var(--text-bright);
+}
+.wizard .wizard-preset-go.on {
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--accent-text);
 }
 
-.wizard-preset-del {
-  flex: 0 0 auto;
-  color: var(--fg-muted) !important;
+.wizard .wizard-preset-del {
+  margin-left: -4px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.wizard .wizard-preset-del:hover {
+  color: var(--danger);
+  background: transparent;
 }
 
-.wizard-preset-del:hover {
-  color: var(--danger) !important;
-}
-
-/* ---- Settings modal ---- */
+/* ---- Shared modal scrim (Shortcuts, Session logs) ---- */
 .settings-backdrop {
   position: fixed;
   inset: 0;
   background: var(--scrim);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 60;
+  animation: th-scrim-in 0.14s ease-out;
+}
+
+/* ---- Settings: centered scrim overlay (like the command palette) ---- */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 56px 24px;
+  z-index: 70;
+  box-sizing: border-box;
+  animation: th-scrim-in 0.14s ease-out;
 }
 
 .settings {
-  width: 560px;
+  width: 860px;
   max-width: 92vw;
-  max-height: 88vh;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  color: var(--fg);
-  font:
-    13px ui-monospace,
-    monospace;
-  box-shadow: 0 12px 40px var(--shadow);
+  border-radius: 16px;
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+  color: var(--text-bright);
+  font: 13px var(--font-ui);
+  animation: th-ov-in 0.16s ease-out;
 }
+/* Horizontal padding lives on the header/tabs/body/footer (not the card) so the scrolling body
+   spans the full card width: its scrollbar sits at the card edge with a comfortable gap to the
+   content, and the active theme tile's ring isn't clipped by the overflow edge. */
 
 .settings-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 22px 24px 16px;
   flex: 0 0 auto;
 }
 
 .settings-title {
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--text-bright);
+  font: 600 24px var(--font-ui);
+  letter-spacing: -0.015em;
 }
 
 .settings-x {
@@ -1797,56 +2599,147 @@ body,
   color: var(--danger);
 }
 
+/* ---- Shared modal dialog card (Shortcuts, Session logs) — Frameless overlay ---- */
+.dialog {
+  width: 560px;
+  max-width: 92vw;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+  color: var(--text-bright);
+  font: 13px var(--font-ui);
+  animation: th-ov-in 0.16s ease-out;
+}
+.log-dialog {
+  width: 760px;
+}
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 50px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--hairline);
+  flex: 0 0 auto;
+}
+.dialog-title {
+  font: 600 15px var(--font-ui);
+  color: var(--text-bright);
+}
+
 .settings-tabs {
   display: flex;
-  gap: 2px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 24px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--hairline);
   flex: 0 0 auto;
 }
 
 .settings-tab {
-  font: inherit;
-  color: var(--fg-muted);
+  font: 14px var(--font-ui);
+  color: var(--text-dim);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  padding: 9px 12px;
+  padding: 9px 2px;
   cursor: pointer;
+  transition: color 0.12s ease;
 }
 
 .settings-tab:hover {
-  color: var(--fg);
+  color: var(--text-mid);
 }
 
 .settings-tab.on {
-  color: var(--accent);
-  border-bottom-color: var(--accent-strong);
+  color: var(--text-bright);
+  border-bottom-color: var(--accent);
 }
 
 .settings-body {
-  padding: 4px 16px 8px;
+  padding: 16px 24px 24px;
   overflow-y: auto;
   flex: 1 1 auto;
+  min-height: 0;
 }
 
 .settings-section {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
 }
 
 .settings-section:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
+/* Grouped settings card (TERMINAL / each key-binding group): rows divided by hairlines. */
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  overflow: hidden;
+}
+.settings-card .settings-row {
+  margin: 0;
+  min-height: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+.settings-card .settings-row:last-child {
+  border-bottom: none;
+}
+.settings-card .settings-row + .settings-row {
+  margin-top: 0;
+}
+/* Text inputs in grouped cards get a consistent, comfortable width, right-aligned (the label's
+   flex:1 pushes them over). Number inputs keep their .narrow width. */
+.settings-card .settings-input:not(.narrow) {
+  width: 248px;
+}
+/* Input + button group on the right of a card row (e.g. Default folder + Browse…). */
+.settings-control {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Unit suffix after a numeric input (e.g. "ms"). */
+.settings-unit {
+  flex: 0 0 auto;
+  font: 12px var(--font-mono);
+  color: var(--text-faint);
+}
+
+/* Key-bindings intro + reset row. */
+.settings-keys-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.settings-keys-intro .settings-hint {
+  flex: 1 1 auto;
+  margin: 0;
+  font: 13px var(--font-ui);
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.settings-keys-intro .settings-btn {
+  flex: 0 0 auto;
+}
+
+/* Section heading (THEME / TERMINAL / FOCUS …) — mono, wide-tracked, faint. */
 .settings-section h3 {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 600;
+  margin: 0 0 12px;
+  font: 11px var(--font-mono);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--fg-muted);
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
 }
 
 .settings-row {
@@ -1866,7 +2759,8 @@ body,
 
 .settings-label {
   flex: 1 1 auto;
-  color: var(--fg);
+  font: 13.5px var(--font-ui);
+  color: var(--text-bright);
 }
 
 .settings-row.toggle .settings-label {
@@ -1882,14 +2776,15 @@ body,
 }
 
 .settings-input {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
-  font: inherit;
-  color: var(--fg);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 5px 8px;
+  font: 12.5px var(--font-mono);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  border-radius: 8px;
+  padding: 6px 12px;
 }
 
 .settings-input.narrow {
@@ -1898,12 +2793,13 @@ body,
 }
 
 .settings-select {
-  font: inherit;
-  color: var(--fg);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 5px 8px;
+  font: 12.5px var(--font-mono);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  border-radius: 8px;
+  padding: 6px 12px;
   cursor: pointer;
 }
 
@@ -1936,7 +2832,8 @@ body,
   background: var(--control);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 6px 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -1958,7 +2855,7 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 14px 24px;
   border-top: 1px solid var(--border);
   flex: 0 0 auto;
 }
@@ -1980,12 +2877,13 @@ body,
 .kb-key {
   flex: 0 0 auto;
   min-width: 13ch;
-  font: inherit;
-  color: var(--fg);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 5px 8px;
+  font: 11.5px var(--font-mono);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  border-radius: 7px;
+  padding: 5px 10px;
   cursor: pointer;
   text-align: center;
 }
@@ -2031,13 +2929,12 @@ body,
 }
 .shortcuts-key {
   flex: 0 0 auto;
-  font: inherit;
-  font-size: 11px;
-  color: var(--fg);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  padding: 2px 7px;
+  font: 11px var(--font-mono);
+  color: var(--text-mid);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  border-radius: 6px;
+  padding: 3px 8px;
   white-space: nowrap;
 }
 .shortcuts-foot {
@@ -2079,64 +2976,426 @@ body,
 /* Theme picker cards */
 .settings-themes {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
 }
 
 .theme-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  padding: 0;
   font: inherit;
-  color: var(--fg);
-  background: var(--control);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--hairline);
   cursor: pointer;
   text-align: left;
 }
 
-.theme-card:hover {
-  background: var(--control-hover);
-}
-
 .theme-card.on {
-  border-color: var(--accent-strong);
-  box-shadow: 0 0 0 1px var(--accent-strong);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .theme-swatch {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  font-size: 14px;
-  letter-spacing: 1px;
+  height: 84px;
+  font: 24px var(--font-mono);
+}
+
+.theme-dot {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
 }
 
 .theme-card-name {
-  font-size: 11px;
-  color: var(--fg-dim);
+  padding: 10px 12px;
+  background: var(--surface);
+  font: 500 12.5px var(--font-ui);
+  color: var(--text-bright);
+}
+
+/* Section sub-line (e.g. under THEME). */
+.settings-sub {
+  margin: 0 0 16px;
+  font: 12.5px var(--font-ui);
+  color: var(--text-mid);
+}
+
+/* Segmented control (cursor style). */
+.settings-seg {
+  display: flex;
+  gap: 4px;
+  background: var(--well);
+  border-radius: 9px;
+  padding: 3px;
+}
+.settings-seg-opt {
+  font: 12px var(--font-mono);
+  color: var(--text-mid);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.settings-seg-opt.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Pill toggle (cursor blink). */
+.settings-toggle {
+  position: relative;
+  width: 38px;
+  height: 21px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.settings-toggle.on {
+  background: var(--accent);
+  box-shadow: none;
+}
+.settings-toggle-knob {
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+.settings-toggle.on .settings-toggle-knob {
+  transform: translateX(17px);
+  background: #fff;
 }
 
 /* ---- Source Control panel (GitPanel) ---- */
-.git-panel {
-  width: 96vw;
-  height: 94vh;
+/* ---- Docked side panels (Frameless): floating cards, flex siblings of the stage ---- */
+.side-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
+  /* No left margin: the stage's 9px right padding + the pane's 7px leaf-box inset already give
+     a ~16px gutter to the grid, matching the inter-card rhythm. Right 16px = window inset.
+     Bottom 14px matches the broadcast bar so the panel's bottom edge lines up with it. */
+  margin: 8px 16px 14px 0;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  color: var(--fg);
-  font:
-    13px ui-monospace,
-    monospace;
-  box-shadow: 0 12px 40px var(--shadow);
+  border-radius: 14px;
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
+  box-sizing: border-box;
+  color: var(--text-bright);
+  font: 13px var(--font-ui);
+}
+
+.git-panel {
+  width: 440px;
+}
+.docs-panel {
+  width: 480px;
+}
+
+/* Drag the left edge to widen the docked Source Control panel (mirrors .preview-resizer). */
+.git-resizer {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+.git-resizer:hover {
+  /* slim centered vertical accent line, not a full-width 6px bar */
+  background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat;
+}
+
+/* ============================================================================
+   Source Control panel (Frameless redesign). Scoped under .git-scm so it only
+   restyles GitPanel — DocsPanel reuses the legacy .git-* classes below as-is.
+   Single column: header → changes list → unified diff → footer hint/send.
+   ============================================================================ */
+.git-scm {
+  font: 13px var(--font-ui);
+  color: var(--text-bright);
+}
+
+/* header */
+.git-scm .git-head {
+  flex: 0 0 auto;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+.git-scm .git-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.git-scm .git-branch {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 11px var(--font-mono);
+  color: var(--text-dim);
+}
+.git-scm .git-head-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.git-scm .git-icon-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.git-scm .git-icon-btn:hover {
+  color: var(--text-bright);
+}
+
+/* changes list — height is set inline from settings.gitListHeight (drag the divider below it).
+   flex-shrink MUST be 0: an overflow:auto flex item has min-height:0, so a shrinkable list
+   gets squashed to nothing by the diff (flex:1) below it. */
+.git-scm .git-list {
+  flex: 0 0 auto;
+  overflow-y: auto;
+  padding: 10px 10px 6px;
+}
+/* Draggable divider between the changes list and the diff: a wide invisible row-resize grab
+   strip with a true 1px hairline drawn down its center (the ::before). */
+.git-scm .git-list-resizer {
+  position: relative;
+  flex: 0 0 auto;
+  height: 9px;
+  margin: 0 10px;
+  cursor: row-resize;
+}
+.git-scm .git-list-resizer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: var(--hairline);
+}
+.git-scm .git-list-resizer:hover::before {
+  background: var(--accent);
+}
+.git-scm .git-group-head {
+  padding: 6px 8px;
+  font: 10.5px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: none;
+  color: var(--text-faint);
+}
+.git-scm .git-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  color: var(--text-mid);
+  cursor: pointer;
+}
+.git-scm .git-file:hover {
+  background: var(--tint-weak);
+}
+.git-scm .git-file.on {
+  background: var(--tint-weak);
+  color: var(--text-bright);
+}
+.git-scm .git-file-badge {
+  flex: 0 0 auto;
+  width: 14px;
+  font: 600 11px var(--font-mono);
+  text-align: left;
+}
+.git-scm .git-file-badge[data-s="M"] {
+  color: var(--state-needs);
+}
+.git-scm .git-file-badge[data-s="A"],
+.git-scm .git-file-badge[data-s="U"] {
+  color: var(--state-working);
+}
+.git-scm .git-file-badge[data-s="D"] {
+  color: var(--danger);
+}
+.git-scm .git-file-badge[data-s="R"] {
+  color: var(--accent);
+}
+.git-scm .git-file-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 12px var(--font-mono);
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* unified diff */
+.git-scm .git-diff {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 10px;
+  padding: 4px 4px 12px;
+  font: 11.5px var(--font-mono);
+  line-height: 1.7;
+  color: var(--text-dim);
+  overflow: auto;
+  user-select: none;
+  cursor: default;
+}
+.git-scm .git-hunk {
+  padding: 2px 8px;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.git-scm .git-line {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 3px;
+}
+.git-scm .git-line-sign {
+  flex: 0 0 auto;
+  width: 1ch;
+  text-align: center;
+}
+.git-scm .git-line-text {
+  flex: 1 1 auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  tab-size: 4;
+}
+.git-scm .git-line.add {
+  background: rgba(63, 185, 80, 0.14);
+  color: var(--state-working);
+}
+.git-scm .git-line.del {
+  background: rgba(248, 81, 73, 0.14);
+  color: var(--danger);
+}
+/* Selection tint layers over any add/del background via an inset fill (reads on every theme). */
+.git-scm .git-line.sel {
+  box-shadow: inset 0 0 0 9999px rgba(var(--accent-rgb), 0.22);
+}
+
+/* footer: hint, or the send-to-terminal controls when lines are selected */
+/* Fixed-height footer so the hint and the send-controls states are the same size (the design's
+   slim ~46px bar) rather than the footer jumping taller when a selection appears. */
+.git-scm .git-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 16px;
+  border-top: 1px solid var(--hairline);
+}
+.git-scm .git-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.git-scm .git-hint-mark {
+  color: var(--accent-text);
+}
+.git-scm .git-empty-fill {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+/* The shared .git-send is a sticky bar elsewhere; here it sits flat inside the slim footer. */
+.git-scm .git-send {
+  position: static;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.git-scm .git-send-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-mid);
+  font-size: 11.5px;
+}
+.git-scm .git-send-loc {
+  color: var(--text-faint);
+}
+.git-scm .git-send-btn {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+.git-scm .git-send-clear {
+  flex: 0 0 auto;
+}
+
+/* Docs reuses the .git-scm layout, but its body is prose/markdown — not a mono diff. Undo the
+   monospace + tight line-height the diff scope imposes so rendered markdown reads as prose. */
+.git-scm .git-diff.docs-content {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 4px 6px 12px;
+}
+/* The Preview/Raw segmented toggle sits on the right of the slim header, next to the actions. */
+.docs-panel .docs-modes {
+  margin-left: auto;
+}
+.docs-panel .git-head-actions {
+  margin-left: 0;
+}
+
+/* Narrow dock: stack the file list above the diff/reader, rather than side-by-side. */
+.side-panel .git-body {
+  flex-direction: column;
+}
+.side-panel .git-files {
+  flex: 0 0 auto;
+  max-height: 42%;
+  border-right: none;
+  border-bottom: 1px solid var(--hairline);
 }
 
 .git-branch {
@@ -2269,6 +3528,7 @@ body,
 .git-diff {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0; /* allow the diff/reader to scroll when the panel stacks list-above-diff */
   display: flex;
   flex-direction: column;
   overflow: auto;
@@ -2621,65 +3881,134 @@ body,
 }
 
 /* ---- Command palette (Ctrl+Shift+P) ---- */
+/* ---- Command palette (Frameless overlay) ---- */
 .palette-overlay {
   position: fixed;
   inset: 0;
   background: var(--scrim);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 12vh;
+  padding-top: 96px;
   z-index: 70;
+  animation: th-scrim-in 0.14s ease-out;
 }
 
 .palette {
-  width: 560px;
+  width: 640px;
   max-width: 92vw;
   max-height: 70vh;
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  box-shadow: 0 12px 40px var(--shadow);
+  border-radius: 16px;
+  box-shadow: var(--shadow-overlay);
   overflow: hidden;
+  animation: th-ov-in 0.16s ease-out;
+}
+
+.palette-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.palette-glyph {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+  font-size: 15px;
 }
 
 .palette-input {
-  font:
-    14px ui-monospace,
-    monospace;
-  color: var(--fg);
-  background: var(--bg);
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 14px var(--font-mono);
+  color: var(--text-bright);
+  background: transparent;
   border: none;
-  border-bottom: 1px solid var(--border);
-  padding: 12px 14px;
+  padding: 0;
   outline: none;
+}
+.palette-input::placeholder {
+  color: var(--text-mid);
+}
+
+.palette-esc {
+  flex: 0 0 auto;
+  font: 11px var(--font-mono);
+  color: var(--text-faint);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  border-radius: 6px;
+  padding: 3px 7px;
 }
 
 .palette-list {
   overflow-y: auto;
-  padding: 4px;
+  padding: 8px;
+}
+
+/* Section labels (ACTIONS / GO TO PANE). */
+.palette-section {
+  font: 10.5px var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  padding: 8px 12px 6px;
+}
+.palette-section ~ .palette-section,
+.palette-list .palette-item + .palette-section {
+  padding-top: 14px;
 }
 
 .palette-item {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  padding: 7px 10px;
-  border-radius: 6px;
+  padding: 11px 12px;
+  border-radius: 9px;
   cursor: pointer;
-  font:
-    13px ui-monospace,
-    monospace;
-  color: var(--fg-dim);
+  font: 13.5px var(--font-ui);
+  color: var(--text-mid);
 }
 
 .palette-item.sel {
-  background: var(--surface-active);
-  color: var(--fg);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  background: var(--accent-fill);
+  color: var(--text-bright);
+}
+
+/* Leading action icon (16px); accent on the selected row, dim otherwise. */
+.palette-ic {
+  flex: 0 0 auto;
+  width: 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.palette-item.sel .palette-ic {
+  color: var(--accent-text);
+}
+
+/* Leading state dot for "go to pane" rows. */
+.palette-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin: 0 5px;
+  border-radius: 50%;
+  background: var(--state-idle);
+}
+.palette-dot[data-state='working'] {
+  background: var(--state-working);
+}
+.palette-dot[data-state='needs'] {
+  background: var(--state-needs);
+}
+.palette-dot[data-state='dead'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-dim);
 }
 
 .palette-label {
@@ -2689,25 +4018,46 @@ body,
   white-space: nowrap;
 }
 
-.palette-hint {
-  flex: 0 0 auto;
-  font-size: 11px;
-  color: var(--fg-muted);
-}
-
+/* Shortcut keys are plain mono text (matching the rendered handover palette — not boxed). */
 .palette-key {
   flex: 0 0 auto;
-  font-size: 10px;
-  color: var(--fg-muted);
-  background: var(--control);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 6px;
+  font: 11px var(--font-mono);
+  color: var(--text-mid);
   white-space: nowrap;
 }
-.palette-item.sel .palette-key {
-  color: var(--fg);
-  border-color: var(--border-strong);
+.palette-key-state[data-state='needs'] {
+  color: var(--state-needs);
+}
+.palette-key-state[data-state='working'] {
+  color: var(--state-working);
+}
+
+/* ---- Shared overlay motion (Frameless) ---- */
+@keyframes th-ov-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes th-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .palette,
+  .palette-overlay,
+  .settings-backdrop,
+  .wizard-backdrop {
+    animation: none;
+  }
 }
 
 .palette-empty {

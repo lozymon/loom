@@ -11,13 +11,6 @@ import { settings, setSetting } from "../stores/settings";
 const RAIL_MIN = 120;
 const RAIL_MAX = 420;
 
-/** A stable hue (0–359) derived from a workspace id, so each row's icon gets its own color. */
-function wsHue(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
-  return h;
-}
-
 export default function WorkspaceRail(props: { onNew: () => void }) {
   // Which workspace row is mid-rename (double-click the name to enter, Enter/blur commits, Esc cancels).
   const [editingId, setEditingId] = createSignal<string | null>(null);
@@ -51,6 +44,8 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
       <div class="rail-list">
         <For each={appState.workspaces}>
           {(ws) => {
+            // The row's live dot: amber when a hidden pane needs you, green on background activity,
+            // grey at rest. Derived from the activity store — never pane output (ADR-0001).
             // Two signals for a hidden workspace (the active one shows per-pane indicators):
             //   • activity  — a pane produced unseen output / rang the bell → lighter amber dot.
             //   • attention — a pane raised the sticky "needs you" flag → amber border on the row.
@@ -58,7 +53,8 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
             const paneIds = () => Object.keys(ws.panes).map(Number);
             const hasActivity = () => isHidden() && anyAttention(paneIds());
             const needsAttention = () => isHidden() && anyNeedsAttention(paneIds());
-            const hue = wsHue(ws.id);
+            const dotState = () =>
+              needsAttention() ? "needs" : hasActivity() ? "working" : "idle";
             return (
               <div
                 class="rail-item"
@@ -66,17 +62,8 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
                 onClick={() => switchWorkspace(ws.id)}
                 title={ws.cwd || ws.name}
               >
-                {/* Per-workspace colored icon chip — a little terminal glyph tinted by hue. */}
-                <span
-                  class="rail-icon"
-                  style={{
-                    color: `hsl(${hue} 70% 72%)`,
-                    background: `hsl(${hue} 45% 50% / 0.18)`,
-                    "border-color": `hsl(${hue} 50% 55% / 0.45)`,
-                  }}
-                >
-                  ❯
-                </span>
+                {/* Live state dot, leading the row. */}
+                <span class="rail-dot" data-state={dotState()} />
                 <Show
                   when={editingId() === ws.id}
                   fallback={
@@ -101,28 +88,30 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
                     onBlur={(e) => { renameWorkspace(ws.id, e.currentTarget.value); setEditingId(null); }}
                   />
                 </Show>
-                <Show when={hasActivity()}>
-                  <span class="rail-attn" title="Activity in this workspace" />
-                </Show>
                 <span class="rail-badge">{paneCount(ws)}</span>
-                <button
-                  class="rail-dup"
-                  title="Duplicate workspace (same layout + commands)"
-                  onClick={(e) => { e.stopPropagation(); duplicateWorkspace(ws.id); }}
-                >
-                  ⧉
-                </button>
-                <button
-                  class="rail-close"
-                  title="Close workspace"
-                  onClick={(e) => { e.stopPropagation(); closeWorkspace(ws.id); }}
-                >
-                  ✕
-                </button>
+                <span class="wsact">
+                  <button
+                    class="rail-dup"
+                    title="Duplicate workspace (same layout + commands)"
+                    onClick={(e) => { e.stopPropagation(); duplicateWorkspace(ws.id); }}
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    class="rail-close"
+                    title="Close workspace"
+                    onClick={(e) => { e.stopPropagation(); closeWorkspace(ws.id); }}
+                  >
+                    ✕
+                  </button>
+                </span>
               </div>
             );
           }}
         </For>
+        <button class="rail-new" title="New workspace (Ctrl+Shift+T)" onClick={() => props.onNew()}>
+          <span class="rail-new-plus">＋</span> New workspace
+        </button>
       </div>
       <div class="rail-resizer" title="Drag to resize" onPointerDown={onResizeDown} />
     </nav>

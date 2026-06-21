@@ -98,9 +98,9 @@ export default function SessionLogViewer(props: { onClose: () => void; preselect
 
   return (
     <div class="settings-backdrop" onClick={() => props.onClose()}>
-      <div class="git-panel" onClick={(e) => e.stopPropagation()}>
-        <header class="settings-head">
-          <span class="settings-title">≣ Session logs</span>
+      <div class="dialog log-dialog" onClick={(e) => e.stopPropagation()}>
+        <header class="dialog-head">
+          <span class="dialog-title">≣ Session logs</span>
           <span class="git-head-actions">
             <button class="settings-btn" title="Refresh" onClick={() => void refresh()}>⟳ Refresh</button>
             <button class="settings-x" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>

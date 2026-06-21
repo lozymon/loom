@@ -45,8 +45,8 @@ export const THEMES: Theme[] = [
     name: "Termhaus Dark",
     dark: true,
     terminal: {
-      background: "#1a1b1e", foreground: "#e6e6e6",
-      cursor: "#5b8cff", cursorAccent: "#1a1b1e", selectionBackground: "#3a4d7a",
+      background: "#191b20", foreground: "#e7e7ea",
+      cursor: "#5b8cff", cursorAccent: "#191b20", selectionBackground: "#3a4d7a",
       ...ANSI_DARK,
     },
   },
@@ -65,8 +65,8 @@ export const THEMES: Theme[] = [
     name: "Midnight",
     dark: true,
     terminal: {
-      background: "#0f1117", foreground: "#e3e8f0",
-      cursor: "#6ea8fe", cursorAccent: "#0f1117", selectionBackground: "#2d4a7a",
+      background: "#141826", foreground: "#e3e8f0",
+      cursor: "#6ea8fe", cursorAccent: "#141826", selectionBackground: "#2d4a7a",
       ...ANSI_DARK,
     },
   },

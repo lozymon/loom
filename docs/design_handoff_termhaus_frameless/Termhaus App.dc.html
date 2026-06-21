@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  .pane:hover .pctl{opacity:1 !important}
+  .wsrow:hover .wsact{opacity:1 !important}
+  .navitem{transition:color .12s;cursor:pointer}
+  .clk{cursor:pointer}
+  @keyframes thpulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes ovin{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
+  @keyframes bgin{from{opacity:0}to{opacity:1}}
+  .livedot{animation:thpulse 2.4s ease-in-out infinite}
+  .cursor{animation:thpulse 1.1s steps(1,end) infinite}
+  .overlay-card{animation:ovin .16s ease-out both}
+  .backdrop{animation:bgin .14s ease-out both}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:rgba(130,130,140,.28);border-radius:999px}
+</style>
+</helmet>
+<div style="position:relative;height:100vh;width:100vw;overflow:hidden;background:{{ canvas }};font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:{{ bright }};display:flex;flex-direction:column">
+
+  <!-- TOP BAR -->
+  <div style="height:50px;flex:none;display:flex;align-items:center;padding:0 18px;z-index:5">
+    <div class="clk navitem" onClick="{{ goOverview }}" style="display:flex;align-items:center;gap:10px">
+      <div style="width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 30% 30%, {{ accentText }}, {{ accent }})"></div>
+      <span style="font-weight:600;font-size:14.5px;letter-spacing:-.01em;color:{{ bright }}">Termhaus</span>
+    </div>
+    <nav style="display:flex;gap:24px;margin-left:34px;font-size:13px">
+      <span class="navitem" onClick="{{ goOverview }}" style="color:{{ nav.overview }}">Overview</span>
+      <span class="navitem" onClick="{{ openPalette }}" style="color:{{ nav.palette }}">Palette</span>
+      <span class="navitem" onClick="{{ openGit }}" style="color:{{ nav.git }}">Git</span>
+      <span class="navitem" onClick="{{ openPreview }}" style="color:{{ nav.preview }}">Preview</span>
+      <span class="navitem" onClick="{{ openDocs }}" style="color:{{ nav.docs }}">Docs</span>
+      <span class="navitem" onClick="{{ openSettings }}" style="color:{{ nav.settings }}">Settings</span>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:20px;color:{{ faint }}">
+      <div style="width:12px;height:1.5px;background:currentColor"></div>
+      <div style="width:9px;height:9px;border:1.5px solid currentColor;border-radius:2px"></div>
+      <div style="font-size:16px;line-height:1;color:{{ dim }}">×</div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;padding-left:14px">
+
+    <!-- RAIL -->
+    <div style="width:212px;flex:none;padding:8px 12px 16px;display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 6px 14px 10px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.2em;color:{{ faint }}">WORKSPACES</span>
+        <div class="clk" onClick="{{ openLauncher }}" style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:{{ dim }};font-size:16px;font-weight:300">+</div>
+      </div>
+
+      <div class="wsrow clk" onClick="{{ wsTermhausFn }}" style="display:flex;align-items:center;gap:11px;height:44px;padding:0 14px;border-radius:12px;background:{{ railTermhausBg }};color:{{ railTermhausText }}">
+        <div class="livedot" style="width:6px;height:6px;border-radius:50%;background:{{ accent }};flex:none;box-shadow:{{ railTermhausGlow }}"></div>
+        <span style="flex:1;font-size:13.5px;font-weight:500">Termhaus</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ railTermhausCount }}">4</span>
+      </div>
+
+      <div class="wsrow clk" onClick="{{ wsFleetFn }}" style="display:flex;align-items:center;gap:11px;height:44px;padding:0 14px;border-radius:12px;background:{{ railFleetBg }};color:{{ railFleetText }}">
+        <div class="livedot" style="width:6px;height:6px;border-radius:50%;background:{{ working }};flex:none"></div>
+        <span style="flex:1;font-size:13.5px">Fleet</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ railFleetCount }}">12</span>
+      </div>
+
+      <div class="wsrow clk" onClick="{{ wsScratchFn }}" style="display:flex;align-items:center;gap:11px;height:44px;padding:0 14px;border-radius:12px;background:{{ railScratchBg }};color:{{ railScratchText }}">
+        <div style="width:6px;height:6px;border-radius:50%;background:{{ idle }};flex:none"></div>
+        <span style="flex:1;font-size:13.5px">Scratch</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ faint }}">0</span>
+      </div>
+
+      <div class="clk" onClick="{{ openLauncher }}" style="margin-top:12px;height:40px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;background:{{ tintWeak }};color:{{ mid }};font-size:13px">
+        <span style="font-size:16px;font-weight:300">+</span> New
+      </div>
+
+      <div style="margin-top:auto;display:flex;align-items:center;gap:9px;padding:10px 12px;color:{{ faint }};font-family:'IBM Plex Mono',monospace;font-size:11px">
+        <div style="width:24px;height:24px;border-radius:50%;background:{{ tintMed }};flex:none"></div>
+        lozymon
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+
+      <!-- ===== GRID ===== -->
+      <sc-if value="{{ showGrid }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;display:flex;min-height:0;gap:14px;padding:8px 16px 0">
+
+        <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+
+          <!-- TERMHAUS — hero 4-pane -->
+          <sc-if value="{{ wsTermhaus }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:1;display:grid;grid-template-columns:{{ gridCols }};grid-template-rows:1fr 1fr;gap:14px;min-height:0">
+
+            <div class="pane" style="position:relative;background:{{ surface }};border-radius:14px;overflow:hidden;box-shadow:{{ focusRingShadow }}">
+              <div style="position:absolute;top:13px;left:14px;display:flex;align-items:center;gap:7px;background:{{ chip }};backdrop-filter:blur(8px);padding:6px 12px;border-radius:999px;box-shadow:inset 0 0 0 1px {{ chipBorder }};z-index:2">
+                <div class="livedot" style="width:6px;height:6px;border-radius:50%;background:{{ working }}"></div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">Faye</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ faint }}">⎇ main</span>
+              </div>
+              <div class="pctl" style="position:absolute;top:15px;right:16px;display:flex;gap:13px;opacity:{{ ctlOpacity }};transition:opacity .12s;color:{{ mid }};font-size:13px;z-index:2"><span>+</span><span>⤢</span><span>×</span></div>
+              <div style="height:100%;padding:52px 20px 18px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.75;color:{{ dim }}">
+                <div style="color:{{ mid }}">$ npm run dev</div>
+                <div>VITE v5.2.0&nbsp;&nbsp;ready in 312 ms</div>
+                <div>➜&nbsp;&nbsp;Local:&nbsp;&nbsp;&nbsp;<span style="color:{{ accentText }}">localhost:3000</span></div>
+                <div style="color:{{ faint }}">➜&nbsp;&nbsp;press h + enter for help</div>
+                <div style="margin-top:4px">$ <span class="cursor" style="display:inline-block;width:7px;height:14px;background:{{ dim }};vertical-align:middle"></span></div>
+              </div>
+            </div>
+
+            <div class="pane" style="position:relative;background:{{ surface }};border-radius:14px;overflow:hidden;box-shadow:{{ paneShadow }}">
+              <div style="position:absolute;top:13px;left:14px;display:flex;align-items:center;gap:7px;background:{{ chip }};backdrop-filter:blur(8px);padding:6px 12px;border-radius:999px;box-shadow:inset 0 0 0 1px {{ chipBorder }};z-index:2">
+                <div style="width:6px;height:6px;border-radius:50%;background:{{ idle }}"></div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:{{ mid }}">Cleo</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ faint }}">idle</span>
+              </div>
+              <div class="pctl" style="position:absolute;top:15px;right:16px;display:flex;gap:13px;opacity:{{ ctlOpacity }};transition:opacity .12s;color:{{ mid }};font-size:13px;z-index:2"><span>+</span><span>⤢</span><span>×</span></div>
+              <div style="height:100%;padding:52px 20px 18px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.75;color:{{ dim }}">
+                <div>$ git status</div>
+                <div style="color:{{ working }}">working tree clean</div>
+                <div style="margin-top:4px">$ <span class="cursor" style="display:inline-block;width:7px;height:14px;background:{{ dim }};vertical-align:middle"></span></div>
+              </div>
+            </div>
+
+            <div class="pane" style="position:relative;background:{{ surface }};border-radius:14px;overflow:hidden;box-shadow:{{ needsShadow }}">
+              <div style="position:absolute;top:13px;left:14px;display:flex;align-items:center;gap:7px;background:{{ chip }};backdrop-filter:blur(8px);padding:6px 12px;border-radius:999px;box-shadow:inset 0 0 0 1px {{ needsBorder }};z-index:2">
+                <div class="livedot" style="width:6px;height:6px;border-radius:50%;background:{{ needs }}"></div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:{{ mid }}">Wade</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ needs }}">needs you</span>
+              </div>
+              <div class="pctl" style="position:absolute;top:15px;right:16px;display:flex;gap:13px;opacity:{{ ctlOpacity }};transition:opacity .12s;color:{{ mid }};font-size:13px;z-index:2"><span>+</span><span>⤢</span><span>×</span></div>
+              <div style="height:100%;padding:52px 20px 18px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.75;color:{{ dim }}">
+                <div style="color:{{ mid }}">? Overwrite existing migration?</div>
+                <div style="color:{{ mid }}"><span style="color:{{ needs }}">(y/N)</span> <span class="cursor" style="display:inline-block;width:7px;height:14px;background:{{ needs }};vertical-align:middle"></span></div>
+              </div>
+            </div>
+
+            <div class="pane" style="position:relative;background:{{ surfaceDead }};border-radius:14px;overflow:hidden;box-shadow:{{ deadShadow }}">
+              <div style="position:absolute;top:13px;left:14px;display:flex;align-items:center;gap:7px;background:{{ chip }};backdrop-filter:blur(8px);padding:6px 12px;border-radius:999px;box-shadow:inset 0 0 0 1px {{ chipBorder }};z-index:2">
+                <div style="width:6px;height:6px;border-radius:50%;border:1px solid {{ dim }}"></div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:{{ dim }}">Dext</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ fail }}">exited · 1</span>
+              </div>
+              <div class="pctl" style="position:absolute;top:14px;right:16px;display:flex;gap:11px;opacity:{{ ctlOpacity }};transition:opacity .12s;color:{{ mid }};font-family:'IBM Plex Mono',monospace;font-size:11px;z-index:2"><span style="color:{{ bright }}">↻ restart</span><span>×</span></div>
+              <div style="height:100%;padding:52px 20px 18px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.75;color:{{ faint }}">
+                <div>$ pytest -q</div>
+                <div style="color:{{ fail }}">FAILED tests/test_pty.py::test_resize</div>
+                <div style="color:{{ faint }}">process exited with code 1 · ↻ to restart</div>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- FLEET — 12 panes -->
+          <sc-if value="{{ wsFleet }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;display:grid;grid-template-columns:{{ fleetCols }};grid-auto-rows:1fr;gap:11px;min-height:0">
+            <sc-for list="{{ fleetPanes }}" as="p" hint-placeholder-count="12">
+              <div class="pane" style="position:relative;background:{{ surface }};border-radius:12px;overflow:hidden;box-shadow:{{ p.shadow }}">
+                <div style="position:absolute;top:10px;left:11px;display:flex;align-items:center;gap:6px;background:{{ chip }};backdrop-filter:blur(8px);padding:4px 9px;border-radius:999px;box-shadow:inset 0 0 0 1px {{ chipBorder }};z-index:2">
+                  <div class="livedot" style="width:5px;height:5px;border-radius:50%;background:{{ p.dot }}"></div>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:{{ p.nameColor }}">{{ p.name }}</span>
+                  <span style="width:5px;height:5px;border-radius:50%;background:{{ p.tint }}"></span>
+                </div>
+                <div style="position:absolute;top:11px;right:12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.04em;color:{{ p.statusColor }};z-index:2">{{ p.statusLabel }}</div>
+                <div style="height:100%;padding:34px 12px 11px;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.65;color:{{ dim }}">
+                  <div style="color:{{ p.agentColor }}">{{ p.agent }}</div>
+                  <div style="color:{{ p.lineColor }}">{{ p.line }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          </sc-if>
+
+          <!-- SCRATCH — empty / first run -->
+          <sc-if value="{{ wsScratch }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;min-height:0">
+            <div style="display:flex;flex-direction:column;align-items:center;text-align:center;max-width:360px">
+              <div style="width:62px;height:62px;border-radius:16px;border:1.5px dashed {{ chipBorder2 }};display:flex;align-items:center;justify-content:center;margin-bottom:22px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;width:26px;height:26px"><div style="background:{{ dim }};border-radius:2px"></div><div style="background:{{ faint }};border-radius:2px"></div><div style="background:{{ faint }};border-radius:2px"></div><div style="background:{{ faint }};border-radius:2px"></div></div>
+              </div>
+              <div style="font-size:18px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px">No panes yet</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ mid }};margin-bottom:24px">Pick a layout and assign an agent to each pane to start running commands in this workspace.</div>
+              <div style="display:flex;gap:10px">
+                <span class="clk" onClick="{{ openLauncher }}" style="font-size:13px;font-weight:500;color:#fff;background:{{ accent }};padding:11px 22px;border-radius:11px">Choose a layout</span>
+                <span class="clk" style="font-size:13px;color:{{ mid }};padding:11px 18px;border-radius:11px;box-shadow:inset 0 0 0 1px {{ chipBorder2 }}">Split a pane</span>
+              </div>
+              <div style="margin-top:22px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ faint }}">or press <span style="color:{{ accentText }}">Ctrl+Shift+D</span></div>
+            </div>
+          </div>
+          </sc-if>
+
+        </div>
+
+        <!-- DOCKED PANEL: GIT -->
+        <sc-if value="{{ panelGit }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:none;width:440px;background:{{ surface }};border-radius:14px;overflow:hidden;box-shadow:{{ panelShadow }};display:flex;flex-direction:column">
+          <div style="height:46px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid {{ hair }}">
+            <span style="font-size:13.5px;font-weight:600">Source Control</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ dim }}">⎇ main</span>
+            <div style="margin-left:auto;display:flex;gap:14px;color:{{ dim }};font-size:13px"><span class="clk">↻</span><span class="clk" onClick="{{ closePanel }}">×</span></div>
+          </div>
+          <div style="flex:none;padding:10px 10px 6px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:{{ faint }};padding:6px 8px">CHANGES · 3</div>
+            <div class="clk" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;width:14px;color:{{ needs }}">M</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ mid }}">src/components/TitleBar.tsx</span></div>
+            <div class="clk" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:{{ tintWeak }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;width:14px;color:{{ working }}">A</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px">src/components/CommandBar.tsx</span></div>
+            <div class="clk" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;width:14px;color:{{ fail }}">D</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ mid }}">src/legacy/Tabs.tsx</span></div>
+          </div>
+          <div style="flex:1;min-height:0;margin:6px 10px 0;border-top:1px solid {{ hair }};font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.7;overflow:auto;padding:10px 4px 12px;color:{{ dim }}">
+            <div style="color:{{ faint }}">@@ -14,7 +14,9 @@ CommandBar()</div>
+            <div>&nbsp;&nbsp;const targets = useTargets();</div>
+            <div style="background:{{ addBg }};color:{{ addText }}">+&nbsp;const live = panes.filter(p =&gt; p.alive);</div>
+            <div style="background:{{ addBg }};color:{{ addText }}">+&nbsp;const scope = useScope('all');</div>
+            <div style="background:{{ delBg }};color:{{ delText }}">-&nbsp;const all = panes;</div>
+            <div>&nbsp;&nbsp;return (</div>
+          </div>
+          <div style="flex:none;display:flex;align-items:center;gap:8px;padding:11px 16px;border-top:1px solid {{ hair }};color:{{ faint }};font-size:11.5px">
+            <span style="color:{{ accentText }}">⌖</span> drag to select lines → send to terminal
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- DOCKED PANEL: PREVIEW -->
+        <sc-if value="{{ panelPreview }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:none;width:480px;background:{{ surface }};border-radius:14px;overflow:hidden;box-shadow:{{ panelShadow }};display:flex;flex-direction:column">
+          <div style="height:46px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid {{ hair }}">
+            <span style="color:{{ dim }};font-size:13px">↻</span>
+            <div style="flex:1;height:30px;border-radius:8px;background:{{ well }};border:1px solid {{ hair }};display:flex;align-items:center;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ mid }}">localhost:3000</div>
+            <div style="display:flex;gap:13px;color:{{ dim }};font-size:13px"><span class="clk">⤤</span><span class="clk" onClick="{{ closePanel }}">×</span></div>
+          </div>
+          <div style="flex:1;min-height:0;background:#fff;color:#1c1e22;overflow:hidden;display:flex;flex-direction:column">
+            <div style="height:54px;flex:none;background:{{ accent }};display:flex;align-items:center;padding:0 22px;color:#fff;font-weight:600;font-size:15px;gap:10px"><div style="width:20px;height:20px;border-radius:6px;background:rgba(255,255,255,.9)"></div>Acme</div>
+            <div style="padding:28px 24px;display:flex;flex-direction:column;gap:14px">
+              <div style="width:62%;height:22px;border-radius:6px;background:#e7ebf3"></div>
+              <div style="width:90%;height:11px;border-radius:6px;background:#eef1f6"></div>
+              <div style="width:80%;height:11px;border-radius:6px;background:#eef1f6"></div>
+              <div style="width:120px;height:34px;border-radius:8px;background:{{ accent }};margin-top:6px"></div>
+              <div style="display:flex;gap:12px;margin-top:14px"><div style="flex:1;height:90px;border-radius:10px;background:#f4f6fa"></div><div style="flex:1;height:90px;border-radius:10px;background:#f4f6fa"></div><div style="flex:1;height:90px;border-radius:10px;background:#f4f6fa"></div></div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- DOCKED PANEL: DOCS -->
+        <sc-if value="{{ panelDocs }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:none;width:480px;background:{{ surface }};border-radius:14px;overflow:hidden;box-shadow:{{ panelShadow }};display:flex;flex-direction:column">
+          <div style="height:46px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid {{ hair }}">
+            <span style="font-size:13.5px;font-weight:600">Docs</span>
+            <div style="margin-left:auto;display:flex;gap:14px;color:{{ dim }};font-size:13px"><span class="clk" onClick="{{ closePanel }}">×</span></div>
+          </div>
+          <div style="flex:none;display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid {{ hair }};font-family:'IBM Plex Mono',monospace;font-size:11.5px">
+            <span style="padding:5px 11px;border-radius:7px;background:{{ activeWsBg }};color:{{ accentText }}">README.md</span>
+            <span style="padding:5px 11px;border-radius:7px;color:{{ mid }}">ARCHITECTURE.md</span>
+            <span style="padding:5px 11px;border-radius:7px;color:{{ mid }}">CONTRIBUTING.md</span>
+          </div>
+          <div style="flex:1;min-height:0;overflow:auto;padding:22px 24px;line-height:1.6">
+            <div style="font-size:21px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px">Termhaus</div>
+            <div style="font-size:13.5px;color:{{ mid }};margin-bottom:20px">A control room of real terminals — a graphical multiplexer for driving fleets of CLI agents.</div>
+            <div style="font-size:12.5px;font-weight:600;color:{{ bright }};margin-bottom:8px">Getting started</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:{{ well }};border:1px solid {{ hair }};border-radius:8px;padding:12px 14px;color:{{ working }};margin-bottom:18px">$ pnpm install<br>$ pnpm tauri dev</div>
+            <div style="font-size:13.5px;color:{{ dim }}">Open the rail's <span style="color:{{ bright }}">+</span> to create a workspace, choose a layout, and assign an agent to each pane.</div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <!-- ===== SETTINGS ===== -->
+      <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;min-height:0;overflow:auto;padding:14px 16px 24px">
+        <div style="max-width:860px;margin:0 auto">
+          <div style="font-size:24px;font-weight:600;letter-spacing:-.015em;margin:14px 0 18px">Settings</div>
+          <div style="display:flex;gap:6px;margin-bottom:26px;border-bottom:1px solid {{ hair }}">
+            <div class="clk" onClick="{{ tabAppearanceFn }}" style="padding:10px 4px;margin-right:18px;font-size:13.5px;color:{{ tabAppearanceColor }};border-bottom:2px solid {{ tabAppearanceBorder }}">Appearance</div>
+            <div class="clk" onClick="{{ tabKeysFn }}" style="padding:10px 4px;font-size:13.5px;color:{{ tabKeysColor }};border-bottom:2px solid {{ tabKeysBorder }}">Key bindings</div>
+          </div>
+
+          <sc-if value="{{ tabAppearance }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:{{ faint }};margin-bottom:8px">THEME</div>
+            <div style="font-size:12.5px;color:{{ mid }};margin-bottom:16px">Click a theme to apply it live across the app.</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:34px">
+              <div class="clk" onClick="{{ setThemeDark }}" style="border-radius:12px;overflow:hidden;box-shadow:{{ tileDark }}">
+                <div style="height:84px;background:#1a1b1e;display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#e6e6e6">Ab</span><div style="position:absolute;bottom:10px;right:10px;width:14px;height:14px;border-radius:50%;background:#5b8cff"></div></div>
+                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;font-weight:500;color:{{ bright }}">Termhaus Dark</div>
+              </div>
+              <div class="clk" onClick="{{ setThemeLight }}" style="border-radius:12px;overflow:hidden;box-shadow:{{ tileLight }}">
+                <div style="height:84px;background:#ffffff;display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#1c1e22">Ab</span><div style="position:absolute;bottom:10px;right:10px;width:14px;height:14px;border-radius:50%;background:#2f6bff"></div></div>
+                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;color:{{ bright }}">Termhaus Light</div>
+              </div>
+              <div class="clk" onClick="{{ setThemeMidnight }}" style="border-radius:12px;overflow:hidden;box-shadow:{{ tileMidnight }}">
+                <div style="height:84px;background:#0f1117;display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#e3e8f0">Ab</span><div style="position:absolute;bottom:10px;right:10px;width:14px;height:14px;border-radius:50%;background:#6ea8fe"></div></div>
+                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;color:{{ bright }}">Midnight</div>
+              </div>
+              <div class="clk" onClick="{{ setThemePaper }}" style="border-radius:12px;overflow:hidden;box-shadow:{{ tilePaper }}">
+                <div style="height:84px;background:#faf7f0;display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#2b2620">Ab</span><div style="position:absolute;bottom:10px;right:10px;width:14px;height:14px;border-radius:50%;background:#5a55d6"></div></div>
+                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;color:{{ bright }}">Paper</div>
+              </div>
+            </div>
+
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:{{ faint }};margin-bottom:14px">TERMINAL</div>
+            <div style="display:flex;flex-direction:column;gap:2px;background:{{ surface }};border-radius:12px;box-shadow:inset 0 0 0 1px {{ hair }};overflow:hidden">
+              <div style="display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">Font family</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:8px;padding:6px 12px">JetBrains Mono ▾</span></div>
+              <div style="display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">Font size</span><div style="display:flex;align-items:center;gap:14px"><div style="width:180px;height:4px;border-radius:999px;background:{{ well }};position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:42%;background:{{ accent }};border-radius:999px"></div><div style="position:absolute;left:42%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:{{ bright }}"></div></div><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ mid }};width:34px">14px</span></div></div>
+              <div style="display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">Cursor style</span><div style="display:flex;gap:4px;background:{{ well }};border-radius:9px;padding:3px"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 12px;border-radius:7px;background:{{ accent }};color:#fff">Block</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 12px;border-radius:7px;color:{{ mid }}">Bar</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 12px;border-radius:7px;color:{{ mid }}">Underline</span></div></div>
+              <div style="display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">Cursor blink</span><div style="width:38px;height:21px;border-radius:999px;background:{{ accent }};position:relative"><div style="position:absolute;top:2.5px;left:19px;width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div>
+              <div style="display:flex;align-items:center;padding:15px 18px"><span style="flex:1;font-size:13.5px">Scrollback lines</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:8px;padding:6px 12px">5000</span></div>
+            </div>
+          </div>
+          </sc-if>
+
+          <sc-if value="{{ tabKeys }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:13px;color:{{ dim }};margin-bottom:22px;line-height:1.6">Every app shortcut lives in the <span style="font-family:'IBM Plex Mono',monospace;color:{{ accentText }}">Ctrl+Shift</span> namespace, so plain keys always reach the terminal. Click a binding to rebind.</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:{{ faint }};margin-bottom:12px">FOCUS</div>
+            <div style="background:{{ surface }};border-radius:12px;box-shadow:inset 0 0 0 1px {{ hair }};overflow:hidden;margin-bottom:26px">
+              <div style="display:flex;align-items:center;padding:13px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">Move focus ↑ ↓ ← →</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:7px;padding:5px 10px">Ctrl+Shift+Arrows</span></div>
+              <div style="display:flex;align-items:center;padding:13px 18px"><span style="flex:1;font-size:13.5px">Command palette</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:7px;padding:5px 10px">Ctrl+Shift+P</span></div>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:{{ faint }};margin-bottom:12px">PANES</div>
+            <div style="background:{{ surface }};border-radius:12px;box-shadow:inset 0 0 0 1px {{ hair }};overflow:hidden;margin-bottom:26px">
+              <div style="display:flex;align-items:center;padding:13px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">Split right</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:7px;padding:5px 10px">Ctrl+Shift+D</span></div>
+              <div style="display:flex;align-items:center;padding:13px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">Split down</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:7px;padding:5px 10px">Ctrl+Shift+E</span></div>
+              <div style="display:flex;align-items:center;padding:13px 18px"><span style="flex:1;font-size:13.5px">Zoom pane</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:7px;padding:5px 10px">Ctrl+Shift+Enter</span></div>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:{{ faint }};margin-bottom:12px">WORKSPACES</div>
+            <div style="background:{{ surface }};border-radius:12px;box-shadow:inset 0 0 0 1px {{ hair }};overflow:hidden">
+              <div style="display:flex;align-items:center;padding:13px 18px;border-bottom:1px solid {{ hair }}"><span style="flex:1;font-size:13.5px">New workspace</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:7px;padding:5px 10px">Ctrl+Shift+T</span></div>
+              <div style="display:flex;align-items:center;padding:13px 18px"><span style="flex:1;font-size:13.5px">Jump to workspace 1–9</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ mid }};background:{{ well }};border:1px solid {{ hair }};border-radius:7px;padding:5px 10px">Ctrl+Shift+1…9</span></div>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== COMMAND BAR ===== -->
+      <sc-if value="{{ showCmdBar }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:none;padding:14px 16px 16px;position:relative">
+        <!-- targets dropdown -->
+        <sc-if value="{{ targetsOpen }}" hint-placeholder-val="{{ false }}">
+        <div class="overlay-card" style="position:absolute;bottom:74px;right:118px;width:236px;background:{{ surface }};border-radius:12px;box-shadow:{{ panelShadow }};overflow:hidden;z-index:30;padding:6px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;color:{{ faint }};padding:8px 10px 6px">BROADCAST TO</div>
+          <div class="clk" onClick="{{ scopeAll }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:{{ scAllBg }}"><span style="color:{{ accentText }};width:14px">⌖</span><span style="flex:1;font-size:13px">All live panes</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">{{ scAllCount }}</span></div>
+          <div class="clk" onClick="{{ scopeGroup }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:{{ scGroupBg }}"><span style="width:14px;color:{{ mid }}">◫</span><span style="flex:1;font-size:13px">Group: claude</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">4</span></div>
+          <div class="clk" onClick="{{ scopeCurrent }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:{{ scCurrentBg }}"><span style="width:14px;color:{{ mid }}">▣</span><span style="flex:1;font-size:13px">Current pane</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">1</span></div>
+        </div>
+        </sc-if>
+
+        <div style="height:54px;border-radius:15px;background:{{ surface }};box-shadow:{{ barShadow }};display:flex;align-items:center;gap:14px;padding:0 8px 0 16px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <div style="width:32px;height:18px;border-radius:999px;background:{{ accent }};position:relative;flex:none"><div style="position:absolute;top:2px;left:16px;width:14px;height:14px;border-radius:50%;background:#fff"></div></div>
+            <span style="font-size:13px;color:{{ mid }}">Broadcast</span>
+          </div>
+          <div style="width:1px;height:24px;background:{{ chipBorder }}"></div>
+          <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ faint }}">Type a prompt → {{ scopeHint }}…</span>
+          <span class="clk" onClick="{{ toggleTargets }}" style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ accentText }};background:{{ targetBg }};padding:6px 13px;border-radius:999px">⌖ {{ scopeLabel }} <span style="opacity:.7">▾</span></span>
+          <span style="font-size:13px;font-weight:500;color:#fff;background:{{ accent }};padding:10px 22px;border-radius:11px">Send</span>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <!-- ===== OVERLAY: PALETTE ===== -->
+  <sc-if value="{{ overlayPalette }}" hint-placeholder-val="{{ false }}">
+  <div class="backdrop" onClick="{{ closeOverlay }}" style="position:absolute;inset:0;background:{{ overlayBg }};backdrop-filter:blur(2px);z-index:40;display:flex;align-items:flex-start;justify-content:center;padding-top:96px">
+    <div class="overlay-card" onClick="{{ stop }}" style="width:640px;background:{{ surface }};border-radius:16px;box-shadow:{{ overlayCardShadow }};overflow:hidden">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid {{ hair }}">
+        <span style="color:{{ accentText }};font-size:15px">⌘</span>
+        <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:14px;color:{{ mid }}">split<span class="cursor" style="display:inline-block;width:7px;height:16px;background:{{ dim }};vertical-align:middle;margin-left:1px"></span></span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ faint }};border:1px solid {{ chipBorder }};border-radius:6px;padding:3px 7px">esc</span>
+      </div>
+      <div style="padding:8px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:{{ faint }};padding:8px 12px 6px">ACTIONS</div>
+        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;background:{{ activeWsBg }}"><span style="color:{{ accentText }};width:16px">⊟</span><span style="flex:1;font-size:13.5px">Split pane right</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">Ctrl+Shift+D</span></div>
+        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><span style="color:{{ dim }};width:16px">⊞</span><span style="flex:1;font-size:13.5px">Split pane down</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">Ctrl+Shift+E</span></div>
+        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><span style="color:{{ dim }};width:16px">⤢</span><span style="flex:1;font-size:13.5px">Zoom focused pane</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">Ctrl+Shift+Enter</span></div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:{{ faint }};padding:14px 12px 6px">GO TO PANE</div>
+        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><div class="livedot" style="width:7px;height:7px;border-radius:50%;background:{{ working }};margin:0 5px"></div><span style="flex:1;font-size:13.5px">Termhaus / Faye <span style="color:{{ faint }};font-family:'IBM Plex Mono',monospace;font-size:11.5px">⎇ main</span></span></div>
+        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><div style="width:7px;height:7px;border-radius:50%;background:{{ needs }};margin:0 5px"></div><span style="flex:1;font-size:13.5px">Termhaus / Wade <span style="color:{{ needs }};font-family:'IBM Plex Mono',monospace;font-size:11.5px">needs you</span></span></div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== OVERLAY: LAUNCHER ===== -->
+  <sc-if value="{{ overlayLauncher }}" hint-placeholder-val="{{ false }}">
+  <div class="backdrop" onClick="{{ closeOverlay }}" style="position:absolute;inset:0;background:{{ overlayBg }};backdrop-filter:blur(2px);z-index:40;display:flex;align-items:center;justify-content:center;padding:40px">
+    <div class="overlay-card" onClick="{{ stop }}" style="width:880px;background:{{ surface }};border-radius:18px;box-shadow:{{ overlayCardShadow }};overflow:hidden;display:flex;flex-direction:column;max-height:100%">
+      <div style="display:flex;align-items:center;padding:20px 24px;border-bottom:1px solid {{ hair }}">
+        <span style="font-size:16px;font-weight:600;letter-spacing:-.01em">New workspace</span>
+        <span class="clk" onClick="{{ closeOverlay }}" style="margin-left:auto;color:{{ dim }};font-size:18px">×</span>
+      </div>
+      <div style="display:flex;min-height:0">
+        <div style="flex:none;width:380px;padding:22px 24px;border-right:1px solid {{ hair }};display:flex;flex-direction:column;gap:20px;overflow:auto">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;color:{{ faint }}">WHERE</div>
+          <div>
+            <div style="font-size:12.5px;color:{{ mid }};margin-bottom:8px">Workspace name</div>
+            <div style="height:38px;border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ accent }};display:flex;align-items:center;padding:0 13px;font-size:13.5px">Termhaus<span class="cursor" style="display:inline-block;width:7px;height:15px;background:{{ dim }};vertical-align:middle;margin-left:2px"></span></div>
+          </div>
+          <div>
+            <div style="font-size:12.5px;color:{{ mid }};margin-bottom:8px">Working folder</div>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1;height:38px;border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ chipBorder }};display:flex;align-items:center;padding:0 13px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ mid }}">~/code/termhaus</div>
+              <div style="height:38px;padding:0 14px;border-radius:9px;background:{{ tintWeak }};display:flex;align-items:center;font-size:12.5px;color:{{ bright }}">Browse…</div>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }};background:{{ well }};border-radius:7px;padding:5px 10px">~/code/acme</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }};background:{{ well }};border-radius:7px;padding:5px 10px">~/work/api</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12.5px;color:{{ mid }};margin-bottom:8px">Presets</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <span style="font-size:12.5px;padding:7px 13px;border-radius:8px;background:{{ activeWsBg }};color:{{ accentText }};box-shadow:inset 0 0 0 1px {{ targetBg }}">Fleet ×4</span>
+              <span style="font-size:12.5px;padding:7px 13px;border-radius:8px;background:{{ well }};color:{{ mid }}">Web dev</span>
+              <span style="font-size:12.5px;padding:7px 13px;border-radius:8px;background:{{ well }};color:{{ mid }}">Blank</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1;padding:22px 24px;display:flex;flex-direction:column;gap:18px;min-width:0;overflow:auto">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;color:{{ faint }}">WHAT RUNS</div>
+          <div>
+            <div style="display:flex;align-items:center;margin-bottom:10px"><span style="flex:1;font-size:12.5px;color:{{ mid }}">Layout</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ accentText }}">4 panes</span></div>
+            <div style="display:flex;gap:10px">
+              <div style="width:42px;height:34px;border-radius:7px;background:{{ well }};padding:4px;box-shadow:inset 0 0 0 1px {{ chipBorder }}"><div style="width:100%;height:100%;border-radius:3px;background:{{ tintMed }}"></div></div>
+              <div style="width:42px;height:34px;border-radius:7px;background:{{ well }};padding:4px;display:flex;gap:3px;box-shadow:inset 0 0 0 1px {{ chipBorder }}"><div style="flex:1;border-radius:3px;background:{{ tintMed }}"></div><div style="flex:1;border-radius:3px;background:{{ tintMed }}"></div></div>
+              <div style="width:42px;height:34px;border-radius:7px;background:{{ well }};padding:4px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;box-shadow:0 0 0 2px {{ accent }}"><div style="border-radius:2px;background:{{ accent }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div></div>
+              <div style="width:42px;height:34px;border-radius:7px;background:{{ well }};padding:4px;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;box-shadow:inset 0 0 0 1px {{ chipBorder }}"><div style="border-radius:2px;background:{{ tintMed }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div><div style="border-radius:2px;background:{{ tintMed }}"></div></div>
+              <div style="display:flex;align-items:center;margin-left:4px"><div style="width:110px;height:4px;border-radius:999px;background:{{ well }};position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:25%;background:{{ accent }};border-radius:999px"></div><div style="position:absolute;left:25%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:{{ bright }}"></div></div></div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;background:{{ well }};border-radius:11px;padding:12px 14px">
+            <span style="font-size:13px;color:{{ bright }};flex:none">Fill every pane with</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ bright }};background:{{ surface }};box-shadow:inset 0 0 0 1px {{ chipBorder }};border-radius:8px;padding:6px 12px">Claude Code ▾</span>
+            <span style="margin-left:auto;font-size:12.5px;font-weight:500;color:#fff;background:{{ accent }};padding:7px 15px;border-radius:8px">Apply to all</span>
+          </div>
+          <div>
+            <div style="font-size:12.5px;color:{{ mid }};margin-bottom:10px">Preview — click a pane to configure</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:60px 60px;gap:8px">
+              <div style="border-radius:9px;background:{{ well }};box-shadow:0 0 0 1.5px {{ accent }};padding:9px 12px;display:flex;flex-direction:column;justify-content:space-between"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ accentText }}">Faye</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">claude</span></div>
+              <div style="border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ chipBorder }};padding:9px 12px;display:flex;flex-direction:column;justify-content:space-between"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ bright }}">Cleo</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">claude</span></div>
+              <div style="border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ chipBorder }};padding:9px 12px;display:flex;flex-direction:column;justify-content:space-between"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ bright }}">Wade</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">claude</span></div>
+              <div style="border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ chipBorder }};padding:9px 12px;display:flex;flex-direction:column;justify-content:space-between"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ bright }}">Dext</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">claude</span></div>
+            </div>
+          </div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding-top:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ faint }}">Ctrl+Shift+T</span>
+            <span class="clk" onClick="{{ closeOverlay }}" style="margin-left:auto;font-size:13px;color:{{ mid }};padding:9px 16px">Cancel</span>
+            <span class="clk" onClick="{{ createScratch }}" style="font-size:13px;font-weight:500;color:#fff;background:{{ accent }};padding:10px 22px;border-radius:10px">Create workspace</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;paneControls&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;On hover&quot;,&quot;Always&quot;],&quot;default&quot;:&quot;On hover&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;liveGlow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { ws:'termhaus', theme:'dark', nav:'overview', panel:null, overlay:null, settingsTab:'appearance', targetsOpen:false, scope:'all' };
+
+  renderVals() {
+    const P = {
+      dark: { canvas:'#0e0f12', surface:'#191b20', surfaceDead:'#141518', bright:'#e7e7ea', mid:'#9a9da3', dim:'#7b7e84', faint:'#5f6268', chip:'rgba(12,13,16,.72)', chipBorder:'rgba(255,255,255,.07)', chipBorder2:'rgba(255,255,255,.14)', tintWeak:'rgba(255,255,255,.04)', tintMed:'#2a2d34', well:'#0f1013', accent:'#5b8cff', accentText:'#9bbcff', glow:'91,140,255', working:'#5fb389', idle:'#6b6e74', needs:'#c89244', fail:'#9a6b6b', light:false },
+      midnight: { canvas:'#0b0d14', surface:'#141826', surfaceDead:'#10131d', bright:'#e3e8f0', mid:'#9aa3b8', dim:'#79839a', faint:'#586273', chip:'rgba(8,10,16,.72)', chipBorder:'rgba(255,255,255,.08)', chipBorder2:'rgba(255,255,255,.16)', tintWeak:'rgba(255,255,255,.05)', tintMed:'#222a3d', well:'#0b0d14', accent:'#6ea8fe', accentText:'#a9ccff', glow:'110,168,254', working:'#5fb389', idle:'#6b7488', needs:'#d4a14e', fail:'#c98a8a', light:false },
+      light: { canvas:'#eef1f6', surface:'#ffffff', surfaceDead:'#f3f4f7', bright:'#1c1e22', mid:'#5b616c', dim:'#767d89', faint:'#aab0bb', chip:'rgba(255,255,255,.82)', chipBorder:'rgba(0,0,0,.08)', chipBorder2:'rgba(0,0,0,.14)', tintWeak:'rgba(0,0,0,.04)', tintMed:'#dde2ea', well:'#eef1f6', accent:'#2f6bff', accentText:'#2f6bff', glow:'47,107,255', working:'#2e9e6b', idle:'#9aa0ab', needs:'#c07d1f', fail:'#c0473f', light:true },
+      paper: { canvas:'#ece4d4', surface:'#faf7f0', surfaceDead:'#f0ebe0', bright:'#2b2620', mid:'#6b6253', dim:'#857b6b', faint:'#b0a892', chip:'rgba(250,247,240,.85)', chipBorder:'rgba(43,38,32,.12)', chipBorder2:'rgba(43,38,32,.2)', tintWeak:'rgba(43,38,32,.05)', tintMed:'#ded3bd', well:'#efe9dc', accent:'#5a55d6', accentText:'#5a55d6', glow:'90,85,214', working:'#3f8f5f', idle:'#b0a892', needs:'#b07d2e', fail:'#b25444', light:true },
+    };
+    const t = P[this.state.theme] ?? P.dark;
+    const s = this.state;
+    const glowOn = (this.props.liveGlow ?? true) && !t.light;
+    const always = (this.props.paneControls ?? 'On hover') === 'Always';
+
+    const isSettings = s.nav === 'settings';
+    const hasPanel = !!s.panel && !isSettings;
+    const activeKey = s.overlay === 'palette' ? 'palette' : (s.panel || s.nav);
+    const navColor = (k) => activeKey === k ? t.bright : t.dim;
+
+    const focusRingShadow = t.light
+      ? `0 0 0 1.5px ${t.accent}, 0 14px 30px -20px rgba(30,40,70,.25)`
+      : `0 0 0 1.5px rgba(${t.glow},.7)${glowOn?`, 0 0 32px -6px rgba(${t.glow},.42)`:''}, 0 18px 40px -22px rgba(0,0,0,.7)`;
+    const paneShadow = t.light ? '0 14px 30px -20px rgba(30,40,70,.26), inset 0 0 0 1px rgba(0,0,0,.05)' : '0 18px 40px -22px rgba(0,0,0,.7)';
+    const deadShadow = t.light ? 'inset 0 0 0 1px rgba(0,0,0,.07)' : 'inset 0 0 0 1px rgba(255,255,255,.04)';
+    const barShadow = t.light ? '0 14px 30px -18px rgba(30,40,70,.3), inset 0 0 0 1px rgba(0,0,0,.06)' : '0 16px 38px -18px rgba(0,0,0,.85), inset 0 0 0 1px rgba(255,255,255,.06)';
+    const panelShadow = t.light ? '0 18px 40px -22px rgba(30,40,70,.3), inset 0 0 0 1px rgba(0,0,0,.06)' : '0 18px 40px -22px rgba(0,0,0,.8), inset 0 0 0 1px rgba(255,255,255,.05)';
+    const overlayCardShadow = t.light ? '0 40px 100px -30px rgba(20,28,50,.4), inset 0 0 0 1px rgba(0,0,0,.07)' : '0 40px 100px -30px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.07)';
+    const hair = t.light ? 'rgba(0,0,0,.07)' : 'rgba(255,255,255,.06)';
+    const overlayBg = t.light ? 'rgba(40,46,60,.34)' : 'rgba(8,9,11,.62)';
+    const needsBorder = t.light ? 'rgba(192,125,31,.4)' : 'rgba(200,146,68,.32)';
+    const needsShadow = `0 0 0 1px rgba(${t.light?'192,125,31':'200,146,68'},.5), ${paneShadow}`;
+
+    // fleet
+    const groups = [
+      { agent:'claude --resume', tint:t.accent },
+      { agent:'codex run', tint:'#3fb6a8' },
+      { agent:'$ tail -f log', tint:'#9a7fd8' },
+    ];
+    const names = ['Faye','Cleo','Wade','Dext','Iris','Otis','Bram','Lena','Niko','Suki','Veer','Mira'];
+    const statuses = ['working','working','idle','working','working','needs','working','working','idle','working','dead','working'];
+    const stColor = { working:t.working, idle:t.idle, needs:t.needs, dead:t.dim };
+    const stLabel = { working:'WORKING', idle:'IDLE', needs:'NEEDS YOU', dead:'EXITED·1' };
+    const stLine = { working:'compiling…', idle:'waiting', needs:'(y/N)', dead:'code 1 · ↻' };
+    const fleetPanes = names.map((nm,i)=>{
+      const g = groups[Math.floor(i/4)];
+      const st = statuses[i];
+      const isFocus = i===0;
+      const shadow = isFocus ? focusRingShadow : (st==='dead' ? deadShadow : (st==='needs' ? needsShadow : `inset 0 0 0 1px ${g.tint}33, ${paneShadow}`));
+      return { name:nm, agent:g.agent, tint:g.tint, dot:stColor[st], statusColor:stColor[st], statusLabel:stLabel[st],
+        line:stLine[st], lineColor: st==='needs'?t.needs:(st==='dead'?t.fail:t.dim), agentColor:t.mid, nameColor:isFocus?t.bright:t.mid, shadow };
+    });
+
+    const railBg = (k) => s.ws===k ? `linear-gradient(90deg, rgba(${t.glow},.16), rgba(${t.glow},.03))` : 'transparent';
+    const railText = (k) => s.ws===k ? t.bright : t.mid;
+    const railCount = (k) => s.ws===k ? t.accentText : t.faint;
+    const tile = (k) => s.theme===k ? `0 0 0 2px ${t.accent}` : `inset 0 0 0 1px ${hair}`;
+
+    const scopeMap = { all:{label:'all · 2 live', hint:'all live panes'}, group:{label:'claude · 4', hint:'group claude (4)'}, current:{label:'Faye', hint:'current pane'} };
+    const sc = scopeMap[s.scope] || scopeMap.all;
+    const scBg = (k) => s.scope===k ? `linear-gradient(90deg, rgba(${t.glow},.16), rgba(${t.glow},.03))` : 'transparent';
+
+    return {
+      canvas:t.canvas, surface:t.surface, surfaceDead:t.surfaceDead, bright:t.bright, mid:t.mid, dim:t.dim, faint:t.faint,
+      chip:t.chip, chipBorder:t.chipBorder, chipBorder2:t.chipBorder2, tintWeak:t.tintWeak, tintMed:t.tintMed, well:t.well,
+      accent:t.accent, accentText:t.accentText, working:t.working, idle:t.idle, needs:t.needs, fail:t.fail,
+      hair, overlayBg, needsBorder, focusRingShadow, paneShadow, deadShadow, needsShadow, barShadow, panelShadow, overlayCardShadow,
+      activeWsBg:`linear-gradient(90deg, rgba(${t.glow},.16), rgba(${t.glow},.03))`,
+      targetBg:`rgba(${t.glow},.14)`,
+      addBg:`rgba(${t.light?'46,158,107':'95,179,137'},.12)`, addText:t.working,
+      delBg:`rgba(${t.light?'192,71,63':'154,107,107'},.12)`, delText:t.fail,
+      ctlOpacity: always ? 1 : 0,
+      gridCols: hasPanel ? '1fr' : '1.45fr 1fr',
+      fleetCols: hasPanel ? 'repeat(3,1fr)' : 'repeat(4,1fr)',
+      fleetPanes,
+
+      nav:{ overview:navColor('overview'), palette:navColor('palette'), git:navColor('git'), preview:navColor('preview'), docs:navColor('docs'), settings:navColor('settings') },
+
+      showGrid: !isSettings, showSettings: isSettings, showCmdBar: !isSettings && s.ws!=='scratch',
+      wsTermhaus: s.ws==='termhaus', wsFleet: s.ws==='fleet', wsScratch: s.ws==='scratch',
+      panelGit:s.panel==='git', panelPreview:s.panel==='preview', panelDocs:s.panel==='docs',
+      overlayPalette:s.overlay==='palette', overlayLauncher:s.overlay==='launcher',
+
+      railTermhausBg:railBg('termhaus'), railTermhausText:railText('termhaus'), railTermhausCount:railCount('termhaus'), railTermhausGlow: (glowOn && s.ws==='termhaus')?`0 0 8px rgba(${t.glow},.85)`:'none',
+      railFleetBg:railBg('fleet'), railFleetText:railText('fleet'), railFleetCount:railCount('fleet'),
+      railScratchBg:railBg('scratch'), railScratchText:railText('scratch'),
+
+      tabAppearance:s.settingsTab==='appearance', tabKeys:s.settingsTab==='keys',
+      tabAppearanceColor:s.settingsTab==='appearance'?t.bright:t.dim, tabKeysColor:s.settingsTab==='keys'?t.bright:t.dim,
+      tabAppearanceBorder:s.settingsTab==='appearance'?t.accent:'transparent', tabKeysBorder:s.settingsTab==='keys'?t.accent:'transparent',
+      tileDark:tile('dark'), tileLight:tile('light'), tileMidnight:tile('midnight'), tilePaper:tile('paper'),
+
+      targetsOpen:s.targetsOpen, scopeLabel:sc.label, scopeHint:sc.hint,
+      scAllBg:scBg('all'), scGroupBg:scBg('group'), scCurrentBg:scBg('current'), scAllCount:'2 live',
+
+      goOverview:()=>this.setState({nav:'overview',panel:null,overlay:null}),
+      openSettings:()=>this.setState({nav:'settings',panel:null,overlay:null}),
+      openPalette:()=>this.setState({overlay:'palette'}),
+      openLauncher:()=>this.setState({overlay:'launcher'}),
+      openGit:()=>this.setState({nav:'overview',panel:this.state.panel==='git'?null:'git',overlay:null}),
+      openPreview:()=>this.setState({nav:'overview',panel:this.state.panel==='preview'?null:'preview',overlay:null}),
+      openDocs:()=>this.setState({nav:'overview',panel:this.state.panel==='docs'?null:'docs',overlay:null}),
+      closePanel:()=>this.setState({panel:null}),
+      closeOverlay:()=>this.setState({overlay:null}),
+      wsTermhausFn:()=>this.setState({ws:'termhaus',nav:'overview'}),
+      wsFleetFn:()=>this.setState({ws:'fleet',nav:'overview'}),
+      wsScratchFn:()=>this.setState({ws:'scratch',nav:'overview'}),
+      createScratch:()=>this.setState({overlay:null,ws:'termhaus',nav:'overview'}),
+      tabAppearanceFn:()=>this.setState({settingsTab:'appearance'}),
+      tabKeysFn:()=>this.setState({settingsTab:'keys'}),
+      setThemeDark:()=>this.setState({theme:'dark'}),
+      setThemeLight:()=>this.setState({theme:'light'}),
+      setThemeMidnight:()=>this.setState({theme:'midnight'}),
+      setThemePaper:()=>this.setState({theme:'paper'}),
+      toggleTargets:(e)=>{e.stopPropagation();this.setState({targetsOpen:!this.state.targetsOpen});},
+      scopeAll:()=>this.setState({scope:'all',targetsOpen:false}),
+      scopeGroup:()=>this.setState({scope:'group',targetsOpen:false}),
+      scopeCurrent:()=>this.setState({scope:'current',targetsOpen:false}),
+      stop:(e)=>{e.stopPropagation();},
+    };
+  }
+}
+</script>
+</body>
+</html>

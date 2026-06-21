@@ -1,11 +1,12 @@
-// Source Control panel (a VSCode-style git diff viewer), opened from the rail's ⎇ button or
-// Ctrl+Shift+G. A full-screen modal over the stage scoped to the active workspace's working
-// folder: the left list groups changed files into Staged / Changes; clicking one renders its
-// unified diff side-by-side in the main pane. Strictly read-only — no stage/commit (yet).
+// Source Control panel (a git diff viewer), opened from the rail's ⎇ button or Ctrl+Shift+G.
+// Docks as a floating card to the right of the stage, scoped to the active workspace's working
+// folder: a changes list (Staged / Changes) above a unified diff. Drag its left edge to widen.
+// Strictly read-only — no stage/commit (yet).
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { activeWorkspace } from "../stores/workspace";
 import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
+import { settings, setSetting } from "../stores/settings";
 import {
   formatDiffSelection,
   gitDiff,
@@ -21,12 +22,6 @@ interface Selection {
   path: string;
   staged: boolean;
   untracked: boolean;
-}
-
-/** Split a repo-relative path into a dimmed directory + a bold basename (VSCode-style). */
-function splitPath(path: string): { dir: string; base: string } {
-  const i = path.lastIndexOf("/");
-  return i < 0 ? { dir: "", base: path } : { dir: path.slice(0, i), base: path.slice(i + 1) };
 }
 
 /** A single-letter badge for a file row, given which group it's shown under. */
@@ -63,8 +58,6 @@ export default function GitPanel(props: { onClose: () => void }) {
   // Selection is a contiguous row range [anchor, head]; drag or shift-click extends it.
   const [anchor, setAnchor] = createSignal<number | null>(null);
   const [head, setHead] = createSignal<number | null>(null);
-  const [instruction, setInstruction] = createSignal("");
-  const [submitOnSend, setSubmitOnSend] = createSignal(true);
   const [flash, setFlash] = createSignal<string | null>(null);
   let dragging = false;
   let flashTimer: ReturnType<typeof setTimeout> | undefined;
@@ -84,7 +77,7 @@ export default function GitPanel(props: { onClose: () => void }) {
     if (!r) return [];
     const rs = rows();
     const out: number[] = [];
-    for (let i = r.lo; i <= r.hi; i++) if (rs[i]?.kind === "pair") out.push(i);
+    for (let i = r.lo; i <= r.hi; i++) if (rs[i]?.kind === "line") out.push(i);
     return out;
   });
   /** The reconstructed diff slice for the current selection (null when nothing selected). */
@@ -116,29 +109,72 @@ export default function GitPanel(props: { onClose: () => void }) {
   onMount(() => window.addEventListener("mouseup", endDrag));
   onCleanup(() => window.removeEventListener("mouseup", endDrag));
 
+  // Drag the left edge to resize; clamp + persist (mirrors the rail/preview resizer).
+  const WIDTH_MIN = 360;
+  const WIDTH_MAX = 960;
+  function onResizeDown(e: PointerEvent) {
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startW = settings.gitWidth;
+    const move = (ev: PointerEvent) => {
+      // Dragging left (smaller clientX) widens the right-docked panel.
+      const w = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, startW + (startX - ev.clientX)));
+      setSetting("gitWidth", w);
+    };
+    const up = (ev: PointerEvent) => {
+      handle.releasePointerCapture(ev.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  // Drag the divider below the changes list to re-split list vs. diff height; clamp + persist.
+  const LIST_MIN = 72;
+  const LIST_MAX = 640;
+  function onListResizeDown(e: PointerEvent) {
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const startH = settings.gitListHeight;
+    const move = (ev: PointerEvent) => {
+      // Dragging down (larger clientY) grows the list, shrinking the diff below it.
+      const h = Math.max(LIST_MIN, Math.min(LIST_MAX, startH + (ev.clientY - startY)));
+      setSetting("gitListHeight", h);
+    };
+    const up = (ev: PointerEvent) => {
+      handle.releasePointerCapture(ev.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
   function showFlash(msg: string) {
     clearTimeout(flashTimer);
     setFlash(msg);
     flashTimer = setTimeout(() => setFlash(null), 2200);
   }
 
-  /** Send the selected diff lines (+ optional instruction) into the focused pane's PTY. */
+  /** Send the selected diff lines into the focused pane's PTY (as one bracketed paste + submit). */
   function sendToTerminal() {
     const id = focusedId();
     const sel = selMeta();
     if (id == null || !sel) return;
     const path = selected()?.path ?? "";
-    const instr = instruction().trim();
-    let body = `${path}:${rangeStr(sel)}\n\`\`\`diff\n${sel.text}\n\`\`\``;
-    if (instr) body += `\n${instr}`;
+    const body = `${path}:${rangeStr(sel)}\n\`\`\`diff\n${sel.text}\n\`\`\``;
     // Bracketed paste so the multi-line block lands as one paste (not line-by-line Enters);
-    // an optional trailing CR submits it so the agent acts on it immediately.
-    const payload = `\x1b[200~${body}\x1b[201~` + (submitOnSend() ? "\r" : "");
+    // the trailing CR submits it so the agent acts on it immediately.
+    const payload = `\x1b[200~${body}\x1b[201~\r`;
     const n = writeToPanes([id], payload);
     if (n > 0) {
       // Sent — close the panel so the focused terminal (and the agent acting on it) is visible.
       clearSelection();
-      setInstruction("");
       props.onClose();
     } else {
       showFlash("no live terminal focused");
@@ -208,7 +244,7 @@ export default function GitPanel(props: { onClose: () => void }) {
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
   const fileRow = (file: GitFile, stagedView: boolean) => {
-    const { dir, base } = splitPath(file.path);
+    const b = badge(file, stagedView);
     return (
       <button
         class="git-file"
@@ -216,161 +252,130 @@ export default function GitPanel(props: { onClose: () => void }) {
         onClick={() => openFile(file, stagedView)}
         title={file.path}
       >
-        <span class="git-file-name">
-          <span class="git-file-base">{base}</span>
-          <Show when={dir}>
-            <span class="git-file-dir">{dir}</span>
-          </Show>
-        </span>
-        <span class="git-file-badge" data-s={badge(file, stagedView)}>{badge(file, stagedView)}</span>
+        <span class="git-file-badge" data-s={b}>{b}</span>
+        <span class="git-file-path">{file.path}</span>
       </button>
     );
   };
 
+  /** The unified-diff line column for one row index (line-number gutter omitted, per the design). */
+  const diffLine = (row: Extract<DiffRow, { kind: "line" }>, i: number) => {
+    const cls = row.sign === "+" ? "add" : row.sign === "-" ? "del" : "ctx";
+    return (
+      <div
+        class="git-line"
+        classList={{ [cls]: true, sel: isRowSel(i) }}
+        onMouseDown={(e) => rowDown(i, e)}
+        onMouseEnter={() => rowEnter(i)}
+      >
+        <span class="git-line-sign">{row.sign === " " ? "" : row.sign}</span>
+        <span class="git-line-text">{row.text}</span>
+      </div>
+    );
+  };
+
   return (
-    <div class="settings-backdrop" onClick={() => props.onClose()}>
-      <div class="git-panel" onClick={(e) => e.stopPropagation()}>
-        <header class="settings-head">
-          <span class="settings-title">
-            ⎇ Source Control
-            <Show when={status()?.isRepo && status()!.branch}>
-              <span class="git-branch">{status()!.branch}</span>
-            </Show>
-            <Show when={cwd()}>
-              <span class="git-cwd" title={cwd()}>{cwd()}</span>
-            </Show>
-          </span>
+    <aside
+      class="side-panel git-panel git-scm"
+      style={{ "flex-basis": `${settings.gitWidth}px`, width: `${settings.gitWidth}px` }}
+    >
+        <div class="git-resizer" title="Drag to resize" onPointerDown={onResizeDown} />
+        <header class="git-head">
+          <span class="git-title">Source Control</span>
+          <Show when={status()?.isRepo && status()!.branch}>
+            <span class="git-branch" title={cwd()}>⎇ {status()!.branch}</span>
+          </Show>
           <span class="git-head-actions">
-            <button class="settings-btn" title="Refresh" onClick={() => void refresh()}>
-              ⟳ Refresh
-            </button>
-            <button class="settings-x" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
+            <button class="git-icon-btn" title="Refresh" onClick={() => void refresh()}>↻</button>
+            <button class="git-icon-btn" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
           </span>
         </header>
 
-        <div class="git-body">
-          <aside class="git-files">
-            <Show
-              when={!loading() && !error() && status()?.isRepo}
-              fallback={
-                <div class="git-empty">
-                  <Show when={loading()}>Loading…</Show>
-                  <Show when={!loading() && error()}>{error()}</Show>
-                  <Show when={!loading() && !error() && !status()?.isRepo}>
-                    Not a git repository.
-                    <div class="git-empty-sub">{cwd() || "(no working folder)"}</div>
-                  </Show>
-                </div>
-              }
-            >
-              <Show when={staged().length === 0 && changes().length === 0}>
-                <div class="git-empty">No changes.</div>
+        <Show
+          when={!loading() && !error() && status()?.isRepo}
+          fallback={
+            <div class="git-empty git-empty-fill">
+              <Show when={loading()}>Loading…</Show>
+              <Show when={!loading() && error()}>{error()}</Show>
+              <Show when={!loading() && !error() && !status()?.isRepo}>
+                Not a git repository.
+                <div class="git-empty-sub">{cwd() || "(no working folder)"}</div>
               </Show>
-              <Show when={staged().length > 0}>
-                <div class="git-group-head">Staged Changes <span class="git-count">{staged().length}</span></div>
-                <For each={staged()}>{(f) => fileRow(f, true)}</For>
-              </Show>
-              <Show when={changes().length > 0}>
-                <div class="git-group-head">Changes <span class="git-count">{changes().length}</span></div>
-                <For each={changes()}>{(f) => fileRow(f, false)}</For>
-              </Show>
+            </div>
+          }
+        >
+          <div class="git-list" style={{ height: `${settings.gitListHeight}px` }}>
+            <Show when={staged().length === 0 && changes().length === 0}>
+              <div class="git-empty">No changes.</div>
             </Show>
-          </aside>
+            <Show when={staged().length > 0}>
+              <div class="git-group-head">STAGED · {staged().length}</div>
+              <For each={staged()}>{(f) => fileRow(f, true)}</For>
+            </Show>
+            <Show when={changes().length > 0}>
+              <div class="git-group-head">CHANGES · {changes().length}</div>
+              <For each={changes()}>{(f) => fileRow(f, false)}</For>
+            </Show>
+          </div>
+
+          <div class="git-list-resizer" title="Drag to resize" onPointerDown={onListResizeDown} />
 
           <section class="git-diff">
             <Show
               when={selected()}
-              fallback={<div class="git-empty">{status()?.isRepo ? "Select a file to view its diff." : ""}</div>}
+              fallback={<div class="git-empty">Select a file to view its diff.</div>}
             >
-              <div class="git-diff-path">
-                <span>{selected()!.path}</span>
-                <span class="git-diff-hint">drag to select lines → send to terminal</span>
-              </div>
               <Show when={diffError()}>
                 <div class="git-empty">{diffError()}</div>
               </Show>
               <Show when={!diffError() && rows().length === 0}>
                 <div class="git-empty">No textual changes (binary or whitespace-only).</div>
               </Show>
-              <div class="git-diff-grid">
-                <For each={rows()}>
-                  {(row, i) =>
-                    row.kind === "hunk" ? (
-                      <div class="git-hunk">{row.header}</div>
-                    ) : (
-                      <>
-                        <div
-                          class="git-ln"
-                          classList={{ [row.left.kind]: true, sel: isRowSel(i()) }}
-                          onMouseDown={(e) => rowDown(i(), e)}
-                          onMouseEnter={() => rowEnter(i())}
-                        >{row.left.no ?? ""}</div>
-                        <div
-                          class="git-code"
-                          classList={{ [row.left.kind]: true, sel: isRowSel(i()) }}
-                          onMouseDown={(e) => rowDown(i(), e)}
-                          onMouseEnter={() => rowEnter(i())}
-                        >{row.left.text}</div>
-                        <div
-                          class="git-ln"
-                          classList={{ [row.right.kind]: true, sel: isRowSel(i()) }}
-                          onMouseDown={(e) => rowDown(i(), e)}
-                          onMouseEnter={() => rowEnter(i())}
-                        >{row.right.no ?? ""}</div>
-                        <div
-                          class="git-code"
-                          classList={{ [row.right.kind]: true, sel: isRowSel(i()) }}
-                          onMouseDown={(e) => rowDown(i(), e)}
-                          onMouseEnter={() => rowEnter(i())}
-                        >{row.right.text}</div>
-                      </>
-                    )
-                  }
-                </For>
-              </div>
-
-              <Show when={selMeta()}>
-                <div class="git-send">
-                  <span class="git-send-info">
-                    {selMeta()!.count} line{selMeta()!.count === 1 ? "" : "s"}
-                    <span class="git-send-loc"> · {selected()!.path}:{rangeStr(selMeta()!)}</span>
-                  </span>
-                  <input
-                    class="git-send-input"
-                    placeholder="Add an instruction for the agent… (optional)"
-                    value={instruction()}
-                    onInput={(e) => setInstruction(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") { e.preventDefault(); sendToTerminal(); }
-                      else if (e.key === "Escape") { e.stopPropagation(); clearSelection(); }
-                    }}
-                  />
-                  <label class="git-send-enter" title="Press Enter in the terminal after pasting (submit)">
-                    <input
-                      type="checkbox"
-                      checked={submitOnSend()}
-                      onChange={(e) => setSubmitOnSend(e.currentTarget.checked)}
-                    />
-                    submit
-                  </label>
-                  <button
-                    class="git-send-btn primary"
-                    disabled={!targetLive()}
-                    title={targetLive() ? "Send to the focused terminal" : "No live terminal is focused"}
-                    onClick={sendToTerminal}
-                  >
-                    Send to terminal ▸
-                  </button>
-                  <button class="git-send-clear" title="Clear selection (Esc)" onClick={clearSelection}>✕</button>
-                  <Show when={flash()}>
-                    <span class="git-send-flash">{flash()}</span>
-                  </Show>
-                </div>
-              </Show>
+              <For each={rows()}>
+                {(row, i) =>
+                  row.kind === "hunk" ? (
+                    <div class="git-hunk">{row.header}</div>
+                  ) : (
+                    diffLine(row, i())
+                  )
+                }
+              </For>
             </Show>
           </section>
-        </div>
-      </div>
-    </div>
+
+          <footer class="git-foot">
+            <Show
+              when={selMeta()}
+              fallback={
+                <span class="git-hint">
+                  <span class="git-hint-mark">⌖</span> drag to select lines → send to terminal
+                </span>
+              }
+            >
+              <div class="git-send">
+                <span class="git-send-info">
+                  <Show when={flash()} fallback={
+                    <>
+                      {selMeta()!.count} line{selMeta()!.count === 1 ? "" : "s"}
+                      <span class="git-send-loc"> · {selected()!.path}:{rangeStr(selMeta()!)}</span>
+                    </>
+                  }>
+                    <span class="git-send-flash">{flash()}</span>
+                  </Show>
+                </span>
+                <button
+                  class="git-send-btn"
+                  disabled={!targetLive()}
+                  title={targetLive() ? "Send to the focused terminal" : "No live terminal is focused"}
+                  onClick={sendToTerminal}
+                >
+                  Send ▸
+                </button>
+                <button class="git-send-clear" title="Clear selection (Esc)" onClick={clearSelection}>✕</button>
+              </div>
+            </Show>
+          </footer>
+        </Show>
+    </aside>
   );
 }

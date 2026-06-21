@@ -9,6 +9,7 @@ import { computeLayout, type GutterBox, type Rect } from "../lib/layout";
 import { isDetachedPlaceholder, recallPane } from "../lib/detach";
 import type { PaneId } from "../ipc/protocol";
 import TerminalPane from "./Terminal";
+import EmptyWorkspace from "./EmptyWorkspace";
 
 export default function LayoutView(props: { ws: WorkspaceUI }) {
   let root!: HTMLDivElement;
@@ -84,6 +85,11 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
 
   return (
     <div ref={root} class="layout-root" classList={{ overview: overview() }}>
+      <Show when={paneIds().length === 0}>
+        <EmptyWorkspace
+          onChooseLayout={() => window.dispatchEvent(new CustomEvent("termhaus:new-workspace"))}
+        />
+      </Show>
       <For each={paneIds()}>
         {(id) => (
           <div class="leaf-box" style={paneStyle(id)}>
