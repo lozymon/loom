@@ -4,7 +4,7 @@
 // Strictly read-only — no stage/commit (yet).
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { activeWorkspace } from "../stores/workspace";
+import { activeWorkspace, setPanelCwd } from "../stores/workspace";
 import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
 import { settings, setSetting } from "../stores/settings";
 import {
@@ -34,8 +34,10 @@ function badge(file: GitFile, stagedView: boolean): string {
 export default function GitPanel(props: { onClose: () => void }) {
   const ws = activeWorkspace();
 
-  // The folder git runs in: prefer the focused terminal's *live* cwd (where you've cd'd to),
-  // falling back to the workspace's launch folder. Resolved on open/refresh into this signal.
+  // The folder git runs in. Captured from the active terminal *when the panel is opened* and then
+  // pinned to this workspace (panel.gitCwd), so it stays put if you later cd or focus elsewhere —
+  // and so each workspace keeps its own Source Control source. Refresh re-runs git on the pinned
+  // folder; close and reopen to re-point it at the current terminal.
   const [cwd, setCwd] = createSignal("");
 
   async function resolveCwd(): Promise<string> {
@@ -45,6 +47,16 @@ export default function GitPanel(props: { onClose: () => void }) {
       if (live) return live;
     }
     return ws?.cwd?.trim() || "";
+  }
+
+  /** The pinned source folder: restore it if this workspace already opened SC, else capture it
+   *  now from the active terminal and pin it. */
+  async function ensureCwd(): Promise<string> {
+    const stored = ws?.panel.gitCwd?.trim() ?? "";
+    const dir = stored || (await resolveCwd());
+    if (dir && !stored) setPanelCwd("git", dir);
+    setCwd(dir);
+    return dir;
   }
 
   const [status, setStatus] = createSignal<GitStatus | null>(null);
@@ -206,8 +218,7 @@ export default function GitPanel(props: { onClose: () => void }) {
   async function refresh() {
     setLoading(true);
     setError(null);
-    const dir = await resolveCwd();
-    setCwd(dir);
+    const dir = await ensureCwd();
     if (!dir) {
       setError("No working folder — focus a terminal or give this workspace a folder.");
       setLoading(false);

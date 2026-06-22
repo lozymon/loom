@@ -24,8 +24,9 @@ import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
   setOverview, toggleOverview, switchWorkspaceRelative, switchWorkspaceIndex,
-  activeWorkspace,
+  activeWorkspace, activePanel, setActivePanel,
 } from "./stores/workspace";
+import type { DockedPanelKind } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings, settings } from "./stores/settings";
 import { applyGlobalHotkey } from "./lib/globalHotkey";
@@ -37,12 +38,15 @@ import "./App.css";
 export default function App() {
   const [wizardOpen, setWizardOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
-  const [gitOpen, setGitOpen] = createSignal(false);
-  const [docsOpen, setDocsOpen] = createSignal(false);
+  // The docked right-side panel (Source Control / Docs / Preview) is now per-workspace state:
+  // these read the active workspace's `panel.open`, so switching workspaces shows only what was
+  // open in that one. See showPanel/togglePanel below and stores/workspace.ts.
+  const gitOpen = () => activePanel() === "git";
+  const docsOpen = () => activePanel() === "docs";
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const [logsOpen, setLogsOpen] = createSignal(false);
   const [logPreselect, setLogPreselect] = createSignal<string | null>(null);
-  const [previewOpen, setPreviewOpen] = createSignal(false);
+  const previewOpen = () => activePanel() === "preview";
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
@@ -80,13 +84,11 @@ export default function App() {
   // The three right-side panels (Git / Preview / Docs) share one docked slot — only one shows at a
   // time, and toggling the open one closes it (Frameless: dock right, never replace the grid; the
   // stage just narrows and panes refit). `showPanel`/`togglePanel` keep that mutual exclusion.
-  const showPanel = (which: "git" | "preview" | "docs" | null) => {
+  const showPanel = (which: DockedPanelKind | null) => {
     if (which !== null) setSettingsOpen(false); // opening a docked panel closes the Settings overlay
-    setGitOpen(which === "git");
-    setPreviewOpen(which === "preview");
-    setDocsOpen(which === "docs");
+    setActivePanel(which); // per-workspace: only the active workspace's slot changes
   };
-  const togglePanel = (which: "git" | "preview" | "docs") => {
+  const togglePanel = (which: DockedPanelKind) => {
     const isOpen = which === "git" ? gitOpen() : which === "preview" ? previewOpen() : docsOpen();
     showPanel(isOpen ? null : which);
   };
@@ -252,14 +254,16 @@ export default function App() {
       </div>
       {/* The right-side docked panels — flex siblings of .stage, so opening one narrows the grid
           (panes refit via their ResizeObserver) rather than covering it. Mutually exclusive. */}
-      <Show when={gitOpen()}>
-        <GitPanel onClose={() => showPanel(null)} />
+      {/* Keyed on the active workspace so switching between two workspaces that *both* have a
+          panel open remounts it against the new workspace (each carries its own source/state). */}
+      <Show when={gitOpen() && activeWorkspace()} keyed>
+        {(_ws) => <GitPanel onClose={() => showPanel(null)} />}
       </Show>
-      <Show when={previewOpen()}>
-        <PreviewPanel onClose={() => showPanel(null)} />
+      <Show when={previewOpen() && activeWorkspace()} keyed>
+        {(_ws) => <PreviewPanel onClose={() => showPanel(null)} />}
       </Show>
-      <Show when={docsOpen()}>
-        <DocsPanel onClose={() => showPanel(null)} />
+      <Show when={docsOpen() && activeWorkspace()} keyed>
+        {(_ws) => <DocsPanel onClose={() => showPanel(null)} />}
       </Show>
       </div>
       <Show when={wizardOpen()}>

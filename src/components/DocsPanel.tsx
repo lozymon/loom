@@ -9,7 +9,7 @@
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
-import { activeWorkspace } from "../stores/workspace";
+import { activeWorkspace, setPanelCwd } from "../stores/workspace";
 import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
 import { listDocs, readDoc, type DocEntry } from "../lib/docsClient";
 import { parseMarkdownBlocks } from "../lib/markdown";
@@ -25,8 +25,9 @@ function entryForPath(path: string): DocEntry {
 export default function DocsPanel(props: { onClose: () => void }) {
   const ws = activeWorkspace();
 
-  // The folder we scan for markdown: prefer the focused terminal's *live* cwd, else the
-  // workspace's launch folder (same resolution as the Source Control panel).
+  // The folder we scan for markdown. Captured from the active terminal *when Docs is opened* and
+  // pinned to this workspace (panel.docsCwd), so each workspace keeps its own Docs source and it
+  // stays put if you later cd or focus elsewhere (same model as the Source Control panel).
   const [cwd, setCwd] = createSignal("");
   async function resolveCwd(): Promise<string> {
     const focused = ws?.focused ?? null;
@@ -35,6 +36,15 @@ export default function DocsPanel(props: { onClose: () => void }) {
       if (live) return live;
     }
     return ws?.cwd?.trim() || "";
+  }
+
+  /** Restore this workspace's pinned Docs folder, or capture+pin it from the active terminal now. */
+  async function ensureCwd(): Promise<string> {
+    const stored = ws?.panel.docsCwd?.trim() ?? "";
+    const dir = stored || (await resolveCwd());
+    if (dir && !stored) setPanelCwd("docs", dir);
+    setCwd(dir);
+    return dir;
   }
 
   const [files, setFiles] = createSignal<DocEntry[]>([]);
@@ -211,8 +221,7 @@ export default function DocsPanel(props: { onClose: () => void }) {
   async function refresh() {
     setLoading(true);
     setError(null);
-    const dir = await resolveCwd();
-    setCwd(dir);
+    const dir = await ensureCwd();
     if (!dir) {
       setError("No working folder — focus a terminal or give this workspace a folder.");
       setLoading(false);
