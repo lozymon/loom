@@ -98,6 +98,8 @@ th attention Cleo --clear                 # drop pane Cleo's border
 
 It works over a per-user unix socket (`$XDG_RUNTIME_DIR/termhaus.sock`, mode 0600): Rust is a pure relay, all routing/naming/spawn logic lives in the frontend, and pane *output* is never parsed — this is an inbound command channel, distinct from the opacity rule ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md) / [ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
 
+See **[docs/cli.md](docs/cli.md)** for the full `th` command reference (every flag, `th status`, `th hooks`), and **[docs/agent-mcp.md](docs/agent-mcp.md)** / **[docs/agent-hooks.md](docs/agent-hooks.md)** for the model-native MCP tools and the auto-status hooks.
+
 ### Light a pane when an agent needs you
 
 Termhaus can't tell "an agent is waiting for your answer" from "an agent is working" just by watching the process — both are a live foreground command, and pane output is never parsed ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)). So the agent flags itself: a single `th attention` call lights its pane's amber border, which clears the moment you focus it.
@@ -162,7 +164,12 @@ src-tauri/src/               Rust shell (PTY engine + OS concerns)
   lib.rs                     Tauri command handlers + Channel wiring (the frontend contract)
   workspace.rs               schema-agnostic JSON state load/save
 docs/adr/                    architecture decision records
+docs/cli.md                  the `th` inter-pane control CLI reference
+docs/agent-mcp.md            the `th-mcp` MCP server (agent tools)
+docs/agent-hooks.md          wire a Claude Code agent into Termhaus
+docs/troubleshooting.md      file locations, rendering, control-bus, build fixes
 PLAN.md                      the milestone-by-milestone build plan + status
+CHANGELOG.md                 release-by-release change log
 ```
 
 ## Architecture notes
