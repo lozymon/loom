@@ -2529,8 +2529,8 @@ body,
   z-index: 7;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
+  gap: 6px;
+  padding: 6px;
   background: var(--chip);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
@@ -2538,24 +2538,77 @@ body,
   border-radius: 10px;
 }
 
+/* The input + its inline search icon + match counter share one sunken field. */
+.pane-search-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  transition: border-color 120ms ease;
+}
+
+.pane-search-field:focus-within {
+  border-color: var(--accent);
+}
+
+.pane-search.no-match .pane-search-field {
+  border-color: var(--danger, #e5484d);
+}
+
+.pane-search-icon {
+  flex: none;
+  color: var(--fg-dim);
+}
+
 .pane-search-input {
   font:
     12px ui-monospace,
     monospace;
   color: var(--fg);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  padding: 3px 6px;
-  width: 18ch;
+  background: transparent;
+  border: none;
+  padding: 5px 0;
+  width: 20ch;
+}
+
+.pane-search-input::placeholder {
+  color: var(--fg-dim);
 }
 
 .pane-search-input:focus {
   outline: none;
-  border-color: var(--accent);
+}
+
+/* Match position (e.g. "3/12"), tabular so it doesn't jitter as you step through hits. */
+.pane-search-count {
+  flex: none;
+  font:
+    11px ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  padding-left: 2px;
+}
+
+.pane-search.no-match .pane-search-count {
+  color: var(--danger, #e5484d);
+}
+
+.pane-search-nav {
+  display: flex;
+  gap: 4px;
 }
 
 .pane-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   font:
     12px ui-monospace,
     monospace;
@@ -2563,13 +2616,24 @@ body,
   color: var(--fg-dim);
   background: var(--control);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  padding: 3px 6px;
+  border-radius: 6px;
   cursor: pointer;
+  transition:
+    background 110ms ease,
+    color 110ms ease;
 }
 
-.pane-search button:hover {
+.pane-search button:hover:not(:disabled) {
   background: var(--control-hover);
+  color: var(--fg);
+}
+
+.pane-search button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pane-search-close:hover:not(:disabled) {
   color: var(--fg);
 }
 
@@ -3243,6 +3307,15 @@ body,
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text-bright);
+}
+.git-scm .git-project {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-mid);
 }
 .git-scm .git-branch {
   margin: 0;

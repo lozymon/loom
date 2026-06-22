@@ -282,6 +282,11 @@ export default function GitPanel(props: { onClose: () => void }) {
         <div class="git-resizer" title="Drag to resize" onPointerDown={onResizeDown} />
         <header class="git-head">
           <span class="git-title">Source Control</span>
+          <Show when={status()?.isRepo && status()!.root}>
+            <span class="git-project" title={status()!.root}>
+              {status()!.root.split("/").filter(Boolean).pop()}
+            </span>
+          </Show>
           <Show when={status()?.isRepo && status()!.branch}>
             <span class="git-branch" title={cwd()}>⎇ {status()!.branch}</span>
           </Show>

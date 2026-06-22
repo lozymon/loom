@@ -99,6 +99,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const [dead, setDead] = createSignal<number | null>(null);
   const [finding, setFinding] = createSignal(false);
   const [query, setQuery] = createSignal("");
+  // Live match position from the SearchAddon: {index, count}. index is -1 when no active match.
+  const [matches, setMatches] = createSignal<{ index: number; count: number }>({ index: -1, count: 0 });
   const [dragOver, setDragOver] = createSignal(false);
   // Live shell location for the title bar: cwd (via /proc, ADR-0001's carve-out) + git branch.
   const [cwd, setCwd] = createSignal<string | null>(null);
@@ -312,6 +314,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   }
   function closeSearch() {
     setFinding(false);
+    setQuery("");
+    setMatches({ index: -1, count: 0 });
     search.clearDecorations();
     term.focus();
   }
@@ -351,6 +355,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     serialize = new SerializeAddon();
     term.loadAddon(fit);
     term.loadAddon(search);
+    // Keep the overlay's match counter in sync with the addon. resultIndex is -1 when there's
+    // no active match (empty query or no hits); xterm reports it 0-based, we show it 1-based.
+    search.onDidChangeResults((r) => setMatches({ index: r.resultIndex, count: r.resultCount }));
     term.loadAddon(serialize);
     term.loadAddon(new WebLinksAddon((_e, uri) => { void openUrl(uri); }));
     const uni = new Unicode11Addon();
@@ -664,21 +671,38 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
       <div class="pane-term-wrap">
         <Show when={finding()}>
-          <div class="pane-search" onPointerDown={(e) => e.stopPropagation()}>
-            <input
-              ref={searchInput}
-              class="pane-search-input"
-              placeholder="Find in scrollback"
-              value={query()}
-              onInput={(e) => { setQuery(e.currentTarget.value); findNext(); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
-                else if (e.key === "Escape") { e.preventDefault(); closeSearch(); }
-              }}
-            />
-            <button title="Previous (Shift+Enter)" onClick={findPrev}>↑</button>
-            <button title="Next (Enter)" onClick={findNext}>↓</button>
-            <button title="Close (Esc)" onClick={closeSearch}>✕</button>
+          <div
+            class="pane-search"
+            classList={{ "is-empty": query().length === 0, "no-match": query().length > 0 && matches().count === 0 }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div class="pane-search-field">
+              <svg class="pane-search-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+                <line x1="10.3" y1="10.3" x2="13.5" y2="13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+              <input
+                ref={searchInput}
+                class="pane-search-input"
+                placeholder="Find in scrollback"
+                value={query()}
+                onInput={(e) => { setQuery(e.currentTarget.value); findNext(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
+                  else if (e.key === "Escape") { e.preventDefault(); closeSearch(); }
+                }}
+              />
+              <Show when={query().length > 0}>
+                <span class="pane-search-count">
+                  {matches().count === 0 ? "No results" : `${matches().index + 1}/${matches().count}`}
+                </span>
+              </Show>
+            </div>
+            <div class="pane-search-nav">
+              <button title="Previous (Shift+Enter)" disabled={matches().count === 0} onClick={findPrev}>↑</button>
+              <button title="Next (Enter)" disabled={matches().count === 0} onClick={findNext}>↓</button>
+            </div>
+            <button class="pane-search-close" title="Close (Esc)" onClick={closeSearch}>✕</button>
           </div>
         </Show>
         <div ref={container} class="terminal-pane" />
