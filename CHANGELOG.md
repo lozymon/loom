@@ -4,6 +4,17 @@ All notable changes to Termhaus are documented here. The format is loosely based
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [0.8.0] — 2026
+
+### Added
+- **Per-workspace Source Control & Docs panels** — each workspace independently
+  owns whether the docked SC / Docs / Preview panel is open, and the source folder
+  is captured from the active terminal when you open it and pinned to that
+  workspace. Switching workspaces shows only what that workspace had open.
+- Project (repo) name in the Source Control header, beside the branch.
+- Documentation: `docs/cli.md` (the `th` CLI reference), `docs/troubleshooting.md`,
+  and this `CHANGELOG.md`.
+
 ## [0.7.0] — 2026
 
 ### Added
@@ -74,6 +85,7 @@ versioning.
   the left workspace rail, the Start→Layout→Agents wizard, broadcast input, and local
   JSON persistence of workspace intent.
 
+[0.8.0]: https://github.com/lozymon/termhaus/releases/tag/v0.8.0
 [0.7.0]: https://github.com/lozymon/termhaus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/lozymon/termhaus/releases/tag/v0.6.0
 [0.5.1]: https://github.com/lozymon/termhaus/releases/tag/v0.5.1
