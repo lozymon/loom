@@ -2,6 +2,7 @@ mod capture;
 mod control;
 mod control_transport;
 mod docs;
+mod editor;
 mod git;
 mod logs;
 mod pty;
@@ -109,6 +110,7 @@ pub fn run() {
             pty_foreground,
             pty_check_command,
             control::pane_cmd_reply,
+            editor::open_editor,
             capture::capture_region,
             git::git_status,
             git::git_branch,

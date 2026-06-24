@@ -25,13 +25,14 @@ import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detac
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
+import { openEditorAt } from "../lib/editor";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
-import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
+import { actionForKey, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
 import { detectAgent } from "../lib/agents";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
@@ -467,6 +468,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "split-down": () => splitPane(props.paneId, "col"),
       "close-pane": () => closePane(props.paneId),
       "toggle-zoom": () => toggleZoom(props.paneId),
+      "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
       "command-palette": () => window.dispatchEvent(new CustomEvent("termhaus:command-palette")),
       "source-control": () => window.dispatchEvent(new CustomEvent("termhaus:source-control")),
@@ -649,6 +651,12 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           }
         >
           <button title="Launch Claude here" onClick={launchClaude}>✦</button>
+          <Show when={settings.editorCommand.trim()}>
+            <button
+              title={`Open this folder in ${settings.editorCommand.trim()} (${formatBinding(settings.keybindings["open-editor"])})`}
+              onClick={() => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || "")}
+            >✎</button>
+          </Show>
           <button title="Find (Ctrl+Shift+F)" onClick={openSearch}>⌕</button>
           <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")}>▥</button>
           <button title="Split down (Ctrl+Shift+E)" onClick={() => splitPane(props.paneId, "col")}>▤</button>

@@ -31,6 +31,7 @@ import { initTheme } from "./stores/theme";
 import { initSettings, settings } from "./stores/settings";
 import { applyGlobalHotkey } from "./lib/globalHotkey";
 import { redock } from "./lib/detach";
+import { openEditorForActivePane } from "./lib/editor";
 import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import "./App.css";
@@ -149,6 +150,7 @@ export default function App() {
     "preview": () => togglePanel("preview"),
     "prev-workspace": () => switchWorkspaceRelative(-1),
     "next-workspace": () => switchWorkspaceRelative(1),
+    "open-editor": () => void openEditorForActivePane(),
   };
   // Ctrl+Shift+1…9 jump straight to workspace N (works rail/dialog/nothing-focused too).
   SWITCH_WORKSPACE_ACTIONS.forEach((id, i) => {

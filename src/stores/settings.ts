@@ -34,6 +34,11 @@ export interface Settings {
   defaultShell: string;
   /** Working folder the wizard pre-fills and plain shells fall back to (empty = `$HOME`). */
   defaultCwd: string;
+  // ---- External editor ----
+  /** Command the top-bar "Editor" button runs on the focused pane's working folder (empty =
+   *  button does nothing but prompt). The folder is appended as the last argument, unless the
+   *  command contains a `{dir}` token, which is replaced with it (e.g. `code`, `subl`, `zed`). */
+  editorCommand: string;
   // ---- Safety ----
   /** Ask before closing a pane/workspace that still has a live process. */
   confirmClose: boolean;
@@ -103,6 +108,7 @@ export const DEFAULT_SETTINGS: Settings = {
   middleClickPaste: false,
   defaultShell: "",
   defaultCwd: "",
+  editorCommand: "code",
   confirmClose: true,
   confirmExternalSpawn: true,
   notifyOnAttention: false,
