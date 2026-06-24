@@ -68,7 +68,10 @@ struct ControlEvent {
 /// works, callers just have to invoke the socket directly.
 pub fn cli_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let cand = exe.parent()?.join("th");
+    // `EXE_SUFFIX` is ".exe" on Windows, "" on Unix — the sibling binary is `th.exe` there.
+    let cand = exe
+        .parent()?
+        .join(format!("th{}", std::env::consts::EXE_SUFFIX));
     cand.exists().then_some(cand)
 }
 
@@ -76,7 +79,9 @@ pub fn cli_path() -> Option<PathBuf> {
 /// built. Exposed to pane children as `$TERMHAUS_MCP` so an agent's `.mcp.json` can point at it.
 pub fn mcp_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let cand = exe.parent()?.join("th-mcp");
+    let cand = exe
+        .parent()?
+        .join(format!("th-mcp{}", std::env::consts::EXE_SUFFIX));
     cand.exists().then_some(cand)
 }
 
