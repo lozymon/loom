@@ -25,13 +25,14 @@ import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detac
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
+import { openEditorAt } from "../lib/editor";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
-import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
+import { actionForKey, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
 import { detectAgent } from "../lib/agents";
 import type { PaneId, PtyHandle } from "../ipc/protocol";
 import {
@@ -221,10 +222,21 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   }
 
   // ---- Clipboard (OS, via Tauri — reliable under WebKitGTK) --------------------------
+  // The last non-empty xterm selection, mirrored here on every selection change. Under
+  // WebKitGTK 2.5x the visual selection can already be cleared by the time the Ctrl+Shift+C
+  // keydown handler runs, so `term.getSelection()` returns "" and the copy is lost; this cache
+  // is the fallback so the copy keybinding always has the text the user actually highlighted.
+  let lastSelection = "";
+
   async function copySelection(): Promise<boolean> {
-    const sel = term.getSelection();
+    const sel = term.getSelection() || lastSelection;
     if (!sel) return false;
-    try { await writeText(sel); } catch (e) { console.error("clipboard write failed", e); }
+    try {
+      await writeText(sel);
+    } catch (e) {
+      console.error("clipboard write failed", e);
+      return false;
+    }
     return true;
   }
 
@@ -443,11 +455,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     // active workspace). Separate from the focus-pull effect so it isn't gated on editing/find.
     createEffect(() => { if (looking()) seePane(props.paneId); });
 
-    // Copy-on-select (optional): mirror any selection straight to the OS clipboard.
+    // Keep the last-selection cache current (used by copySelection when the live selection has
+    // already been cleared), and mirror to the clipboard immediately when copy-on-select is on.
     term.onSelectionChange(() => {
-      if (!settings.copyOnSelect) return;
       const sel = term.getSelection();
-      if (sel) void writeText(sel).catch((e) => console.error("clipboard write failed", e));
+      if (!sel) return;
+      lastSelection = sel;
+      if (settings.copyOnSelect) void writeText(sel).catch((e) => console.error("clipboard write failed", e));
     });
 
     // Middle-click paste (optional, classic X11 behaviour) — paste into the PTY.
@@ -467,6 +481,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "split-down": () => splitPane(props.paneId, "col"),
       "close-pane": () => closePane(props.paneId),
       "toggle-zoom": () => toggleZoom(props.paneId),
+      "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
       "command-palette": () => window.dispatchEvent(new CustomEvent("termhaus:command-palette")),
       "source-control": () => window.dispatchEvent(new CustomEvent("termhaus:source-control")),
@@ -649,6 +664,12 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           }
         >
           <button title="Launch Claude here" onClick={launchClaude}>✦</button>
+          <Show when={settings.editorCommand.trim()}>
+            <button
+              title={`Open this folder in ${settings.editorCommand.trim()} (${formatBinding(settings.keybindings["open-editor"])})`}
+              onClick={() => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || "")}
+            >✎</button>
+          </Show>
           <button title="Find (Ctrl+Shift+F)" onClick={openSearch}>⌕</button>
           <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")}>▥</button>
           <button title="Split down (Ctrl+Shift+E)" onClick={() => splitPane(props.paneId, "col")}>▤</button>

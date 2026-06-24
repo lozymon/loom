@@ -301,6 +301,28 @@ export default function Settings(props: { onClose: () => void }) {
             <p class="settings-hint muted">Applies to terminals you open from now on.</p>
           </section>
 
+          {/* ---- External editor ---- */}
+          <section class="settings-section">
+            <h3>External editor</h3>
+            <div class="settings-card">
+              <label class="settings-row">
+                <span class="settings-label">Editor command</span>
+                <input
+                  class="settings-input"
+                  placeholder="e.g. code, subl, zed"
+                  value={settings.editorCommand}
+                  onChange={(e) => setSetting("editorCommand", e.currentTarget.value.trim())}
+                />
+              </label>
+            </div>
+            <p class="settings-hint muted">
+              The <b>✎</b> button in each pane's controls (or <code>Ctrl+Shift+I</code>, rebindable
+              under Key bindings) runs this on the pane's working folder. The folder is appended as
+              the last argument, or substituted for <code>{"{dir}"}</code> if you include it (e.g.
+              <code>code -n {"{dir}"}</code>). Leave empty to hide the button.
+            </p>
+          </section>
+
           {/* ---- Safety ---- */}
           <section class="settings-section">
             <h3>Safety</h3>
