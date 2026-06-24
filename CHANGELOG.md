@@ -4,6 +4,19 @@ All notable changes to Termhaus are documented here. The format is loosely based
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [0.9.0] — 2026
+
+### Added
+- **Open folder in external editor** — a `✎` control on each pane (and `Ctrl+Shift+I`,
+  rebindable) launches your configured editor on the pane's working folder. Set the
+  command in Settings → Terminal → External editor (e.g. `code`, `subl`, `zed`); the
+  folder is appended, or substituted for a `{dir}` token.
+
+### Fixed
+- **Copy under WebKitGTK 2.5x (Linux Mint)** — `Ctrl+Shift+C` could silently drop the
+  copy when the xterm selection was already cleared as the keystroke was processed,
+  leaving the clipboard stale. The last selection is now cached and used as a fallback.
+
 ## [0.8.0] — 2026
 
 ### Added
