@@ -222,10 +222,21 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   }
 
   // ---- Clipboard (OS, via Tauri — reliable under WebKitGTK) --------------------------
+  // The last non-empty xterm selection, mirrored here on every selection change. Under
+  // WebKitGTK 2.5x the visual selection can already be cleared by the time the Ctrl+Shift+C
+  // keydown handler runs, so `term.getSelection()` returns "" and the copy is lost; this cache
+  // is the fallback so the copy keybinding always has the text the user actually highlighted.
+  let lastSelection = "";
+
   async function copySelection(): Promise<boolean> {
-    const sel = term.getSelection();
+    const sel = term.getSelection() || lastSelection;
     if (!sel) return false;
-    try { await writeText(sel); } catch (e) { console.error("clipboard write failed", e); }
+    try {
+      await writeText(sel);
+    } catch (e) {
+      console.error("clipboard write failed", e);
+      return false;
+    }
     return true;
   }
 
@@ -444,11 +455,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     // active workspace). Separate from the focus-pull effect so it isn't gated on editing/find.
     createEffect(() => { if (looking()) seePane(props.paneId); });
 
-    // Copy-on-select (optional): mirror any selection straight to the OS clipboard.
+    // Keep the last-selection cache current (used by copySelection when the live selection has
+    // already been cleared), and mirror to the clipboard immediately when copy-on-select is on.
     term.onSelectionChange(() => {
-      if (!settings.copyOnSelect) return;
       const sel = term.getSelection();
-      if (sel) void writeText(sel).catch((e) => console.error("clipboard write failed", e));
+      if (!sel) return;
+      lastSelection = sel;
+      if (settings.copyOnSelect) void writeText(sel).catch((e) => console.error("clipboard write failed", e));
     });
 
     // Middle-click paste (optional, classic X11 behaviour) — paste into the PTY.
