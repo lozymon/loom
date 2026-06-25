@@ -93,6 +93,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // Set true while tearing this pane off into its own window, so onCleanup unmounts the xterm
   // WITHOUT killing the PTY — the detached window takes over the live stream.
   let detaching = false;
+  // True while the live PTY is the interactive shell we auto-opened after a command pane's
+  // launch command (e.g. `claude`) exited — so the user keeps a usable terminal instead of a
+  // dead pane. Gates the drop-to-shell to fire once: when *this* shell later exits (the user
+  // typed `exit`), we let the pane die normally rather than looping a fresh shell forever.
+  let currentIsShellDrop = false;
   // git-branch poll throttle: the last cwd we ran `git` for, and a tick counter so the subprocess
   // only fires on a cwd change or a slow refresh (the branch is rarely what changes).
   let lastGitCwd: string | null = null;
@@ -151,13 +156,26 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     handle = null;
     setBusy(props.paneId, null);
     setForeground(null);
+    // Drop into an interactive shell when a command pane's launch command finishes, so exiting
+    // (e.g.) `claude` leaves you at a usable prompt rather than a dead pane. Fires once per launch
+    // (currentIsShellDrop guards the follow-on `exit` from looping), and never for a 127
+    // missing-binary exit — that keeps the "command not found" panel useful (Unix; on Windows a
+    // missing command exits non-127 and just prints its error above the new shell).
+    const hadCommand = !!spec()?.command?.trim();
+    if (hadCommand && !currentIsShellDrop && code !== 127) {
+      term.write(`\r\n\x1b[2m[process exited: ${code}] — opening shell\x1b[0m\r\n`);
+      void start(true);
+      return;
+    }
     term.write(`\r\n\x1b[2m[process exited: ${code}]\x1b[0m\r\n`);
     setDead(code);
   };
 
   /** Spawn a fresh PTY and bind it to this pane's xterm — or, when re-docking from a torn-off
-   *  window, rebind to the *existing* PTY (no respawn). Used for first run, respawn, and re-dock. */
-  async function start() {
+   *  window, rebind to the *existing* PTY (no respawn). Used for first run, respawn, and re-dock.
+   *  `asShell` forces a plain interactive shell, ignoring the pane's launch command — used to drop
+   *  to a shell after a command pane's command exits (see onExit). */
+  async function start(asShell = false) {
     if (handle !== null) return;
     setDead(null);
 
@@ -191,7 +209,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         {
           cols: term.cols,
           rows: term.rows,
-          command: spec()?.command,
+          command: asShell ? undefined : spec()?.command,
           // Per-pane cwd wins (e.g. a `th spawn --cwd …` pane), then the workspace folder.
           cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
           shell: settings.defaultShell || undefined,
@@ -201,6 +219,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         onOutput,
         onExit,
       );
+      // Remember whether the live PTY is the auto-opened shell, so its eventual exit lets the
+      // pane die instead of re-dropping. A normal launch/restart clears it (re-runs the command).
+      currentIsShellDrop = asShell;
     } catch (e) {
       term.write(`\r\n\x1b[31mfailed to spawn pty: ${e}\x1b[0m\r\n`);
     }

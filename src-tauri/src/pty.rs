@@ -351,19 +351,45 @@ pub fn spawn(
     let sink = Arc::new(Mutex::new(on_output));
     let exit_sink = Arc::new(Mutex::new(on_exit));
 
+    // Waiter thread: block on the child and drive teardown when it exits. This is what makes
+    // exit detection work on Windows ConPTY, where the master's reader does NOT observe EOF on
+    // child exit while the pseudoconsole (HPCON) is still open — and we deliberately keep the
+    // master alive for resize() for the pane's whole lifetime. Keying teardown off the reader's
+    // EOF (as a pure flusher loop would) therefore deadlocks the pane on Windows: child dies →
+    // no EOF → reader blocks → flusher blocks → on_exit never fires → the pane freezes on its
+    // last frame. So we detect exit independently here: wait on the child, hand the exit code to
+    // the flusher, then drop the master by removing the pane. Dropping the master closes the
+    // HPCON, which is the documented ConPTY teardown order — conhost flushes any final output to
+    // the pipe and only THEN signals EOF to the reader, so the tail is delivered before exit. On
+    // Unix the reader already EOFs (the slave is closed at spawn), so this is harmless reaping.
+    let mut child = child;
+    // One-slot handoff of the exit code from the waiter to the flusher. The flusher reports it
+    // only after it has drained the reader's tail, so output always precedes the exit notice.
+    let (code_tx, code_rx) = mpsc::sync_channel::<i32>(1);
+    let wait_panes = mgr.panes.clone();
+    std::thread::spawn(move || {
+        let code = match child.wait() {
+            Ok(status) => status.exit_code() as i32,
+            Err(_) => -1,
+        };
+        // Publish the code first (capacity 1, never blocks here)...
+        let _ = code_tx.send(code);
+        // ...then drop the master (removing the pane drops it) to close the HPCON and unblock /
+        // EOF the reader. Also stops a dead PaneId resolving (write/resize/kill become no-ops).
+        wait_panes.lock().unwrap().remove(&id);
+    });
+
     // Flusher thread: coalesce into one frame and emit at most once per FLUSH_INTERVAL.
     // The frame-rate cap is what keeps WebKitGTK alive under a flood — without it we'd
     // post to the IPC as fast as base64 runs and balloon the main process. acc is capped
     // at FRAME_MAX; when it's full we stop draining `rx`, which back-pressures the reader.
-    let mut child = child;
-    let panes = mgr.panes.clone();
     let flush_sink = sink.clone();
     let flush_exit = exit_sink.clone();
     std::thread::spawn(move || {
         let engine = base64::engine::general_purpose::STANDARD;
         let mut acc: Vec<u8> = Vec::with_capacity(FRAME_MAX);
         // Block until the first byte of the next frame; `recv` erroring means the reader
-        // is gone (child exited), which ends the loop and falls through to reaping.
+        // is gone (child exited and the master was dropped), which ends the loop.
         while let Ok(first) = rx.recv() {
             acc.extend_from_slice(&first);
             let frame_start = Instant::now();
@@ -389,14 +415,11 @@ pub fn spawn(
                 std::thread::sleep(rest);
             }
         }
-        // Reap the child so it doesn't linger as a zombie, report its exit, and drop the
-        // pane so a dead PaneId stops resolving (write/resize/kill become no-ops).
-        let code = match child.wait() {
-            Ok(status) => status.exit_code() as i32,
-            Err(_) => -1,
-        };
+        // Reader hit EOF — the child has exited and its tail is fully flushed. Block for the
+        // waiter's exit code (already sent, or imminent on Unix where the reader EOFs first),
+        // then report it. The pane is removed by the waiter, not here.
+        let code = code_rx.recv().unwrap_or(-1);
         let _ = flush_exit.lock().unwrap().send(code);
-        panes.lock().unwrap().remove(&id);
     });
 
     mgr.panes.lock().unwrap().insert(
