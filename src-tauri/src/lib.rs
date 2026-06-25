@@ -86,6 +86,13 @@ fn pty_check_command(command: String, shell: Option<String>) -> bool {
     pty::check_command(&command, shell.as_deref())
 }
 
+/// Installed WSL distributions for the new-workspace shell picker (empty off Windows / when WSL
+/// isn't installed). `async` so the `wsl.exe --list` subprocess runs off the UI thread.
+#[tauri::command]
+async fn wsl_distros() -> Result<Vec<String>, String> {
+    Ok(pty::wsl_distros())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pending = Arc::new(PendingReplies::new());
@@ -109,6 +116,7 @@ pub fn run() {
             pty_busy,
             pty_foreground,
             pty_check_command,
+            wsl_distros,
             control::pane_cmd_reply,
             editor::open_editor,
             capture::capture_region,

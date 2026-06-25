@@ -106,6 +106,8 @@ export interface NewWorkspaceOpts {
   commands?: (string | undefined)[];
   /** Per-pane working-folder overrides (row-major); entry omitted/empty = workspace `cwd`. */
   cwds?: (string | undefined)[];
+  /** Per-pane shell overrides (row-major), e.g. `wsl.exe -d Ubuntu`; omitted/empty = global default. */
+  shells?: (string | undefined)[];
   /** Preselect every pane as a broadcast target (one prompt → many panes from launch). */
   broadcastAll?: boolean;
   /** A saved layout to rebuild verbatim (preset relaunch / duplicate) instead of a balanced grid.
@@ -156,9 +158,11 @@ function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
     const title = allocName(Object.values(panes).map((p) => p.title));
     const command = opts.commands?.[i]?.trim();
     const cwd = opts.cwds?.[i]?.trim();
+    const shell = opts.shells?.[i]?.trim();
     const spec: PaneSpec = { title };
     if (command) spec.command = command;
     if (cwd) spec.cwd = cwd;
+    if (shell) spec.shell = shell;
     panes[paneId] = spec;
     i++;
     return { kind: "leaf", paneId };

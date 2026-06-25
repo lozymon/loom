@@ -65,6 +65,11 @@ export function writePty(handle: PtyHandle, data: string): Promise<void> {
   return invoke(Cmd.write, { id: handle, data });
 }
 
+/** Installed WSL distros for the shell picker — empty off Windows / when WSL isn't installed. */
+export function listWslDistros(): Promise<string[]> {
+  return invoke<string[]>(Cmd.wslDistros);
+}
+
 /**
  * Re-point a live PTY's output/exit at fresh Channels in *this* window (tear-off / re-dock). The
  * PTY keeps running; only where its bytes land changes. Used by a detached pane window to claim a

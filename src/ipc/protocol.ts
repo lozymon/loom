@@ -26,6 +26,9 @@ export interface PaneSpec {
   command?: string;
   cwd?: string;
   env?: Record<string, string>;
+  /** Shell to launch for this pane, overriding the global Default shell. May carry args, e.g.
+   *  `wsl.exe -d Ubuntu` or `cmd.exe`. Omitted = use the global default (Settings → Default shell). */
+  shell?: string;
   title: string;
 }
 
@@ -60,6 +63,8 @@ export const Cmd = {
   foreground: "pty_foreground",
   /** Advisory check that a command's program is installed/on PATH (wizard pre-flight). */
   checkCommand: "pty_check_command",
+  /** List installed WSL distros for the new-workspace shell picker (empty off Windows). */
+  wslDistros: "wsl_distros",
   /** Hand a relayed inter-pane request's answer back to Rust (ADR-0007). */
   paneCmdReply: "pane_cmd_reply",
 } as const;

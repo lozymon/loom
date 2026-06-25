@@ -119,15 +119,42 @@ fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
 }
 
 /// Windows has no login-shell concept (PLAN M7.1): PATH comes from the env/registry, not a sourced
-/// profile. PowerShell runs the command via `-Command`; `cmd.exe` via `/c`.
+/// profile. PowerShell runs the command via `-Command`; `cmd.exe` via `/c`. WSL is special: the
+/// `shell` may carry a distro selector (e.g. `wsl.exe -d Ubuntu`), and a command runs through a
+/// login `bash -lc` *inside* the distro so its PATH/profile load — the Unix `$SHELL -lc` parity.
 #[cfg(windows)]
 fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
-    let mut cmd = CommandBuilder::new(shell);
-    let is_cmd = std::path::Path::new(shell)
+    let trimmed = shell.trim();
+    let first = trimmed.split_whitespace().next().unwrap_or("");
+    let stem = std::path::Path::new(first)
         .file_stem()
         .and_then(|s| s.to_str())
-        .map(|s| s.eq_ignore_ascii_case("cmd"))
-        .unwrap_or(false);
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    // WSL: split the spec into program + leading args (the optional `-d <distro>`), then launch
+    // the distro's interactive login shell, or a `bash -lc "<cmd>"` for a command pane. The
+    // Windows cwd we set on the CommandBuilder is auto-translated by wsl.exe to its /mnt path.
+    if stem == "wsl" {
+        let mut tokens = trimmed.split_whitespace();
+        let program = tokens.next().unwrap_or("wsl.exe");
+        let mut cmd = CommandBuilder::new(program);
+        for a in tokens {
+            cmd.arg(a);
+        }
+        if let Some(c) = command {
+            cmd.arg("--");
+            cmd.arg("bash");
+            cmd.arg("-lc");
+            cmd.arg(c);
+        }
+        return cmd;
+    }
+
+    // PowerShell / cmd / any other shell: the whole string is the program (it may be a path with
+    // spaces, so we don't split it). cmd.exe takes `/c`, everything else the PowerShell flags.
+    let mut cmd = CommandBuilder::new(shell);
+    let is_cmd = stem == "cmd";
     match command {
         Some(c) if is_cmd => {
             cmd.arg("/c");
@@ -145,6 +172,39 @@ fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
         None => {}
     }
     cmd
+}
+
+/// Installed WSL distributions, for the new-workspace shell picker. Runs `wsl.exe --list --quiet`
+/// (names only, one per line) and decodes its UTF-16LE output. Any failure (WSL not installed, no
+/// distros) yields an empty list — the picker then simply offers no WSL entries. Never an error.
+#[cfg(windows)]
+pub fn wsl_distros() -> Vec<String> {
+    let out = match std::process::Command::new("wsl.exe")
+        .args(["--list", "--quiet"])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return Vec::new(),
+    };
+    // wsl.exe emits UTF-16LE (often with a BOM and CRLF line ends); decode then tidy.
+    let u16s: Vec<u16> = out
+        .stdout
+        .chunks_exact(2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .collect();
+    String::from_utf16_lossy(&u16s)
+        .replace('\u{feff}', "")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Non-Windows: WSL is a Windows-only concept, so there are never any distros.
+#[cfg(not(windows))]
+pub fn wsl_distros() -> Vec<String> {
+    Vec::new()
 }
 
 /// Locale env the child inherits. `TERM`/`COLORTERM` are a Unix idiom; on Windows ConPTY advertises

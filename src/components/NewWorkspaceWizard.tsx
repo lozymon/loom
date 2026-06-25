@@ -13,7 +13,12 @@ import {
 import { settings } from "../stores/settings";
 import { AGENTS, detectAgent } from "../lib/agents";
 import { checkCommandAvailable } from "../lib/agentAvailability";
+import { listWslDistros } from "../lib/ptyClient";
 import { allocName, balancedBands } from "../lib/grid";
+
+/** We only surface the shell picker on Windows, where PowerShell / cmd / WSL meaningfully differ.
+ *  WebView2's UA carries "Windows"; WebKitGTK (Linux) does not. Zero-dependency platform sniff. */
+const IS_WINDOWS = navigator.userAgent.includes("Windows");
 
 const PRESETS = [1, 2, 4, 6];
 const MAX_PANES = 16;
@@ -56,6 +61,10 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   const [count, setCount] = createSignal(4);
   const [commands, setCommands] = createSignal<string[]>([]);
   const [cwds, setCwds] = createSignal<string[]>([]);
+  // Per-pane shell override (row-major); "" = global default (PowerShell on Windows). Windows-only.
+  const [shells, setShells] = createSignal<string[]>([]);
+  // Installed WSL distros, loaded once on Windows; each becomes a `wsl.exe -d <distro>` shell option.
+  const [wslDistros, setWslDistros] = createSignal<string[]>([]);
   const [selected, setSelected] = createSignal<number | null>(null);
   // Pre-flight: command string → is its program installed? (undefined = unchecked/checking).
   // Filled async so we never block opening the wizard; drives the "⚠ not installed" hints.
@@ -72,7 +81,21 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   onMount(() => {
     AGENTS.forEach((a) => checkAvail(a.command));
     fillAll(fleetAgent());
+    if (IS_WINDOWS) void listWslDistros().then(setWslDistros).catch(() => {});
   });
+
+  // The shell choices offered per pane: PowerShell (the default), cmd, and one entry per WSL
+  // distro. The value is the literal shell spec stored on the PaneSpec; "" means global default.
+  const shellOptions = createMemo(() => {
+    const opts = [
+      { value: "", label: "PowerShell (default)" },
+      { value: "cmd.exe", label: "Command Prompt" },
+    ];
+    for (const d of wslDistros()) opts.push({ value: `wsl.exe -d ${d}`, label: `WSL · ${d}` });
+    return opts;
+  });
+  const shellLabel = (value: string) =>
+    shellOptions().find((o) => o.value === value)?.label ?? value;
 
   // Auto-names exactly as buildWorkspace allocates them (Faye, Cleo, …) so the preview matches.
   const names = createMemo(() => {
@@ -87,6 +110,8 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   // The agent the "Fill every pane with" dropdown applies (default Claude Code, matching the
   // design). It's a pending selection — panes stay as-is until you hit "Apply to all".
   const [fleetAgent, setFleetAgent] = createSignal(AGENTS[0]?.command ?? "");
+  // The shell the "Fill every pane with" row applies to every pane ("" = PowerShell default).
+  const [fleetShell, setFleetShell] = createSignal("");
 
   // No availability probe here: this fires on every keystroke of the free-text cmd field, and a
   // probe spawns a login shell. The built-in agent commands are all probed up front (onMount);
@@ -95,7 +120,10 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     setCommands((c) => { const n = [...c]; n[i] = cmd; return n; });
   const setCwdAt = (i: number, dir: string) =>
     setCwds((c) => { const n = [...c]; n[i] = dir; return n; });
+  const setShellAt = (i: number, sh: string) =>
+    setShells((c) => { const n = [...c]; n[i] = sh; return n; });
   const fillAll = (cmd: string) => setCommands(Array.from({ length: count() }, () => cmd));
+  const fillAllShells = (sh: string) => setShells(Array.from({ length: count() }, () => sh));
 
   // Changing the folder also refreshes the name, unless the user has hand-edited it.
   function applyCwd(next: string) {
@@ -116,6 +144,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     const folder = cwd().trim();
     const cmds = commands().slice(0, count());
     const dirs = cwds().slice(0, count());
+    const shs = shells().slice(0, count());
     const wsName = name().trim() || (folder ? autoName(folder) : `Workspace ${recents().length + 1}`);
     createWorkspace({
       name: wsName,
@@ -123,6 +152,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
       paneCount: count(),
       commands: cmds.some((c) => c?.trim()) ? cmds : undefined,
       cwds: dirs.some((c) => c?.trim()) ? dirs : undefined,
+      shells: shs.some((s) => s?.trim()) ? shs : undefined,
     });
     props.onClose();
   }
@@ -270,7 +300,19 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                   {(a) => <option value={a.command}>{a.label}{isMissing(a.command) ? " (not installed)" : ""}</option>}
                 </For>
               </select>
-              <button class="wiz-fleet-apply" onClick={() => fillAll(fleetAgent())}>Apply to all</button>
+              <Show when={IS_WINDOWS}>
+                <span class="wiz-fleet-label">in</span>
+                <select
+                  class="wiz-fleet-select"
+                  value={fleetShell()}
+                  onChange={(e) => { setFleetShell(e.currentTarget.value); fillAllShells(e.currentTarget.value); }}
+                >
+                  <For each={shellOptions()}>
+                    {(o) => <option value={o.value}>{o.label}</option>}
+                  </For>
+                </select>
+              </Show>
+              <button class="wiz-fleet-apply" onClick={() => { fillAll(fleetAgent()); fillAllShells(fleetShell()); }}>Apply to all</button>
             </div>
 
             <div>
@@ -300,6 +342,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                                 <span class="wiz-cell-agent">
                                   {commands()[idx()]?.trim() || "shell"}
                                   <Show when={cwds()[idx()]?.trim()}> · {basename(cwds()[idx()]!)}</Show>
+                                  <Show when={shells()[idx()]?.trim()}> · {shellLabel(shells()[idx()]!)}</Show>
                                 </span>
                               </button>
                             );
@@ -356,6 +399,20 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                       />
                       <button onClick={() => browseCwdAt(i())}>Browse…</button>
                     </div>
+                    <Show when={IS_WINDOWS}>
+                      <div class="wizard-row">
+                        <span class="muted" style={{ width: "5ch" }}>shell</span>
+                        <select
+                          class="wizard-input"
+                          value={shells()[i()] ?? ""}
+                          onChange={(e) => setShellAt(i(), e.currentTarget.value)}
+                        >
+                          <For each={shellOptions()}>
+                            {(o) => <option value={o.value}>{o.label}</option>}
+                          </For>
+                        </select>
+                      </div>
+                    </Show>
                   </div>
                 );
               })()}

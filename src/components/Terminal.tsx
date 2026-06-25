@@ -212,7 +212,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           command: asShell ? undefined : spec()?.command,
           // Per-pane cwd wins (e.g. a `th spawn --cwd …` pane), then the workspace folder.
           cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
-          shell: settings.defaultShell || undefined,
+          // Per-pane shell (e.g. a WSL distro chosen in the wizard) wins over the global default.
+          shell: spec()?.shell || settings.defaultShell || undefined,
           name: spec()?.title,
           logPath,
         },
