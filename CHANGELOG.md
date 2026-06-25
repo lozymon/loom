@@ -4,6 +4,33 @@ All notable changes to Termhaus are documented here. The format is loosely based
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [0.10.0] — 2026-06-24
+
+### Added
+- **Per-pane shell picker with WSL support (Windows)** — choose PowerShell, Command
+  Prompt, or any installed WSL distro per pane in the new-workspace wizard, so a single
+  workspace can mix shells (e.g. Claude in WSL/Ubuntu beside a PowerShell pane). The
+  "Fill every pane with" row gains a matching `[agent] in [shell]` selector, and the
+  chosen shell is remembered per pane and restored on relaunch.
+- **Region capture on Windows** — the screenshot-to-pane control now works on Windows by
+  driving the built-in Snip & Sketch overlay and saving the snip as PNG, matching the
+  Linux flameshot/grim contract (a cancelled snip leaves the clipboard intact).
+
+### Changed
+- **Command panes drop into a shell on exit** — when a pane launched with a command
+  (e.g. `claude`) exits, it now opens an interactive shell in the same folder instead of
+  going dead, so you keep a usable terminal. Typing `exit` then closes the pane as usual.
+
+### Fixed
+- **Panes froze on process exit (Windows)** — quitting a program in a pane (e.g. exiting
+  Claude) left the pane stuck on its last frame. On Windows ConPTY the PTY reader never
+  sees EOF while the pseudoconsole stays open, so the exit was never detected. Exit is now
+  observed independently and the pseudoconsole torn down in the documented ConPTY order,
+  so the pane reports the exit and recovers.
+- **External editor & `th` CLI resolution on Windows** — a bare editor command like `code`
+  now resolves via PATH×PATHEXT (`code.cmd`), and the `th`/`th-mcp` sidecar binaries are
+  found with their `.exe` suffix so a pane's inter-pane control bus is wired up.
+
 ## [0.9.0] — 2026
 
 ### Added
