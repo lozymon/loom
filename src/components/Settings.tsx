@@ -29,7 +29,6 @@ const NAV_ITEMS: { id: NavItemId; label: string; hint: string }[] = [
   { id: "palette", label: "Palette", hint: "command palette" },
   { id: "git", label: "Git", hint: "source control" },
   { id: "docs", label: "Docs", hint: "markdown reader" },
-  { id: "preview", label: "Preview", hint: "web preview" },
 ];
 
 type TabId = "appearance" | "terminal" | "keys";

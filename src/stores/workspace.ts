@@ -18,11 +18,11 @@ import { settings } from "./settings";
 import { activity } from "./activity";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
-export type DockedPanelKind = "git" | "docs" | "preview";
+export type DockedPanelKind = "git" | "docs";
 
 /**
  * Per-workspace state for the docked side panel. Lets each workspace carry its own Source
- * Control / Docs / Preview: opening one in workspace A leaves workspace B untouched, and the
+ * Control / Docs: opening one in workspace A leaves workspace B untouched, and the
  * source folder is captured from the active terminal *at open time* (so it stays pinned to
  * the folder you opened against, even if you later cd or focus elsewhere). Ephemeral.
  */
@@ -40,7 +40,7 @@ const freshPanel = (): DockedPanelState => ({ open: null, gitCwd: "", docsCwd: "
 /**
  * A workspace plus its ephemeral UI state (focus/zoom/broadcast/panel — not persisted).
  * `broadcast` is the subset of panes the broadcast bar targets; empty = "all live panes".
- * `panel` is this workspace's docked side-panel (Source Control / Docs / Preview) state.
+ * `panel` is this workspace's docked side-panel (Source Control / Docs) state.
  */
 export interface WorkspaceUI extends Workspace {
   focused: PaneId | null;

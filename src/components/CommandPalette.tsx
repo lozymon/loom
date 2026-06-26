@@ -48,7 +48,6 @@ export default function CommandPalette(props: {
   onDocs: () => void;
   onShortcuts: () => void;
   onLogs: () => void;
-  onPreview: () => void;
 }) {
   const [query, setQuery] = createSignal("");
   const [sel, setSel] = createSignal(0);
@@ -67,7 +66,6 @@ export default function CommandPalette(props: {
       { label: "Open docs reader", icon: "▦", kind: "action", key: kb("docs"), run: props.onDocs },
       { label: "Keyboard shortcuts cheat-sheet", icon: "⌨", kind: "action", key: kb("shortcuts"), run: props.onShortcuts },
       { label: "View session logs", icon: "≣", kind: "action", hint: "Recorded pane output", run: props.onLogs },
-      { label: "Toggle preview panel", icon: "▤", kind: "action", key: kb("preview"), run: props.onPreview },
       { label: "Toggle overview (fleet glance)", icon: "▦", kind: "action", key: kb("overview"), run: () => toggleOverview() },
       { label: "Save workspace as preset", icon: "★", kind: "action", run: () => saveCurrentAsPreset() },
       { label: "Next workspace", icon: "→", kind: "action", key: kb("next-workspace"), run: () => switchWorkspaceRelative(1) },

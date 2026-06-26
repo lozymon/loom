@@ -1,0 +1,59 @@
+# Termhaus — What to Add or Remove
+
+Notes for discussion. My honest read after going through the whole app.
+
+## The headline
+
+This is a _finished_ product, not a half-built one. M0–M11 plus the entire
+IDEAS.md roadmap shipped, zero TODOs/FIXMEs/dead code, clean Rust↔TS separation.
+So the real question isn't "what's missing" — it's **"what's diluting the core
+thesis vs. strengthening it."** The thesis is sharp: _a control room for driving
+fleets of CLI agents._ I judge everything against that.
+
+## What I'd consider removing (or at least questioning)
+
+The biggest risk here is **feature sprawl** — a few things are mini-apps bolted
+onto a terminal multiplexer, and each one is a maintenance surface that competes
+with a better tool the user could just run _in a pane_:
+
+- ~~**PreviewPanel** (iframe web preview) — The weakest fit. A terminal
+  multiplexer embedding a browser pane is scope creep; anyone wanting a live
+  preview has a real browser one Alt-Tab away.~~ ✅ **Removed 2026-06-25** —
+  component, `preview` keybinding/nav item, and `settings.previewUrl`/
+  `previewWidth` deleted; tests + typecheck green.
+- **DocsPanel** — A markdown reader competes directly with `glow`/`bat` in a pane.
+  Its _one_ justification is "drag-select lines → send to a pane" for feeding
+  agent context. If that workflow isn't actually used, this is a lot of surface
+  for a niche.
+- **GitPanel** (read-only) — Genuinely useful, but read-only git competes with
+  `lazygit` in a pane, which does vastly more. The "drag diff lines into a pane"
+  hook is again the only thing that justifies it being _in-app_ rather than
+  just-another-terminal.
+
+I'm not saying delete all three — I'm saying each one needs to earn its keep via
+a workflow that a pane _can't_ do, and right now that workflow is "drag text into
+a pane." If that's load-bearing, keep them; if it's not getting used, they're
+dead weight that blurs the product.
+
+## What I'd consider adding (all reinforce the core thesis)
+
+- **Cross-pane / cross-workspace session-log search.** Logs today are opt-in,
+  ANSI-stripped, tail-only, per-pane. The single highest-value fleet feature you
+  _don't_ have is "grep everything my 12 agents did in the last hour." This is
+  the natural place SQLite finally earns its way in (PLAN.md already flags it as
+  the trigger condition). This is the one I'd build first.
+- **An agent-lifecycle timeline / fleet dashboard.** You have all the signals
+  already (busy, attention, status, bell) but they live as per-pane dots. A
+  compact "what is every agent doing right now, and which ones have been
+  idle/waiting longest" strip would make the fleet thesis _visible_. Cheap to
+  build on existing state, high payoff.
+- **Broadcast that crosses workspaces.** Today broadcast is scoped to the active
+  workspace. For a fleet split across workspaces, "prompt all agents everywhere"
+  is a natural ask.
+
+## What I would _not_ touch
+
+The core engine — `pty.rs` coalescing/back-pressure, the layout tree, the control
+bus relay, the opaque-panes rule. That's the part that's genuinely hard and
+genuinely right. Don't let anyone "optimize" base64→raw-byte transport unless a
+flood actually regresses; ADR-0003 already says it holds.

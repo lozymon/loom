@@ -18,10 +18,8 @@ export default function TitleBar(props: {
   onGit: () => void;
   onDocs: () => void;
   onShortcuts: () => void;
-  onPreview: () => void;
   gitOn: () => boolean;
   docsOn: () => boolean;
-  previewOn: () => boolean;
   settingsOn: () => boolean;
   paletteOn: () => boolean;
 }) {
@@ -75,16 +73,6 @@ export default function TitleBar(props: {
             onClick={() => props.onDocs()}
           >
             Docs
-          </button>
-        </Show>
-        <Show when={settings.navVisible.preview}>
-          <button
-            class="tb-btn"
-            classList={{ on: props.previewOn() }}
-            title="Preview panel — localhost / docs (Ctrl+Shift+B)"
-            onClick={() => props.onPreview()}
-          >
-            Preview
           </button>
         </Show>
         <button

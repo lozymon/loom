@@ -240,12 +240,12 @@ it to the whole pane.
   **Live-verified on Linux 2026-06-13:** tear-off, re-dock via "Bring it back", and re-dock via the
   window ✕ all preserve scrollback; `top`-style live sessions transfer cleanly.
 - **Right-side browser / preview panel** — the dropped reference-app feature (localhost/docs
-  preview); users currently alt-tab to a real browser. 🔴 ✅ shipped — `PreviewPanel.tsx`, a docked
-  right-side `<iframe>` with a URL bar (reload / go / open-externally / close), resizable + persisted
-  (`settings.previewUrl`/`previewWidth`). Docked as a flex sibling of the stage so opening it shrinks
-  the grid and panes refit. Toggle from the title bar's ▤ Preview button, the palette, or
-  Ctrl+Shift+B (new `preview` action). Sites that refuse framing (X-Frame-Options / CSP) won't load
-  inline — the ↗ button opens them in the real browser.
+  preview); users currently alt-tab to a real browser. 🔴 ✅ shipped, then ❌ **removed (2026-06-25)** —
+  an embedded `<iframe>` browser was scope creep for a terminal multiplexer (a real browser is one
+  Alt-Tab away, and sites that refuse framing wouldn't load inline anyway). `PreviewPanel.tsx`, the
+  `preview` keybinding/nav item, and `settings.previewUrl`/`previewWidth` were all deleted. The
+  docked-panel slot (a flex sibling of the stage that shrinks the grid) remains, shared by Source
+  Control and Docs.
 
 ---
 

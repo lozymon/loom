@@ -17,7 +17,7 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 /** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
  *  so this config stays reachable). */
-export type NavItemId = "overview" | "palette" | "git" | "docs" | "preview";
+export type NavItemId = "overview" | "palette" | "git" | "docs";
 
 export interface Settings {
   // ---- Appearance (terminal text) ----
@@ -53,11 +53,6 @@ export interface Settings {
   globalHotkey: string;
   /** Close button hides to the tray instead of quitting (Quit from the tray menu still exits). */
   closeToTray: boolean;
-  // ---- Preview panel ----
-  /** Last URL shown in the right-side preview panel (a localhost dev server, docs, etc.). */
-  previewUrl: string;
-  /** Width (px) of the right-side preview panel; drag its left edge to resize. */
-  previewWidth: number;
   // ---- Broadcast ----
   /** Append Enter (carriage return) to each broadcast message so it runs immediately. */
   broadcastNewline: boolean;
@@ -114,8 +109,6 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyOnAttention: false,
   globalHotkey: "CommandOrControl+Alt+Backquote",
   closeToTray: false,
-  previewUrl: "http://localhost:3000",
-  previewWidth: 460,
   broadcastNewline: true,
   broadcastSnippets: [],
   broadcastHistory: [],
@@ -124,7 +117,7 @@ export const DEFAULT_SETTINGS: Settings = {
   docsPreview: true,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
-  navVisible: { overview: true, palette: true, git: true, docs: true, preview: true },
+  navVisible: { overview: true, palette: true, git: true, docs: true },
   showBroadcastBar: true,
   railWidth: 212,
   railCollapsed: false,
