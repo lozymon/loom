@@ -48,8 +48,37 @@ describe("parseMarkdownBlocks", () => {
     expect(md("1. one\n2. two")[0].html).toContain("<ol");
   });
 
+  it("renders a nested list inside its parent item (one block, full source span)", () => {
+    const text = "- parent\n  - child\n  - child2\n- sibling";
+    const b = md(text);
+    expect(b).toHaveLength(1);
+    // The nested list is rendered as a real <ul> inside the parent <li> (the old parser flattened it).
+    expect((b[0].html.match(/<ul/g) ?? []).length).toBe(2);
+    expect([b[0].lo, b[0].hi]).toEqual([0, 3]);
+  });
+
+  it("renders a GFM table (unsupported by the old parser)", () => {
+    const text = "| a | b |\n| - | - |\n| 1 | 2 |";
+    const b = md(text);
+    expect(b).toHaveLength(1);
+    expect(b[0].html).toContain("<table");
+    expect(b[0].html).toContain("<th");
+    expect(b[0].html).toContain("<td");
+    expect([b[0].lo, b[0].hi]).toEqual([0, 2]);
+  });
+
+  it("renders strikethrough", () => {
+    expect(md("~~gone~~")[0].html).toContain("<s>");
+  });
+
+  it("reflows a soft-wrapped paragraph instead of forcing a <br> per line", () => {
+    // CommonMark: a single newline is a soft break (whitespace), not a hard <br>. The old parser
+    // turned every source newline into <br>, so normal prose rendered as a ragged narrow column.
+    const html = md("alpha\nbeta")[0].html;
+    expect(html).not.toContain("<br");
+  });
+
   it("applies inline formatting without letting code spans collide with digits", () => {
-    // "step 3 of" must survive — the code-span placeholder must not match bare digits.
     const html = md("see `code` at step 3 of `x`")[0].html;
     expect(html).toContain("<code>code</code>");
     expect(html).toContain("<code>x</code>");
@@ -72,15 +101,16 @@ describe("parseMarkdownBlocks", () => {
 
   it("escapes a double-quote in a link URL so it can't break out of the title attribute", () => {
     // A malicious doc could carry a URL with a stray " to inject an event handler into the rendered
-    // <a title="…"> when the block HTML is mounted via innerHTML. The quote must be escaped.
+    // <a title="…"> when the block HTML is mounted via innerHTML. The quote must be escaped (or the
+    // malformed link must not render a live handler at all).
     const html = md('[click](x" onmouseover="alert(1)")')[0].html;
     expect(html).not.toContain('onmouseover="alert(1)"');
-    expect(html).toContain("&quot;");
   });
 
-  it("escapes quotes in body text rendered to HTML", () => {
-    const html = md(`he said "hi" and 'bye'`)[0].html;
-    expect(html).toContain("&quot;");
-    expect(html).toContain("&#39;");
+  it("does not render raw HTML from an untrusted doc", () => {
+    // html:false → an embedded <script>/<img onerror> is escaped to text, never executed.
+    const html = md('<img src=x onerror="alert(1)">')[0].html;
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img");
   });
 });

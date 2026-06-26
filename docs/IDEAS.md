@@ -123,10 +123,22 @@ uses the native dialog for files outside the folder. Opened from the title bar's
 the command palette, or **Ctrl+Shift+R** (new `docs` keybinding action).
 
 A **Raw / Preview** toggle (persisted as `settings.docsPreview`) now covers *both* rendering
-options: Raw is the line-precise grid; Preview renders the markdown via a small self-contained
-parser (`lib/markdown.ts`, no dep — like the unified-diff parser) where each block carries its
+options: Raw is the line-precise grid; Preview renders the markdown where each block carries its
 **source line range**, so block drag-select still reconstructs and sends the *raw* markdown — the
 "selection maps back to source lines" path the open question called the nicer-but-more-work option.
+
+**Upgraded 2026-06-25** (in-use feedback — see `docs/ASSESSMENT.md`): the original Preview used a
+~140-line homegrown parser that couldn't do tables or nested lists and rendered every soft newline
+as a `<br>` (prose came out as a ragged column). Preview now renders via **markdown-it** (the one
+runtime parsing dependency we've taken — a deliberate break from the "small purpose-built parser"
+habit, justified in `lib/markdown.ts`): real CommonMark + tables, strikethrough, nested lists, and
+proper soft-wrap reflow. The source-line mapping survives because markdown-it block tokens expose a
+`.map` line range. Same pass also fixed three usability complaints: the panel **stays open after a
+send** (was closing — bad for the iterative "read a doc, send passages while discussing" loop) and
+flashes a "sent ✓" instead; a **fuzzy filter box** + arrow-key/Enter nav over the file list (Esc
+peels back filter → selection → close); a **📂 change-folder button** so the scanned root can be
+re-pointed (it used to pin at first-open with no way to change it); and the Rust walk now descends
+**4 levels** (was 2) so deeper docs show up.
 
 ---
 

@@ -13,6 +13,7 @@ import { activeWorkspace, setPanelCwd } from "../stores/workspace";
 import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
 import { listDocs, readDoc, type DocEntry } from "../lib/docsClient";
 import { parseMarkdownBlocks } from "../lib/markdown";
+import { fuzzyScore } from "../lib/matching";
 import { settings, setSetting } from "../stores/settings";
 
 /** A synthetic entry for a file picked via the native dialog (outside the scanned folder). Its
@@ -48,6 +49,19 @@ export default function DocsPanel(props: { onClose: () => void }) {
   }
 
   const [files, setFiles] = createSignal<DocEntry[]>([]);
+  // Filter box over the file list — fuzzy-match the display path so you can type a few letters of a
+  // doc's name instead of scrolling a flat list. `hi` is the keyboard-highlighted row in the result.
+  const [filter, setFilter] = createSignal("");
+  const [hi, setHi] = createSignal(0);
+  const filtered = createMemo(() => {
+    const q = filter().trim();
+    if (!q) return files();
+    return files()
+      .map((f) => ({ f, s: fuzzyScore(q, f.rel) }))
+      .filter((x): x is { f: DocEntry; s: number } => x.s !== null)
+      .sort((a, b) => b.s - a.s)
+      .map((x) => x.f);
+  });
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [selected, setSelected] = createSignal<DocEntry | null>(null);
@@ -183,8 +197,10 @@ export default function DocsPanel(props: { onClose: () => void }) {
     const payload = `\x1b[200~${body}\x1b[201~\r`;
     const n = writeToPanes(ids, payload);
     if (n > 0) {
+      // Stay open: this is an iterative workflow (read a doc, send passages as you discuss with the
+      // agent). Just drop the selection and confirm the send so the next passage is one drag away.
       clearSelection();
-      props.onClose();
+      showFlash(`sent ${sel.count} line${sel.count === 1 ? "" : "s"} ▸`);
     } else {
       showFlash("no live terminal focused");
     }
@@ -218,12 +234,13 @@ export default function DocsPanel(props: { onClose: () => void }) {
     }
   }
 
-  async function refresh() {
+  /** List the markdown under `dir` and show it; keep the open file if it survives, else open the first. */
+  async function loadList(dir: string) {
     setLoading(true);
     setError(null);
-    const dir = await ensureCwd();
+    setHi(0);
     if (!dir) {
-      setError("No working folder — focus a terminal or give this workspace a folder.");
+      setError("No working folder — focus a terminal or pick a folder.");
       setLoading(false);
       return;
     }
@@ -242,20 +259,53 @@ export default function DocsPanel(props: { onClose: () => void }) {
     }
   }
 
+  /** Initial load: resolve+pin this workspace's Docs folder, then list it. */
+  async function refresh() {
+    await loadList(await ensureCwd());
+  }
+
+  /** Re-point the scanned folder via a native directory picker (re-pins this workspace's Docs cwd). */
+  async function pickFolder() {
+    try {
+      const dir = await open({ multiple: false, directory: true });
+      if (typeof dir === "string") {
+        setPanelCwd("docs", dir);
+        setCwd(dir);
+        setFilter("");
+        await loadList(dir);
+      }
+    } catch (e) {
+      showFlash(String(e));
+    }
+  }
+
   onMount(refresh);
 
   // Capture phase: while a terminal has focus xterm swallows Escape (sends \x1b to the PTY), so a
-  // bubble-phase listener never fires. Capturing intercepts it first (same as GitPanel).
+  // bubble-phase listener never fires. Capturing intercepts it first (same as GitPanel). Escape
+  // peels back state in the order you'd expect: an active filter, then a selection, then the panel.
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") props.onClose();
+    if (e.key !== "Escape") return;
+    if (filter()) { setFilter(""); setHi(0); }
+    else if (selRange()) clearSelection();
+    else props.onClose();
   };
   onMount(() => window.addEventListener("keydown", onKey, true));
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
-  const fileRow = (file: DocEntry) => (
+  // Arrow keys move the highlight through the (filtered) file list; Enter opens it — so you can
+  // filter and open without leaving the keyboard.
+  function onFilterKey(e: KeyboardEvent) {
+    const list = filtered();
+    if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, Math.max(0, list.length - 1))); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const f = list[hi()]; if (f) void openEntry(f); }
+  }
+
+  const fileRow = (file: DocEntry, idx: number) => (
     <button
       class="git-file"
-      classList={{ on: selected()?.path === file.path }}
+      classList={{ on: selected()?.path === file.path, key: idx === hi() }}
       onClick={() => void openEntry(file)}
       title={file.path}
     >
@@ -276,7 +326,8 @@ export default function DocsPanel(props: { onClose: () => void }) {
             <button classList={{ on: !preview() }} onClick={() => setPreview(false)} title="Raw markdown source (line-precise)">Raw</button>
           </span>
           <span class="git-head-actions">
-            <button class="git-icon-btn" title="Open a file…" onClick={() => void pickFile()}>＋</button>
+            <button class="git-icon-btn" title="Scan a different folder…" onClick={() => void pickFolder()}>📂</button>
+            <button class="git-icon-btn" title="Open a single file…" onClick={() => void pickFile()}>＋</button>
             <button class="git-icon-btn" title="Refresh" onClick={() => void refresh()}>↻</button>
             <button class="git-icon-btn" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
           </span>
@@ -291,16 +342,30 @@ export default function DocsPanel(props: { onClose: () => void }) {
             </div>
           }
         >
+          <Show when={files().length > 0}>
+            <div class="docs-filter">
+              <input
+                class="docs-filter-input"
+                type="text"
+                placeholder="Filter files…"
+                value={filter()}
+                onInput={(e) => { setFilter(e.currentTarget.value); setHi(0); }}
+                onKeyDown={onFilterKey}
+              />
+            </div>
+          </Show>
           <div class="git-list" style={{ height: `${settings.docsListHeight}px` }}>
-            <Show when={files().length === 0}>
+            <Show when={filtered().length === 0}>
               <div class="git-empty">
-                No markdown here.
-                <div class="git-empty-sub">Use “Open file…” to pick one anywhere.</div>
+                <Show when={files().length === 0} fallback={<>No file matches “{filter()}”.</>}>
+                  No markdown here.
+                  <div class="git-empty-sub">Use the 📂 / ＋ buttons to scan a folder or open a file.</div>
+                </Show>
               </div>
             </Show>
-            <Show when={files().length > 0}>
-              <div class="git-group-head">MARKDOWN · {files().length}</div>
-              <For each={files()}>{(f) => fileRow(f)}</For>
+            <Show when={filtered().length > 0}>
+              <div class="git-group-head">MARKDOWN · {filtered().length}</div>
+              <For each={filtered()}>{(f, i) => fileRow(f, i())}</For>
             </Show>
           </div>
 

@@ -23,8 +23,19 @@ with a better tool the user could just run _in a pane_:
   `previewWidth` deleted; tests + typecheck green.
 - **DocsPanel** — A markdown reader competes directly with `glow`/`bat` in a pane.
   Its _one_ justification is "drag-select lines → send to a pane" for feeding
-  agent context. If that workflow isn't actually used, this is a lot of surface
-  for a niche.
+  agent context. **The user confirmed they use exactly this workflow** (write a
+  doc, discuss it with an agent), so it stays — and got fixed up **2026-06-25**:
+  - ✅ Preview now renders via **markdown-it** (real CommonMark + tables, nested
+    lists, strikethrough, soft-wrap reflow) instead of the old ~140-line homegrown
+    parser. Source-line mapping preserved via markdown-it token `.map`. _(One new
+    runtime dep — a deliberate break from the "small parser, no deps" habit,
+    justified in `lib/markdown.ts`.)_
+  - ✅ **Stays open after a send** (was closing mid-conversation) + "sent ✓" flash.
+  - ✅ **Fuzzy filter box** + arrow/Enter nav over the file list; Esc peels back
+    filter → selection → close.
+  - ✅ **📂 change-folder button** to re-point the scanned root (was pinned at
+    first-open with no way to change it).
+  - ✅ Rust walk descends **4 levels** (was 2) so deeper docs appear.
 - **GitPanel** (read-only) — Genuinely useful, but read-only git competes with
   `lazygit` in a pane, which does vastly more. The "drag diff lines into a pane"
   hook is again the only thing that justifies it being _in-app_ rather than

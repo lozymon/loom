@@ -3334,6 +3334,10 @@ body,
   background: var(--tint-weak);
   color: var(--text-bright);
 }
+/* Keyboard-highlighted row (arrow-key nav in the Docs filter list). */
+.git-scm .git-file.key {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .git-scm .git-file-badge {
   flex: 0 0 auto;
   width: 14px;
@@ -3730,14 +3734,34 @@ body,
   background: var(--accent-strong);
 }
 
+/* Filter box above the Docs file list — fuzzy-narrow a long list; arrow keys move the highlight. */
+.docs-filter {
+  padding: 6px 10px 0;
+  flex: 0 0 auto;
+}
+.docs-filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: 12px var(--font-mono);
+  color: var(--text-bright);
+  background: var(--well);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.docs-filter-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 /* Rendered markdown preview: block drag-select (whole blocks), reconstructed to raw source on
    send. user-select:none because our gesture owns the pointer (same model as the raw grid). */
 .docs-preview {
   user-select: none;
   cursor: default;
-  padding: 4px 14px 12px;
+  padding: 8px 16px 14px;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 .docs-block {
   border-radius: 4px;
@@ -3747,28 +3771,38 @@ body,
 .docs-block.sel {
   box-shadow: inset 0 0 0 9999px rgba(90, 140, 255, 0.24);
 }
-.docs-h {
+/* markdown-it renders plain tags into each .docs-block via innerHTML, so the preview styles are
+   scoped to those tags rather than to per-block classes. Each block's inner element carries the
+   vertical margin that spaces blocks apart — do NOT zero first/last-child margins here: a block
+   usually holds a single element (both first AND last child), so that would flatten all spacing. */
+.docs-block :is(h1, h2, h3, h4, h5, h6) {
   font-weight: 700;
   line-height: 1.3;
-  margin: 14px 0 6px;
+  margin: 18px 0 8px;
 }
-.docs-h1 { font-size: 1.6em; }
-.docs-h2 { font-size: 1.35em; }
-.docs-h3 { font-size: 1.18em; }
-.docs-h4, .docs-h5, .docs-h6 { font-size: 1.05em; }
-.docs-p {
-  margin: 6px 0;
+.docs-block h1 { font-size: 1.6em; }
+.docs-block h2 { font-size: 1.35em; }
+.docs-block h3 { font-size: 1.18em; }
+.docs-block :is(h4, h5, h6) { font-size: 1.05em; }
+.docs-block p {
+  margin: 9px 0;
   white-space: normal;
   word-break: break-word;
 }
-.docs-list {
+.docs-block ul,
+.docs-block ol {
   margin: 6px 0;
   padding-left: 22px;
 }
-.docs-list li {
+.docs-block li {
   margin: 2px 0;
 }
-.docs-pre {
+/* Nested lists hug their parent item rather than re-applying the full block margin. */
+.docs-block li > ul,
+.docs-block li > ol {
+  margin: 2px 0;
+}
+.docs-block pre {
   margin: 8px 0;
   padding: 8px 10px;
   background: var(--bg-sunken);
@@ -3782,24 +3816,41 @@ body,
   font-family: ui-monospace, monospace;
   font-size: 0.92em;
 }
-.docs-p code,
-.docs-list code,
-.docs-h code,
-.docs-quote code {
+/* Inline code (anything not inside a <pre>) gets a subtle chip. */
+.docs-block :not(pre) > code {
   padding: 0 4px;
   background: var(--bg-sunken);
   border-radius: 4px;
 }
-.docs-quote {
+.docs-block blockquote {
   margin: 8px 0;
   padding: 2px 12px;
   color: var(--fg-dim);
   border-left: 3px solid var(--border-strong);
 }
-.docs-hr {
+.docs-block hr {
   margin: 14px 0;
   border: 0;
   border-top: 1px solid var(--border-strong);
+}
+/* GFM tables. */
+.docs-block table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.95em;
+}
+.docs-block th,
+.docs-block td {
+  border: 1px solid var(--border-strong);
+  padding: 4px 10px;
+  text-align: left;
+}
+.docs-block th {
+  background: var(--bg-sunken);
+  font-weight: 700;
+}
+.docs-block :is(s, del) {
+  color: var(--fg-dim);
 }
 .docs-link {
   color: var(--accent);

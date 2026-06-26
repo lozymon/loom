@@ -18,9 +18,10 @@ pub struct DocEntry {
     name: String,
 }
 
-/// How deep to walk below the working folder (0 = the folder itself). Two levels reaches a
-/// top-level `docs/` and `docs/adr/` without turning into a whole-tree crawl.
-const MAX_DEPTH: usize = 2;
+/// How deep to walk below the working folder (0 = the folder itself). Four levels reaches docs
+/// nested a few directories down (e.g. `docs/adr/0007/notes.md`) without turning into a whole-tree
+/// crawl; the entry cap, dotfolder/build skips, and the panel's filter box keep it manageable.
+const MAX_DEPTH: usize = 4;
 /// Cap the listing so a giant monorepo can't flood the panel; the native picker covers the rest.
 const MAX_ENTRIES: usize = 300;
 /// Cap a single doc at 2 MiB — these are meant to be read/marked, not whole books.
