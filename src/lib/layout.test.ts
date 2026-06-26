@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeLayout, neighbor, swapLeaves } from "./layout";
+import { computeLayout, firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves } from "./layout";
 import type { LayoutNode } from "../ipc/protocol";
 
 const leaf = (paneId: number): LayoutNode => ({ kind: "leaf", paneId });
@@ -78,5 +78,69 @@ describe("swapLeaves", () => {
     const ids = (n: LayoutNode): number[] =>
       n.kind === "leaf" ? [n.paneId] : [...ids(n.a), ...ids(n.b)];
     expect(ids(swapLeaves(grid2x2, 2, 3)).sort()).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe("firstLeaf", () => {
+  it("returns a lone leaf's id", () => {
+    expect(firstLeaf(leaf(7))).toBe(7);
+  });
+
+  it("descends `a` first to the top-left leaf", () => {
+    expect(firstLeaf(grid2x2)).toBe(1);
+  });
+});
+
+describe("leafIds", () => {
+  it("returns a single id for a leaf", () => {
+    expect(leafIds(leaf(7))).toEqual([7]);
+  });
+
+  it("lists ids in row-major (a-before-b, depth-first) order", () => {
+    expect(leafIds(grid2x2)).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe("replaceLeaf", () => {
+  it("splits the targeted leaf, keeping it as child `a` and a new pane as `b`", () => {
+    const out = replaceLeaf(grid2x2, 2, (old) => ({
+      kind: "split", dir: "row", ratio: 0.5, a: old, b: leaf(9),
+    }));
+    // 2 is now nested under a split alongside the new leaf 9; the rest is unchanged order.
+    expect(leafIds(out)).toEqual([1, 2, 9, 3, 4]);
+  });
+
+  it("returns an equal tree when the id is absent", () => {
+    expect(replaceLeaf(grid2x2, 99, () => leaf(0))).toEqual(grid2x2);
+  });
+
+  it("does not mutate the input tree", () => {
+    const before = JSON.stringify(grid2x2);
+    replaceLeaf(grid2x2, 1, () => leaf(42));
+    expect(JSON.stringify(grid2x2)).toBe(before);
+  });
+});
+
+describe("removeLeaf", () => {
+  it("promotes the sibling when a leaf's parent split collapses", () => {
+    // Drop 2 → its row-split parent collapses, leaving 1 alone in the top band.
+    const out = removeLeaf(grid2x2, 2)!;
+    expect(leafIds(out)).toEqual([1, 3, 4]);
+    // The top band is now just leaf 1 (the surviving sibling promoted in place).
+    expect((out as { kind: "split"; a: LayoutNode }).a).toEqual(leaf(1));
+  });
+
+  it("returns null when removing the only remaining leaf", () => {
+    expect(removeLeaf(leaf(1), 1)).toBeNull();
+  });
+
+  it("returns an equal tree when the id is absent", () => {
+    expect(removeLeaf(grid2x2, 99)).toEqual(grid2x2);
+  });
+
+  it("does not mutate the input tree", () => {
+    const before = JSON.stringify(grid2x2);
+    removeLeaf(grid2x2, 3);
+    expect(JSON.stringify(grid2x2)).toBe(before);
   });
 });

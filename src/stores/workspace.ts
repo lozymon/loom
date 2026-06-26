@@ -11,7 +11,7 @@ import { createStore } from "solid-js/store";
 import type { LayoutNode, PaneId, PaneSpec, Workspace } from "../ipc/protocol";
 import { allocName, buildBalancedTree } from "../lib/grid";
 import { matchesPattern } from "../lib/matching";
-import { neighbor, swapLeaves, type Dir, type Path } from "../lib/layout";
+import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
 import { countLive } from "../lib/paneRegistry";
 import { settings } from "./settings";
@@ -87,16 +87,6 @@ let presetSeq = 0;
 const nextPaneId = (): PaneId => ++idSeq;
 const nextWsId = (): string => `ws${++wsSeq}`;
 const nextPresetId = (): string => `ps${++presetSeq}`;
-
-function firstLeaf(node: LayoutNode): PaneId {
-  return node.kind === "leaf" ? node.paneId : firstLeaf(node.a);
-}
-
-/** PaneIds in row-major (left-to-right, leaf) order — the order broadcast targets in. */
-function leafIds(node: LayoutNode): PaneId[] {
-  if (node.kind === "leaf") return [node.paneId];
-  return [...leafIds(node.a), ...leafIds(node.b)];
-}
 
 export interface NewWorkspaceOpts {
   name: string;
@@ -186,23 +176,9 @@ export const paneCount = (ws: Workspace): number => Object.keys(ws.panes).length
 const wsIdxById = (id: string) => app.workspaces.findIndex((w) => w.id === id);
 const wsIdxByPane = (paneId: PaneId) => app.workspaces.findIndex((w) => paneId in w.panes);
 
-// ---- Pure tree transforms -----------------------------------------------------------
-
-function replaceLeaf(node: LayoutNode, id: PaneId, make: (leaf: LayoutNode) => LayoutNode): LayoutNode {
-  if (node.kind === "leaf") return node.paneId === id ? make(node) : node;
-  return { ...node, a: replaceLeaf(node.a, id, make), b: replaceLeaf(node.b, id, make) };
-}
-
-function removeLeaf(node: LayoutNode, id: PaneId): LayoutNode | null {
-  if (node.kind === "leaf") return node.paneId === id ? null : node;
-  const a = removeLeaf(node.a, id);
-  const b = removeLeaf(node.b, id);
-  if (a === null) return b;
-  if (b === null) return a;
-  return { ...node, a, b };
-}
-
 // ---- Pane operations (resolve their owning workspace by paneId) ----------------------
+// The pure tree transforms these build on (replaceLeaf/removeLeaf/firstLeaf/leafIds) live in
+// lib/layout.ts; each op below wraps one in a `setApp` mutation.
 
 export function focusPane(paneId: PaneId) {
   const i = wsIdxByPane(paneId);

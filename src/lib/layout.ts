@@ -65,6 +65,47 @@ export function computeLayout(tree: LayoutNode): Layout {
   return { leaves, gutters };
 }
 
+// ---- Pure tree readers & transforms -------------------------------------------------
+// Shape-only operations over a LayoutNode tree, kept here (not in the store) so they're
+// trivially testable and side-effect-free. The workspace store wraps each in a `setApp`.
+
+/** The first leaf's PaneId in depth-first `a`-before-`b` order — focus falls back to this
+ *  after a close, and it's the canonical representative of any subtree. */
+export function firstLeaf(node: LayoutNode): PaneId {
+  return node.kind === "leaf" ? node.paneId : firstLeaf(node.a);
+}
+
+/** Every PaneId in row-major order (depth-first, `a` before `b`) — the order broadcast,
+ *  listing, and target-selection all iterate in. */
+export function leafIds(node: LayoutNode): PaneId[] {
+  if (node.kind === "leaf") return [node.paneId];
+  return [...leafIds(node.a), ...leafIds(node.b)];
+}
+
+/**
+ * Return a copy of `tree` with the leaf `id` replaced by `make(leaf)` — e.g. a split whose
+ * one child is the old leaf and the other a new pane (this is how split + CLI-spawn grow the
+ * tree). Other leaves are shared untouched. A no-op clone if `id` isn't present. Pure.
+ */
+export function replaceLeaf(node: LayoutNode, id: PaneId, make: (leaf: LayoutNode) => LayoutNode): LayoutNode {
+  if (node.kind === "leaf") return node.paneId === id ? make(node) : node;
+  return { ...node, a: replaceLeaf(node.a, id, make), b: replaceLeaf(node.b, id, make) };
+}
+
+/**
+ * Return a copy of `tree` with leaf `id` removed: the parent split collapses and the sibling
+ * is promoted into its place. Returns null if removing `id` would empty the tree (the store
+ * uses that to refuse closing the last pane). Pure — drives close.
+ */
+export function removeLeaf(node: LayoutNode, id: PaneId): LayoutNode | null {
+  if (node.kind === "leaf") return node.paneId === id ? null : node;
+  const a = removeLeaf(node.a, id);
+  const b = removeLeaf(node.b, id);
+  if (a === null) return b;
+  if (b === null) return a;
+  return { ...node, a, b };
+}
+
 function hasLeaf(node: LayoutNode, id: PaneId): boolean {
   return node.kind === "leaf" ? node.paneId === id : hasLeaf(node.a, id) || hasLeaf(node.b, id);
 }
