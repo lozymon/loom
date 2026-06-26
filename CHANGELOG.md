@@ -4,6 +4,40 @@ All notable changes to Termhaus are documented here. The format is loosely based
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [0.11.0] — 2026-06-25
+
+### Added
+- **Code-review queue in Source Control** — the git diff panel is now a review tool.
+  Select a diff region (drag lines, or click a hunk header to grab the whole hunk),
+  optionally attach a note, then **Send ▸** it to the focused agent pane or **＋** queue
+  it. Queued comments collect in a review bar (removable chips) and **Send review ▸**
+  sends them all as one numbered "Code review — N comments" message. The panel now stays
+  open across sends (review is iterative), and whole-file **＋ file / Send file** shortcuts
+  are available. Still strictly read-only — staging/commit stays with the agent.
+
+### Changed
+- **Docs panel markdown rendering** now uses a real CommonMark engine (markdown-it):
+  tables, nested lists, strikethrough, and proper soft-wrap reflow instead of the previous
+  minimal parser. Selecting a rendered block still sends the raw markdown source. The panel
+  also gains a fuzzy **filter box** with arrow/Enter navigation, a **change-folder** button
+  to re-point the scanned root, and it now **stays open after a send**; the folder scan
+  reaches deeper (4 levels).
+
+### Removed
+- **Right-side web preview panel** — embedding an `<iframe>` browser was scope creep for a
+  terminal multiplexer; a real browser is one Alt-Tab away. The panel, its `Ctrl+Shift+B`
+  shortcut/nav item, and its settings were removed.
+- **Human broadcast bar** — the manual prompt-to-many-panes bar (and its target modes, saved
+  groups, snippets, history, stagger, and per-pane target toggle) was removed as unused;
+  multi-agent work here is cross-project, which the single-workspace bar never served. The
+  agent-facing fan-out is kept: `th broadcast` and the `th-mcp` `broadcast` tool still fan a
+  prompt to every pane in a workspace via the inter-pane control bus.
+
+### Fixed
+- **Mid-stream session-log write failures are now surfaced** — if a pane's opt-in session log
+  fails to write partway through, the pane flags the error instead of silently dropping output
+  from the log.
+
 ## [0.10.0] — 2026-06-24
 
 ### Added
