@@ -2,7 +2,7 @@
 
 A running, unprioritised-then-prioritised list of things we *could* build next. The core
 (M0–M11) is done and solid: PTY engine, split-tree layout, workspace rail, single-page
-launcher, broadcast, presets, copy/paste/search, themes, git panel, overview mode,
+launcher, agent control bus, presets, copy/paste/search, themes, git panel, overview mode,
 notifications, the inter-pane `th` control bus, region capture, and the command palette.
 
 So this list is **not** about re-paving basics. The guiding question is: *what sharpens the one
@@ -46,6 +46,8 @@ activity store; `BroadcastBar.tsx` shows a pulsing amber **⚑ Reply to flagged 
 appears only when panes are flagged, sends the typed text to exactly those panes (honouring the
 stagger), then drops their flags via `clearAttention`. Ignores the picked subset by design.
 
+**Removed 2026-06-25:** the human broadcast bar (and its flagged-reply button / saved groups / snippets / stagger) was deleted — the user never used it and multi-agent work is cross-project. The agent-facing fan-out (`th broadcast` / the `th-mcp` `broadcast` tool) is kept.
+
 ### 2. Saved broadcast groups  🟢 ✅ shipped
 **The flow:** name a set of panes ("claudes", "frontend", "reviewers") and flip the broadcast
 scope to it in one click, instead of re-selecting panes every time.
@@ -62,6 +64,8 @@ dropdown on `BroadcastBar.tsx`. Resolution reuses `lib/matching.ts`.
 a `⚐ ▾` groups dropdown in `BroadcastBar.tsx` (mirrors the snippets menu) — save the current
 Targets pattern under a name, then one click flips the bar into select-mode and applies the glob
 through the existing `setBroadcastByPattern` → `matchesPattern` path.
+
+**Removed 2026-06-25:** the human broadcast bar (and its flagged-reply button / saved groups / snippets / stagger) was deleted — the user never used it and multi-agent work is cross-project. The agent-facing fan-out (`th broadcast` / the `th-mcp` `broadcast` tool) is kept.
 
 ### 3. Agent-controlled status label  🟡 ✅ shipped
 **The flow:** an agent sets its own short status — `th status "running tests"` — shown in its
@@ -118,7 +122,7 @@ README-first, bounded depth/count; `read_doc` reads one file, capped at 2 MiB). 
 mirrors `GitPanel.tsx`: a file list + a plain-text reader with the same drag-select gesture and
 selection tint; the selection is sent as **raw markdown** (`rel:lines` + a ```markdown fence` +
 optional instruction) via bracketed paste. A **"to targets"** toggle fans the passage to
-`broadcastTargets(ws)` instead of just the focused pane ("all of you read this"); **"Open file…"**
+`broadcastTargets(ws)` instead of just the focused pane ("all of you read this") *(the broadcast bar has since been removed 2026-06-25; `broadcastTargets(ws)` now resolves to all live panes for the `th broadcast` path)*; **"Open file…"**
 uses the native dialog for files outside the folder. Opened from the title bar's 📖 **Docs** button,
 the command palette, or **Ctrl+Shift+R** (new `docs` keybinding action).
 

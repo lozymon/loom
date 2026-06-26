@@ -1,8 +1,7 @@
 // First-run / empty-workspace state (Frameless §5 "Scratch"). Shown when a workspace has zero
 // panes — a centered column that points at the two ways to get terminals into it. In practice the
 // app keeps every workspace at ≥1 pane (closePane never empties a workspace), so this is a
-// defensive surface: it renders correctly if an empty workspace ever exists. The broadcast bar is
-// hidden alongside it (handled in App.tsx).
+// defensive surface: it renders correctly if an empty workspace ever exists.
 
 export default function EmptyWorkspace(props: { onChooseLayout: () => void }) {
   return (

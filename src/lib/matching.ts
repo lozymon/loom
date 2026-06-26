@@ -1,6 +1,5 @@
-// Small pure string-matching helpers shared by the command palette (fuzzy) and broadcast
-// pattern targeting (glob). Kept dependency-free and side-effect-free so they're unit-tested
-// directly (matching.test.ts).
+// Small pure string-matching helper for the command palette (fuzzy). Kept dependency-free and
+// side-effect-free so it's unit-tested directly (matching.test.ts).
 
 /**
  * Score `text` against a fuzzy `query` (subsequence match, case-insensitive). Returns a
@@ -30,22 +29,4 @@ export function fuzzyScore(query: string, text: string): number | null {
   }
   // Slight preference for shorter targets (a tighter match overall).
   return score - t.length * 0.01;
-}
-
-/** Translate a shell-style glob (`*`, `?`) into an anchored, case-insensitive RegExp. */
-export function globToRegExp(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  const body = escaped.replace(/\*/g, ".*").replace(/\?/g, ".");
-  return new RegExp(`^${body}$`, "i");
-}
-
-/**
- * Does `name` match `pattern`? A pattern with `*`/`?` is treated as a glob; a plain pattern
- * matches as a case-insensitive substring (so "cl" hits "Cleo"). Empty pattern matches all.
- */
-export function matchesPattern(name: string, pattern: string): boolean {
-  const p = pattern.trim();
-  if (p === "") return true;
-  if (p.includes("*") || p.includes("?")) return globToRegExp(p).test(name);
-  return name.toLowerCase().includes(p.toLowerCase());
 }

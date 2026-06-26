@@ -13,7 +13,6 @@ import TitleBar from "./components/TitleBar";
 import WorkspaceRail from "./components/WorkspaceRail";
 import LayoutView from "./components/LayoutNode";
 import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
-import BroadcastBar from "./components/BroadcastBar";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
@@ -209,11 +208,6 @@ export default function App() {
   // Keep the global summon/hide hotkey in sync with the setting (re-registers on change; ""=off).
   createEffect(() => { void applyGlobalHotkey(settings.globalHotkey); });
 
-  // The broadcast bar shows only when enabled and the active workspace has panes. When it's
-  // hidden, the grid gets a bottom inset so its gap to the app edge matches the side gutters.
-  const broadcastShown = () =>
-    settings.showBroadcastBar && ready() && Object.keys(activeWorkspace()?.panes ?? {}).length > 0;
-
   return (
     <div class="shell" classList={{ flush: flush() }}>
       <TitleBar
@@ -228,7 +222,7 @@ export default function App() {
       />
       <div class="body">
       <WorkspaceRail onNew={() => setWizardOpen(true)} />
-      <div class="stage" classList={{ "stage-no-bcast": !broadcastShown() }}>
+      <div class="stage">
         <div class="stage-grid">
           <Show when={ready()}>
             <For each={appState.workspaces}>
@@ -240,9 +234,6 @@ export default function App() {
             </For>
           </Show>
         </div>
-        <Show when={broadcastShown()}>
-          <BroadcastBar />
-        </Show>
       </div>
       {/* The right-side docked panels — flex siblings of .stage, so opening one narrows the grid
           (panes refit via their ResizeObserver) rather than covering it. Mutually exclusive. */}

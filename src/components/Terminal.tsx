@@ -46,7 +46,6 @@ import {
   clearPaneCommand,
   toggleZoom,
   toggleOverview,
-  toggleBroadcastTarget,
   switchWorkspaceRelative,
   switchWorkspaceIndex,
   swapPanes,
@@ -123,7 +122,6 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // never pane output (opacity-safe; see agents.ts + ADR-0001).
   const agent = () => detectAgent(foreground()) ?? detectAgent(spec()?.command);
   const isFocused = () => props.ws.focused === props.paneId;
-  const inBroadcast = () => props.ws.broadcast.includes(props.paneId);
   /** Is the user actually looking at this pane right now? (active workspace + focused) */
   const looking = () => appState.activeId === props.ws.id && isFocused();
   const act = () => activity[props.paneId];
@@ -610,7 +608,6 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         focused: isFocused(),
         attention: !isFocused() && (act()?.attention ?? false),
         agented: !!agent(),
-        "bcast-target": appState.broadcastSelecting && inBroadcast(),
         "drag-over": dragOver(),
       }}
       style={agent() ? { "--agent-color": agent()!.color } : undefined}
@@ -635,17 +632,6 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
         }}
       >
-        <Show when={appState.broadcastSelecting}>
-          <button
-            class="bcast-toggle"
-            classList={{ on: inBroadcast() }}
-            title={inBroadcast() ? "In broadcast set" : "Add to broadcast set"}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => toggleBroadcastTarget(props.paneId)}
-          >
-            {inBroadcast() ? "◉" : "○"}
-          </button>
-        </Show>
         <span
           class="pane-dot"
           data-state={paneState()}

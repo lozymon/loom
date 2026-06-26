@@ -343,36 +343,6 @@ export default function Settings(props: { onClose: () => void }) {
             </div>
           </section>
 
-          {/* ---- Broadcast ---- */}
-          <section class="settings-section">
-            <h3>Broadcast</h3>
-            <div class="settings-card">
-              <ToggleRow
-                label={<>Show broadcast bar <span class="muted">— the prompt bar below the grid (still hidden when a workspace has no panes)</span></>}
-                checked={settings.showBroadcastBar}
-                onToggle={() => setSetting("showBroadcastBar", !settings.showBroadcastBar)}
-              />
-              <ToggleRow
-                label={<>Press Enter after sending <span class="muted">— append a newline so the message runs</span></>}
-                checked={settings.broadcastNewline}
-                onToggle={() => setSetting("broadcastNewline", !settings.broadcastNewline)}
-              />
-              <div class="settings-row">
-                <span class="settings-label">Stagger <span class="muted">— delay between panes (0 = all at once)</span></span>
-                <input
-                  class="settings-input narrow"
-                  type="number"
-                  min="0"
-                  max="10000"
-                  step="50"
-                  value={settings.broadcastStaggerMs}
-                  onChange={(e) => setSetting("broadcastStaggerMs", Math.max(0, e.currentTarget.valueAsNumber || 0))}
-                />
-                <span class="settings-unit">ms</span>
-              </div>
-            </div>
-          </section>
-
           {/* ---- Notifications ---- */}
           <section class="settings-section">
             <h3>Notifications</h3>

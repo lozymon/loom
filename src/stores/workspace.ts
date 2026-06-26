@@ -10,12 +10,10 @@ import { batch, createEffect, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { LayoutNode, PaneId, PaneSpec, Workspace } from "../ipc/protocol";
 import { allocName, buildBalancedTree } from "../lib/grid";
-import { matchesPattern } from "../lib/matching";
 import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
 import { countLive } from "../lib/paneRegistry";
 import { settings } from "./settings";
-import { activity } from "./activity";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
 export type DockedPanelKind = "git" | "docs";
@@ -38,14 +36,12 @@ export interface DockedPanelState {
 const freshPanel = (): DockedPanelState => ({ open: null, gitCwd: "", docsCwd: "" });
 
 /**
- * A workspace plus its ephemeral UI state (focus/zoom/broadcast/panel — not persisted).
- * `broadcast` is the subset of panes the broadcast bar targets; empty = "all live panes".
+ * A workspace plus its ephemeral UI state (focus/zoom/panel — not persisted).
  * `panel` is this workspace's docked side-panel (Source Control / Docs) state.
  */
 export interface WorkspaceUI extends Workspace {
   focused: PaneId | null;
   zoomed: PaneId | null;
-  broadcast: PaneId[];
   panel: DockedPanelState;
 }
 
@@ -74,8 +70,6 @@ interface AppState {
   activeId: string;
   recents: RecentFolder[];
   presets: Preset[];
-  /** Whether the broadcast bar is in subset-select mode (panes show a target toggle). */
-  broadcastSelecting: boolean;
   /** Overview ("fleet glance") mode: the active workspace's panes reflow to a uniform tile grid
       (a view transform only — the split tree and PTYs are untouched). Active-workspace scoped. */
   overview: boolean;
@@ -98,8 +92,6 @@ export interface NewWorkspaceOpts {
   cwds?: (string | undefined)[];
   /** Per-pane shell overrides (row-major), e.g. `wsl.exe -d Ubuntu`; omitted/empty = global default. */
   shells?: (string | undefined)[];
-  /** Preselect every pane as a broadcast target (one prompt → many panes from launch). */
-  broadcastAll?: boolean;
   /** A saved layout to rebuild verbatim (preset relaunch / duplicate) instead of a balanced grid.
    *  When set with `panes`, the tree shape + gutter ratios are preserved and each leaf is remapped
    *  to a fresh PaneId; `paneCount`/`commands`/`cwds` are then ignored. */
@@ -138,8 +130,7 @@ function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
   // Faithful path: rebuild a saved tree verbatim (preset relaunch / duplicate), fresh PaneIds.
   if (opts.tree && opts.panes) {
     const { tree, panes } = cloneTreeWithFreshPanes(opts.tree, opts.panes);
-    const broadcast = opts.broadcastAll ? leafIds(tree) : [];
-    return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, broadcast, panel: freshPanel() };
+    return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, panel: freshPanel() };
   }
   const panes: Record<PaneId, PaneSpec> = {};
   let i = 0;
@@ -158,13 +149,12 @@ function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
     return { kind: "leaf", paneId };
   };
   const tree = buildBalancedTree(Math.max(1, opts.paneCount), makeLeaf);
-  const broadcast = opts.broadcastAll ? leafIds(tree) : [];
-  return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, broadcast, panel: freshPanel() };
+  return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, panel: freshPanel() };
 }
 
 // Starts empty; `init()` (called once at startup) hydrates from disk or seeds a default
 // workspace. Rendering is gated on init completing so panes spawn exactly once.
-const [app, setApp] = createStore<AppState>({ workspaces: [], activeId: "", recents: [], presets: [], broadcastSelecting: false, overview: false });
+const [app, setApp] = createStore<AppState>({ workspaces: [], activeId: "", recents: [], presets: [], overview: false });
 
 /** Reactive read-only view for components. */
 export const appState = app;
@@ -253,7 +243,6 @@ export function closePane(paneId: PaneId) {
     setApp("workspaces", i, "panes", paneId, undefined as unknown as PaneSpec);
     if (ws.focused === paneId) setApp("workspaces", i, "focused", firstLeaf(next));
     if (ws.zoomed === paneId) setApp("workspaces", i, "zoomed", null);
-    if (ws.broadcast.includes(paneId)) setApp("workspaces", i, "broadcast", (b) => b.filter((p) => p !== paneId));
   });
 }
 
@@ -430,7 +419,6 @@ export function duplicateWorkspace(id: string): string | undefined {
     panes,
     focused: firstLeaf(tree),
     zoomed: null,
-    broadcast: [],
     panel: freshPanel(),
   };
   batch(() => {
@@ -465,15 +453,6 @@ export function closeWorkspace(id: string) {
   });
 }
 
-// ---- Broadcast routing --------------------------------------------------------------
-// The store holds *which* panes are targeted; the actual PTY writes go through the pane
-// registry (src/lib/paneRegistry.ts) — Rust/PTY concerns stay out of the store.
-
-/** Enter/leave subset-select mode (panes show a target toggle while on). */
-export function setBroadcastSelecting(on: boolean) {
-  setApp("broadcastSelecting", on);
-}
-
 /** Set overview ("fleet glance") mode on/off. */
 export function setOverview(on: boolean) {
   setApp("overview", on);
@@ -484,69 +463,14 @@ export function toggleOverview() {
   setApp("overview", (v) => !v);
 }
 
-/** Toggle a pane's membership in its workspace's broadcast subset. */
-export function toggleBroadcastTarget(paneId: PaneId) {
-  const i = wsIdxByPane(paneId);
-  if (i < 0) return;
-  setApp("workspaces", i, "broadcast", (sel) =>
-    sel.includes(paneId) ? sel.filter((p) => p !== paneId) : [...sel, paneId],
-  );
-}
-
-/** Clear the active workspace's broadcast subset (→ "all live panes"). */
-export function clearBroadcastTargets() {
-  const i = wsIdxById(app.activeId);
-  if (i >= 0) setApp("workspaces", i, "broadcast", []);
-}
-
-/** Explicitly select every pane in the active workspace as a broadcast target. */
-export function selectAllBroadcastTargets() {
-  const i = wsIdxById(app.activeId);
-  if (i >= 0) setApp("workspaces", i, "broadcast", leafIds(app.workspaces[i].tree));
-}
-
-/** Set the active workspace's broadcast subset to exactly `ids` (used by the Targets dropdown's
- *  quick scopes — a group or the current pane). Empty `ids` clears the subset (→ all live panes). */
-export function setBroadcastTargets(ids: PaneId[]) {
-  const i = wsIdxById(app.activeId);
-  if (i >= 0) setApp("workspaces", i, "broadcast", [...ids]);
-}
-
 /**
- * Set the active workspace's broadcast subset to every pane whose name matches `pattern` (a
- * glob like `Cl*` or a plain substring; see lib/matching). An empty pattern clears the subset
- * (→ all live panes). Returns how many panes matched.
- */
-export function setBroadcastByPattern(pattern: string): number {
-  const i = wsIdxById(app.activeId);
-  if (i < 0) return 0;
-  const ws = app.workspaces[i];
-  if (!pattern.trim()) { setApp("workspaces", i, "broadcast", []); return leafIds(ws.tree).length; }
-  const ids = leafIds(ws.tree).filter((id) => matchesPattern(ws.panes[id]?.title ?? "", pattern));
-  setApp("workspaces", i, "broadcast", ids);
-  return ids.length;
-}
-
-/**
- * The PaneIds a broadcast should reach in `ws`, in row-major order: the explicit subset
- * if one is selected (minus any since-closed panes), else every pane. Liveness is the
- * registry's call at send time — Dead panes are simply skipped there.
+ * The PaneIds a broadcast should reach in `ws`, in row-major order: every pane in the workspace.
+ * This is the agent-facing fan-out target for the inter-pane control bus (`th broadcast` and the
+ * MCP `broadcast` tool, ADR-0007) — there is no human broadcast UI. Liveness is the registry's
+ * call at send time, so dead panes are simply skipped there.
  */
 export function broadcastTargets(ws: WorkspaceUI): PaneId[] {
-  const order = leafIds(ws.tree);
-  if (ws.broadcast.length === 0) return order;
-  const sel = new Set(ws.broadcast);
-  return order.filter((id) => sel.has(id));
-}
-
-/**
- * The PaneIds in `ws` currently raising the "needs you" attention flag, in row-major order — the
- * target set for the needs-input triage loop (IDEAS #1): several agents pause on a y/n and flag
- * themselves with `th attention`; you answer once into exactly those panes. Independent of the
- * broadcast subset (a flagged reply ignores the picked scope). Reactive via the activity store.
- */
-export function flaggedTargets(ws: WorkspaceUI): PaneId[] {
-  return leafIds(ws.tree).filter((id) => activity[id]?.attention);
+  return leafIds(ws.tree);
 }
 
 // ---- Presets (saved workspace templates) --------------------------------------------
@@ -630,7 +554,7 @@ export async function init() {
         // Resume the id counters past anything persisted so new panes/workspaces don't collide.
         idSeq = Math.max(0, ...allPaneIds(data.workspaces));
         wsSeq = Math.max(0, ...data.workspaces.map((w) => parseInt(w.id.replace(/\D/g, ""), 10) || 0));
-        const workspaces = data.workspaces.map((w) => ({ ...w, focused: firstLeaf(w.tree), zoomed: null, broadcast: [], panel: freshPanel() }));
+        const workspaces = data.workspaces.map((w) => ({ ...w, focused: firstLeaf(w.tree), zoomed: null, panel: freshPanel() }));
         const activeId = workspaces.some((w) => w.id === data.activeId) ? data.activeId : workspaces[0].id;
         setApp({ workspaces, activeId });
         restored = true;

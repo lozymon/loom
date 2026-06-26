@@ -53,18 +53,6 @@ export interface Settings {
   globalHotkey: string;
   /** Close button hides to the tray instead of quitting (Quit from the tray menu still exits). */
   closeToTray: boolean;
-  // ---- Broadcast ----
-  /** Append Enter (carriage return) to each broadcast message so it runs immediately. */
-  broadcastNewline: boolean;
-  /** Saved broadcast snippets for one-click re-send. */
-  broadcastSnippets: string[];
-  /** Recently-sent broadcast messages (oldest first), recalled with ↑/↓; persisted, capped at 50. */
-  broadcastHistory: string[];
-  /** Named broadcast target scopes — flip the bar to "claudes"/"reviewers" in one click. Each
-   *  resolves through the same name glob as the Targets pattern field (lib/matching). */
-  broadcastGroups: { name: string; pattern: string }[];
-  /** Delay (ms) between panes when broadcasting; 0 = all at once (no stagger). */
-  broadcastStaggerMs: number;
   // ---- Docs reader ----
   /** Show the Docs panel rendered (preview) vs. raw markdown text; persists across opens. */
   docsPreview: boolean;
@@ -77,8 +65,6 @@ export interface Settings {
   // ---- Layout ----
   /** Which top-bar nav items are visible (Settings is always shown and isn't listed here). */
   navVisible: Record<NavItemId, boolean>;
-  /** Show the broadcast bar below the grid (it still only appears when the workspace has panes). */
-  showBroadcastBar: boolean;
   /** Width (px) of the left workspace rail; drag its right edge to resize. */
   railWidth: number;
   /** Collapse the workspace rail to a slim icon strip (toggle in the rail header). */
@@ -109,16 +95,10 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyOnAttention: false,
   globalHotkey: "CommandOrControl+Alt+Backquote",
   closeToTray: false,
-  broadcastNewline: true,
-  broadcastSnippets: [],
-  broadcastHistory: [],
-  broadcastGroups: [],
-  broadcastStaggerMs: 0,
   docsPreview: true,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
   navVisible: { overview: true, palette: true, git: true, docs: true },
-  showBroadcastBar: true,
   railWidth: 212,
   railCollapsed: false,
   gitWidth: 440,
@@ -157,42 +137,6 @@ export const FONT_SIZE_MAX = 24;
 export function adjustFontSize(delta: number) {
   const next = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, settings.fontSize + delta));
   if (next !== settings.fontSize) setSetting("fontSize", next);
-}
-
-/** Save a broadcast snippet (trimmed, de-duplicated, newest first, capped at 24). */
-export function addBroadcastSnippet(text: string) {
-  const t = text.trim();
-  if (!t) return;
-  const next = [t, ...settings.broadcastSnippets.filter((s) => s !== t)].slice(0, 24);
-  setSetting("broadcastSnippets", next);
-}
-
-/** Remove a saved broadcast snippet. */
-export function removeBroadcastSnippet(text: string) {
-  setSetting("broadcastSnippets", settings.broadcastSnippets.filter((s) => s !== text));
-}
-
-/** Save (or overwrite) a named broadcast target group. Empty name/pattern is ignored. */
-export function addBroadcastGroup(name: string, pattern: string) {
-  const n = name.trim();
-  const p = pattern.trim();
-  if (!n || !p) return;
-  const rest = settings.broadcastGroups.filter((g) => g.name !== n);
-  setSetting("broadcastGroups", [{ name: n, pattern: p }, ...rest].slice(0, 24));
-}
-
-/** Remove a named broadcast target group. */
-export function removeBroadcastGroup(name: string) {
-  setSetting("broadcastGroups", settings.broadcastGroups.filter((g) => g.name !== name));
-}
-
-/** Record a sent broadcast message in the recall history (skip consecutive dupes, cap at 50). */
-export function pushBroadcastHistory(text: string) {
-  const v = text.trim();
-  if (!v) return;
-  const cur = settings.broadcastHistory;
-  if (cur[cur.length - 1] === v) return;
-  setSetting("broadcastHistory", [...cur, v].slice(-50));
 }
 
 /** Restore every setting to its default and persist. */

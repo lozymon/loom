@@ -4,8 +4,8 @@
 //
 // Actions reuse the same entry points as the rail/keyboard: Settings/Git are passed down from
 // App; Overview and the Command Palette fire through the store / the window events App already
-// listens for. (New workspace lives in the rail header; broadcasting in the docked bar;
-// save-as-preset in the palette — none need a button here.)
+// listens for. (New workspace lives in the rail header; save-as-preset in the palette — none
+// need a button here.)
 
 import { Show } from 'solid-js';
 import { getCurrentWindow } from '@tauri-apps/api/window';

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/lozymon/termhaus/actions/workflows/ci.yml/badge.svg)](https://github.com/lozymon/termhaus/actions/workflows/ci.yml)
 
-**A Linux-first desktop control room of real terminals** — a GUI terminal multiplexer (think a graphical tmux / Terminator) that runs many PTYs at once in resizable split grids and a left workspace rail. It's tuned for driving fleets of CLI agents: the headline trick is **broadcast input** — type once and send it to many panes at the same time.
+**A Linux-first desktop control room of real terminals** — a GUI terminal multiplexer (think a graphical tmux / Terminator) that runs many PTYs at once in resizable split grids and a left workspace rail. It's tuned for driving fleets of CLI agents: spawn a wall of terminals, watch which ones need you, and let one agent drive the others over the `th` control bus (including fanning a prompt to every pane with `th broadcast`).
 
 Generic first: a pane is just a real pseudo-terminal running *any* command — a shell, `claude`, a dev server, `tail -f`, `vim`. Termhaus never parses what a pane prints ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)); agents are simply the most interesting thing you can run in one.
 
@@ -14,7 +14,6 @@ Generic first: a pane is just a real pseudo-terminal running *any* command — a
 - **Split-grid layout** — a binary split tree per workspace: split any pane right/down, drag the gutters to resize, close to collapse and promote the sibling. Zoom a pane to fullscreen and back.
 - **Workspace rail** — group panes into workspaces on a left rail; switching keeps hidden workspaces' terminals alive.
 - **New-workspace wizard** — pick a working folder (with Recents) → tap a grid preset (1/2/4/6/8/10/12 terminals) → optionally set a per-pane launch command → go.
-- **Broadcast input** — send a line to every live pane in the current workspace, or a hand-picked subset (click panes, or filter by a name pattern like `Cl*`). Recall recent messages with ↑/↓, save reusable snippets, and optionally stagger sends so a fleet doesn't hit an API all at once. Spawn 12 panes, broadcast one prompt to all.
 - **Pane attention signals** — a per-pane status dot shows when a pane is running a command, produced output you haven't looked at, or rang the bell — so you can tell at a glance which of a fleet of agents needs you. A pane also lights an **amber "needs you" border** when a command finishes in a pane you weren't watching, or when a process inside it calls `th attention` (so an agent can flag itself the moment it's blocked on your input — see [Light a pane when an agent needs you](#light-a-pane-when-an-agent-needs-you)). Hidden workspaces flag activity on the rail. Optionally pop a **desktop notification** when a pane needs you while Termhaus is in the background (off by default; Settings → Notifications). (Metadata only — pane output is never parsed; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).)
 - **Overview mode** (`Ctrl+Shift+O`) — reflow the active workspace into a uniform tile wall to triage a whole fleet at a glance (agent badges, attention borders, and timers stay visible); click a tile or press Esc to drop back to the split grid. The terminals keep running — it's a view, not a re-layout.
 - **Command palette** (`Ctrl+Shift+P`) — fuzzy-search every action plus jump-to-pane-by-name across all workspaces.
@@ -46,7 +45,7 @@ Known to work because they're terminal-native:
 | Aider (model-agnostic) | `aider` |
 | Cursor (headless) | `cursor-agent` |
 
-Run a fleet of them side by side, **broadcast** one prompt to all, and let one agent drive the others over the `th` control bus. When a pane is launched as one of these, its title bar shows a small **agent badge** so you can tell at a glance which terminal is running which assistant. (Derived from the pane's launch command — still no output parsing; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).) The wizard's Agents step has a quick-fill dropdown for the same list.
+Run a fleet of them side by side and let one agent drive the others over the `th` control bus — including fanning a prompt to every pane with `th broadcast`. When a pane is launched as one of these, its title bar shows a small **agent badge** so you can tell at a glance which terminal is running which assistant. (Derived from the pane's launch command — still no output parsing; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).) The wizard's Agents step has a quick-fill dropdown for the same list.
 
 **Not a fit:** editor-only assistants that live inside VS Code / JetBrains (the classic Copilot autocomplete, Cline, Continue, Windsurf) — they speak an editor-extension protocol, not a terminal, so there's no command to host. Raw HTTP model APIs likewise aren't supported directly; run a CLI that wraps them (e.g. Aider) instead of building a chat client into a pane.
 
@@ -152,8 +151,8 @@ Artifacts land in `src-tauri/target/release/bundle/` (e.g. `deb/Termhaus_<versio
 
 ```
 src/                         SolidJS frontend (all UX + state)
-  components/                Terminal, LayoutNode, WorkspaceRail, NewWorkspaceWizard, BroadcastBar, Settings, GitPanel
-  stores/workspace.ts        normalized store: workspaces, trees, panes, focus/zoom, broadcast, presets
+  components/                Terminal, LayoutNode, WorkspaceRail, NewWorkspaceWizard, Settings, GitPanel
+  stores/workspace.ts        normalized store: workspaces, trees, panes, focus/zoom, presets
   lib/                       grid (balanced tree + names), layout (geometry + neighbour),
                              ptyClient, paneRegistry, paneControl (th relay handler), persist, theme
   ipc/protocol.ts            shared types: PaneId, PaneSpec, LayoutNode, Workspace, command names

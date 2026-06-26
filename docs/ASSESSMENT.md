@@ -68,9 +68,15 @@ dead weight that blurs the product.
   compact "what is every agent doing right now, and which ones have been
   idle/waiting longest" strip would make the fleet thesis _visible_. Cheap to
   build on existing state, high payoff.
-- **Broadcast that crosses workspaces.** Today broadcast is scoped to the active
-  workspace. For a fleet split across workspaces, "prompt all agents everywhere"
-  is a natural ask.
+- ~~**Broadcast that crosses workspaces.**~~ **Resolved by removal, 2026-06-25.**
+  The user never used the human broadcast bar, and their multi-agent work is
+  cross-_project_ (separate workspaces) — which the single-workspace bar never
+  served anyway. So instead of extending broadcast across workspaces, we **removed
+  the human bar entirely** (and its targeting/groups/snippets/history/stagger, the
+  per-pane ◉/○ toggle, and the now-orphaned glob matchers). The agent-facing
+  fan-out is kept: `th broadcast` / the `th-mcp` `broadcast` tool still fan a
+  prompt to every pane in a workspace via the control bus (ADR-0007), so one agent
+  can still drive the fleet. Net −~600 lines; bundle −3.4KB gzip.
 
 ## What I would _not_ touch
 
