@@ -36,10 +36,20 @@ with a better tool the user could just run _in a pane_:
   - ✅ **📂 change-folder button** to re-point the scanned root (was pinned at
     first-open with no way to change it).
   - ✅ Rust walk descends **4 levels** (was 2) so deeper docs appear.
-- **GitPanel** (read-only) — Genuinely useful, but read-only git competes with
-  `lazygit` in a pane, which does vastly more. The "drag diff lines into a pane"
-  hook is again the only thing that justifies it being _in-app_ rather than
-  just-another-terminal.
+- ~~**GitPanel** (read-only) — Genuinely useful, but read-only git competes with
+  `lazygit` in a pane, which does vastly more.~~ **Kept and deepened 2026-06-25.**
+  The "send a diff region to the agent" gesture is precisely what `lazygit`
+  _can't_ do, and it's the user's pre-commit-review workflow (review the diff,
+  send comments, then tell the agent to commit). Rather than broaden toward a git
+  client (staging/commit stays with the agent), the review gesture got deepened:
+  - ✅ **Stays open after a send** (was closing) + flash — review is iterative.
+  - ✅ **Review-note field** — type a comment that rides along with the diff, so
+    the agent gets your question with the code instead of a bare diff.
+  - ✅ **Click a hunk header to select the whole hunk**; **＋ file / Send file**
+    for the whole open file.
+  - ✅ **Review queue** — ＋ queues comments; a review bar lists them as removable
+    chips and **Send review ▸** sends them all as one numbered message.
+  - Still strictly read-only.
 
 I'm not saying delete all three — I'm saying each one needs to earn its keep via
 a workflow that a pane _can't_ do, and right now that workflow is "drag text into

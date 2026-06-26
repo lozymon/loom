@@ -3424,13 +3424,34 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 46px;
-  padding: 0 16px;
+  min-height: 46px;
+  padding: 7px 16px;
   border-top: 1px solid var(--hairline);
 }
 .git-scm .git-hint {
   font-size: 11.5px;
   color: var(--text-faint);
+}
+/* No-selection footer: the drag hint on the left, whole-file actions on the right. */
+.git-scm .git-hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+.git-scm .git-hint-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* A hunk header doubles as a one-click "select this whole hunk" target. */
+.git-scm .git-hunk-pick {
+  cursor: pointer;
+}
+.git-scm .git-hunk-pick:hover {
+  color: var(--text-mid);
+  background: var(--tint-weak);
 }
 .git-scm .git-hint-mark {
   color: var(--accent-text);
@@ -3442,13 +3463,38 @@ body,
   align-items: center;
   justify-content: center;
 }
-/* The shared .git-send is a sticky bar elsewhere; here it sits flat inside the slim footer. */
+/* The shared .git-send is a sticky bar elsewhere; here it sits flat inside the footer as a column:
+   an optional note input on top, then the location + send/add/clear controls. */
 .git-scm .git-send {
   position: static;
   width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 0;
   background: none;
   border: 0;
+}
+.git-scm .git-send-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+/* Note field: type a comment that rides along with the selected diff when you send/queue it. */
+.git-scm .git-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: 12px var(--font-ui);
+  color: var(--text-bright);
+  background: var(--well);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.git-scm .git-note-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .git-scm .git-send-info {
   flex: 1 1 auto;
@@ -3469,6 +3515,107 @@ body,
 }
 .git-scm .git-send-clear {
   flex: 0 0 auto;
+}
+/* Add-to-review (＋): a quiet outlined sibling of the filled Send button. */
+.git-scm .git-send-add {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-mid);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.git-scm .git-send-add:hover:not(:disabled) {
+  background: var(--tint-weak);
+  color: var(--text-bright);
+}
+.git-scm .git-send-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Queued-review bar: sits above the footer; lists comments as compact removable chips + the one
+   accent Send-all action. Header mirrors the list's STAGED/CHANGES section heads. */
+.git-scm .git-review {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 32%;
+  padding: 8px 16px 10px;
+  border-top: 1px solid var(--hairline);
+  background: var(--bg-sunken);
+  overflow-y: auto;
+}
+.git-scm .git-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.git-scm .git-review-title {
+  flex: 1 1 auto;
+  font: 10.5px var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+.git-scm .git-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.git-scm .git-review-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.git-scm .git-review-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px 9px;
+  border-radius: 6px;
+  background: var(--tint-weak);
+  font-size: 11.5px;
+}
+.git-scm .git-review-loc {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  color: var(--text-mid);
+}
+.git-scm .git-review-range {
+  color: var(--text-faint);
+}
+.git-scm .git-review-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-mid);
+}
+.git-scm .git-review-note-empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.git-scm .git-review-x {
+  flex: 0 0 auto;
+  font: inherit;
+  line-height: 1;
+  color: var(--text-faint);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.git-scm .git-review-x:hover {
+  color: var(--danger);
+  background: var(--surface);
 }
 
 /* Docs reuses the .git-scm layout, but its body is prose/markdown — not a mono diff. Undo the
