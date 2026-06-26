@@ -2314,6 +2314,21 @@ body,
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent-color, var(--accent)) 40%, transparent);
 }
 
+/* Session-log write-failure marker in the pane control cluster — the log broke mid-stream and
+   is no longer recording (Rust LOG_ERROR_EVENT). Sits beside the "view log" button. */
+.pane-log-error {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--danger);
+  cursor: default;
+}
+
 .pane-chip .pane-name {
   flex: 0 1 auto;
   min-width: 0;

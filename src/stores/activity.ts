@@ -27,9 +27,14 @@ export interface PaneActivity {
   // but unlike the sticky signals it is NOT cleared by looking at the pane; only the agent (or a
   // respawn) clears it. Lets overview read as a fleet dashboard.
   status: string;
+  // Set to the OS error when this pane's session-log write broke mid-stream (disk full, file
+  // removed); "" = logging fine / off. Pushed from Rust (LOG_ERROR_EVENT), drawn as a warning on
+  // the pane's log control so a silently-truncated log can't keep looking like it's recording.
+  // Cleared only by a respawn (which re-opens the file) — not by looking at the pane.
+  logError: string;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "" };
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "" };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -84,6 +89,17 @@ export function setStatus(id: PaneId, text: string) {
 /** Clear a pane's status label (respawn, or `th status --clear`). */
 export function clearStatus(id: PaneId) {
   if (activity[id]?.status) setActivity(id, "status", "");
+}
+
+/** Flag that a pane's session-log write failed mid-stream (Rust LOG_ERROR_EVENT). */
+export function setLogError(id: PaneId, error: string) {
+  ensure(id);
+  if (activity[id].logError !== error) setActivity(id, "logError", error);
+}
+
+/** Clear a pane's session-log error (on respawn — the log file is re-opened). */
+export function clearLogError(id: PaneId) {
+  if (activity[id]?.logError) setActivity(id, "logError", "");
 }
 
 /** The user looked at the pane — clear its sticky unseen/bell/attention signals. */

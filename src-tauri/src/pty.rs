@@ -18,7 +18,9 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use serde::Serialize;
 use tauri::ipc::Channel;
+use tauri::{AppHandle, Emitter};
 
 /// Emit at most one frame to the webview per this interval (frame-rate cap), and
 /// flush a partial buffer this long after the last byte when the pane goes idle.
@@ -30,6 +32,21 @@ const FRAME_MAX: usize = 64 * 1024;
 /// blocks here, stops draining the PTY, the kernel PTY buffer fills, and the child
 /// (`yes`, a big `cat`) is back-pressured by the OS — no unbounded queue, bounded RAM.
 const CHANNEL_DEPTH: usize = 16;
+
+/// Emitted to the webview when a pane's session-log *write* fails mid-stream (disk full, file
+/// removed, mount dropped). The open-failure path is handled inline in `spawn` (logging just
+/// never starts); this covers the case where logging was running and then broke — without it the
+/// failure is silently swallowed and the UI keeps claiming the pane is recording. The frontend
+/// matches `id` to its pane and stops showing the active-recording state. See pty.rs flusher.
+pub const LOG_ERROR_EVENT: &str = "termhaus://log-error";
+
+#[derive(Clone, Serialize)]
+struct LogError {
+    /// The PtyHandle (pane id) whose session log broke — the frontend keys off this.
+    id: u32,
+    /// The OS error, for the pane's tooltip and the console.
+    error: String,
+}
 
 pub struct PtyManager {
     // Arc so the per-pane reaper thread can remove its own entry on child exit.
@@ -281,6 +298,7 @@ fn command_resolves(_shell: &str, _prog: &str) -> bool {
 #[allow(clippy::too_many_arguments)] // mirrors the IPC spawn payload (cols/rows/cmd/cwd/shell/channels)
 pub fn spawn(
     mgr: &PtyManager,
+    app: AppHandle,
     cols: u16,
     rows: u16,
     command: Option<String>,
@@ -461,9 +479,26 @@ pub fn spawn(
                     Err(_) => break,
                 }
             }
-            if let Some(w) = log.as_mut() {
-                let _ = w.write_all(&acc);
-                let _ = w.flush();
+            // Tee to the session log. A write failure here used to be dropped (`let _ =`), leaving
+            // a silently-truncated log the user still believes is complete. Instead surface it once
+            // (console + a webview event so the pane's recording indicator clears) and stop logging
+            // this pane — mirroring the open-failure path that disables logging up front.
+            let log_err = log
+                .as_mut()
+                .and_then(|w| w.write_all(&acc).and_then(|()| w.flush()).err());
+            if let Some(e) = log_err {
+                eprintln!(
+                    "termhaus: session log write failed for {} ({e}); logging off for this pane",
+                    log_path.as_deref().unwrap_or("?")
+                );
+                let _ = app.emit(
+                    LOG_ERROR_EVENT,
+                    LogError {
+                        id,
+                        error: e.to_string(),
+                    },
+                );
+                log = None;
             }
             // Lock just long enough to enqueue the frame; `retarget` may have swapped the sink to
             // another window's Channel since the last frame, and that's exactly the point.

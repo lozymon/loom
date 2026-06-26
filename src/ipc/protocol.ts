@@ -78,6 +78,16 @@ export const Cmd = {
 /** The Tauri event Rust emits for each inbound request. */
 export const PANE_CMD_EVENT = "termhaus://pane-cmd";
 
+/** Event Rust emits when a pane's session-log write fails mid-stream (disk full, file removed).
+ *  The owning pane matches `id` to its live PtyHandle and drops its "recording" indicator —
+ *  without it a broken log would keep claiming to record. Carries the OS error for the tooltip. */
+export const LOG_ERROR_EVENT = "termhaus://log-error";
+export interface LogErrorEvent {
+  /** The PtyHandle whose session log broke. */
+  id: PtyHandle;
+  error: string;
+}
+
 /** Event payload: an opaque request line + the id the reply must echo back. */
 export interface ControlEvent {
   reqId: number;

@@ -14,11 +14,12 @@ use std::sync::Arc;
 use control::PendingReplies;
 use pty::PtyManager;
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // a flat IPC payload mirrors the JS spawn call 1:1
 fn pty_spawn(
+    app: AppHandle,
     mgr: State<PtyManager>,
     cols: u16,
     rows: u16,
@@ -31,7 +32,7 @@ fn pty_spawn(
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
     pty::spawn(
-        &mgr, cols, rows, command, cwd, shell, name, log_path, on_output, on_exit,
+        &mgr, app, cols, rows, command, cwd, shell, name, log_path, on_output, on_exit,
     )
 }
 

@@ -18,6 +18,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { homeDir } from "@tauri-apps/api/path";
+import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 
 import { spawnPty, writePty, resizePty, killPty, cwdPty, busyPty, foregroundPty, retargetPty } from "../lib/ptyClient";
@@ -29,12 +30,13 @@ import { openEditorAt } from "../lib/editor";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
-import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus } from "../stores/activity";
+import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
 import { detectAgent } from "../lib/agents";
-import type { PaneId, PtyHandle } from "../ipc/protocol";
+import type { PaneId, PtyHandle, LogErrorEvent } from "../ipc/protocol";
+import { LOG_ERROR_EVENT } from "../ipc/protocol";
 import {
   appState,
   focusPane,
@@ -223,10 +225,22 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       // Remember whether the live PTY is the auto-opened shell, so its eventual exit lets the
       // pane die instead of re-dropping. A normal launch/restart clears it (re-runs the command).
       currentIsShellDrop = asShell;
+      // A fresh spawn re-opens the session-log file, so any prior write-failure flag is stale.
+      clearLogError(props.paneId);
     } catch (e) {
       term.write(`\r\n\x1b[31mfailed to spawn pty: ${e}\x1b[0m\r\n`);
     }
   }
+
+  // A pane's session-log write can break mid-stream (disk full, file removed); Rust emits
+  // LOG_ERROR_EVENT instead of silently dropping bytes. Flag our own pane (matched by live
+  // handle) so its log control shows the break rather than pretending to still record.
+  onMount(() => {
+    const un = listen<LogErrorEvent>(LOG_ERROR_EVENT, (e) => {
+      if (e.payload.id === handle) setLogError(props.paneId, e.payload.error);
+    });
+    onCleanup(() => { void un.then((f) => f()); });
+  });
 
   /** Tear this pane off into its own window: hand the live PTY's output to a new window and let
    *  the main grid show a placeholder until that window closes (the PTY itself never stops). */
@@ -700,6 +714,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           </button>
           <button title="Tear off into its own window" onClick={() => void detachPane()}>◳</button>
           <Show when={settings.sessionLogging}>
+            <Show when={act()?.logError}>
+              <span class="pane-log-error" title={`Session logging stopped: ${act()!.logError}\nRestart the pane to resume.`}>⚠</span>
+            </Show>
             <button
               title="View this pane's session log"
               onClick={async () => {
