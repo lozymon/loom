@@ -6,6 +6,7 @@
 
 import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
+import { getVersion } from "@tauri-apps/api/app";
 import { themes, themeId, setTheme } from "../stores/theme";
 import {
   settings,
@@ -65,6 +66,9 @@ export default function Settings(props: { onClose: () => void }) {
   const [tab, setTab] = createSignal<TabId>("appearance");
   // The action currently waiting for a new key combo (null = not capturing).
   const [capturing, setCapturing] = createSignal<ActionId | null>(null);
+  // App version, read live from Tauri so it always reflects the running build.
+  const [version, setVersion] = createSignal("");
+  onMount(() => { getVersion().then(setVersion).catch(() => {}); });
 
   // Esc closes the modal from anywhere (the panel itself isn't focus-trapped) — but not
   // while capturing a shortcut, where the capture handler swallows Esc to cancel instead.
@@ -475,6 +479,10 @@ export default function Settings(props: { onClose: () => void }) {
 
         <footer class="settings-foot">
           <button class="settings-btn" onClick={() => resetSettings()}>Reset to defaults</button>
+          <span class="spacer" />
+          <Show when={version()}>
+            <span class="settings-version">Termhaus v{version()}</span>
+          </Show>
           <span class="spacer" />
           <button class="settings-btn primary" onClick={() => props.onClose()}>Done</button>
         </footer>

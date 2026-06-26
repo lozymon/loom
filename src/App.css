@@ -3018,6 +3018,13 @@ body,
   flex: 1 1 auto;
 }
 
+.settings-version {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
 /* Key bindings */
 .kb-group {
   margin: 14px 0 4px;
