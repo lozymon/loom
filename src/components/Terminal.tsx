@@ -64,7 +64,7 @@ function prettyCwd(dir: string): string {
   return dir;
 }
 
-/** Last segment of a path — the pane's folder-derived display name (e.g. "termhaus"). Accepts
+/** Last segment of a path — the pane's folder-derived display name (e.g. "loom"). Accepts
  * both `/` and `\` so a Windows cwd (`C:\Users\me\proj`) resolves to its final segment. */
 function basename(dir: string): string {
   const p = dir.replace(/[\\/]+$/, "");
@@ -139,7 +139,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
   // The name shown in the title bar is the live folder (cwd basename) — it tracks `cd` so the bar
   // always tells you *where* the pane is. The pool name (Faye…) is only the fallback before the
-  // first cwd read, and stays the pane's routing handle for `th send`/broadcast (folder names
+  // first cwd read, and stays the pane's routing handle for `loom send`/broadcast (folder names
   // aren't unique) — only the display changes.
   const displayName = () => {
     const d = cwd();
@@ -210,7 +210,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           cols: term.cols,
           rows: term.rows,
           command: asShell ? undefined : spec()?.command,
-          // Per-pane cwd wins (e.g. a `th spawn --cwd …` pane), then the workspace folder.
+          // Per-pane cwd wins (e.g. a `loom spawn --cwd …` pane), then the workspace folder.
           cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
           // Per-pane shell (e.g. a WSL distro chosen in the wizard) wins over the global default.
           shell: spec()?.shell || settings.defaultShell || undefined,
@@ -299,7 +299,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       // it. Cancellation stays silent. The marker substring is set in capture.rs.
       const msg = String((e as { message?: string })?.message ?? e);
       if (msg.includes("no screenshot tool") && handle !== null) {
-        await writePty(handle, "# Termhaus: screenshot tool not found — install flameshot or gnome-screenshot ");
+        await writePty(handle, "# Loom: screenshot tool not found — install flameshot or gnome-screenshot ");
         term.focus();
       }
       console.error("region capture failed", e);
@@ -368,9 +368,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   function findNext() { if (query()) search.findNext(query(), SEARCH_OPTS); }
   function findPrev() { if (query()) search.findPrevious(query(), SEARCH_OPTS); }
 
-  // ---- Scrollback read (th read) -----------------------------------------------------
+  // ---- Scrollback read (loom read) -----------------------------------------------------
   // Return the last `lines` rows of this pane's buffer as plain text. Only reached on an
-  // explicit inbound `th read` request (ADR-0007), never to drive Termhaus's own UI.
+  // explicit inbound `loom read` request (ADR-0007), never to drive Loom's own UI.
   function readScrollback(lines: number): string {
     const buf = term.buffer.active;
     const total = buf.length; // scrollback + viewport rows
@@ -516,13 +516,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "close-pane": () => closePane(props.paneId),
       "toggle-zoom": () => toggleZoom(props.paneId),
       "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
-      "new-workspace": () => window.dispatchEvent(new CustomEvent("termhaus:new-workspace")),
-      "command-palette": () => window.dispatchEvent(new CustomEvent("termhaus:command-palette")),
-      "source-control": () => window.dispatchEvent(new CustomEvent("termhaus:source-control")),
-      "docs": () => window.dispatchEvent(new CustomEvent("termhaus:docs")),
-      "settings": () => window.dispatchEvent(new CustomEvent("termhaus:settings")),
+      "new-workspace": () => window.dispatchEvent(new CustomEvent("loom:new-workspace")),
+      "command-palette": () => window.dispatchEvent(new CustomEvent("loom:command-palette")),
+      "source-control": () => window.dispatchEvent(new CustomEvent("loom:source-control")),
+      "docs": () => window.dispatchEvent(new CustomEvent("loom:docs")),
+      "settings": () => window.dispatchEvent(new CustomEvent("loom:settings")),
       "overview": () => toggleOverview(),
-      "shortcuts": () => window.dispatchEvent(new CustomEvent("termhaus:shortcuts")),
+      "shortcuts": () => window.dispatchEvent(new CustomEvent("loom:shortcuts")),
       "prev-workspace": () => switchWorkspaceRelative(-1),
       "next-workspace": () => switchWorkspaceRelative(1),
       // Ctrl+Shift+1…9 → jump straight to workspace N.
@@ -706,7 +706,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
               title="View this pane's session log"
               onClick={async () => {
                 const path = await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId);
-                window.dispatchEvent(new CustomEvent("termhaus:view-session-log", { detail: { path: path ?? undefined } }));
+                window.dispatchEvent(new CustomEvent("loom:view-session-log", { detail: { path: path ?? undefined } }));
               }}
             >≣</button>
           </Show>

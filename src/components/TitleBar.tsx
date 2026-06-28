@@ -25,13 +25,13 @@ export default function TitleBar(props: {
 }) {
   const win = getCurrentWindow();
   const openPalette = () =>
-    window.dispatchEvent(new CustomEvent('termhaus:command-palette'));
+    window.dispatchEvent(new CustomEvent('loom:command-palette'));
 
   return (
     <header class="titlebar" data-tauri-drag-region>
       <button class="tb-brand" title="Overview" onClick={() => setOverview(false)}>
         <img class="tb-logo" src={appIcon} alt="" width="18" height="18" />
-        <span class="tb-name">Termhaus</span>
+        <span class="tb-name">Loom</span>
       </button>
 
       <nav class="tb-actions">

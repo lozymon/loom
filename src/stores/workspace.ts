@@ -267,7 +267,7 @@ export function setRatio(wsId: string, path: Path, ratio: number) {
 // logic. The control relay (Rust) and the frontend handler (src/lib/paneControl.ts) call
 // these; liveness itself is the pane registry's call at write time.
 
-/** One pane for a `th list`, in row-major order across all workspaces. */
+/** One pane for a `loom list`, in row-major order across all workspaces. */
 export interface PaneListing {
   paneId: PaneId;
   name: string;
@@ -302,14 +302,14 @@ export function resolvePaneByName(name: string): { paneId: PaneId } | { error: s
   return { error: `"${name}" is ambiguous (${matches.length} panes share it)` };
 }
 
-/** A workspace looked up by display name, preferring the active one (`th broadcast --workspace`). */
+/** A workspace looked up by display name, preferring the active one (`loom broadcast --workspace`). */
 export function workspaceByName(name: string): WorkspaceUI | undefined {
   const active = activeWorkspace();
   if (active && active.name === name) return active;
   return app.workspaces.find((w) => w.name === name);
 }
 
-/** Switch to a pane's workspace and focus it (used by `th focus` and the command palette). */
+/** Switch to a pane's workspace and focus it (used by `loom focus` and the command palette). */
 export function revealPane(paneId: PaneId) {
   const i = wsIdxByPane(paneId);
   if (i < 0) return;
@@ -321,7 +321,7 @@ export function revealPane(paneId: PaneId) {
 }
 
 /**
- * Reveal a pane by name: switch to its workspace and focus it (`th focus`). Returns the pane's
+ * Reveal a pane by name: switch to its workspace and focus it (`loom focus`). Returns the pane's
  * name on success. Resolution reuses {@link resolvePaneByName} (active-workspace-preferring).
  */
 export function revealPaneByName(name: string): { name: string } | { error: string } {
@@ -465,7 +465,7 @@ export function toggleOverview() {
 
 /**
  * The PaneIds a broadcast should reach in `ws`, in row-major order: every pane in the workspace.
- * This is the agent-facing fan-out target for the inter-pane control bus (`th broadcast` and the
+ * This is the agent-facing fan-out target for the inter-pane control bus (`loom broadcast` and the
  * MCP `broadcast` tool, ADR-0007) — there is no human broadcast UI. Liveness is the registry's
  * call at send time, so dead panes are simply skipped there.
  */

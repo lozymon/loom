@@ -1,5 +1,5 @@
 {
-  "name": "termhaus",
+  "name": "loom",
   "version": "0.11.0",
   "description": "A Linux-first desktop control room of real terminals — a GUI terminal multiplexer for driving fleets of CLI agents, with broadcast input.",
   "type": "module",

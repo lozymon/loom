@@ -1,6 +1,6 @@
 //! System-tray icon + summon/hide (a "bigger bet" from IDEAS.md). Right-click opens a menu
 //! (Show/Hide, Quit); left-click toggles the window. Quit is delegated to the frontend by emitting
-//! `termhaus://quit` so it flushes persisted state before destroying the window — the same path as
+//! `loom://quit` so it flushes persisted state before destroying the window — the same path as
 //! the title-bar close button. The global hotkey that also summons the window is registered from
 //! TypeScript (it's a user-configurable setting), so this module is purely the tray.
 
@@ -12,12 +12,12 @@ use tauri::{
 
 /// Build the tray icon and wire its menu + click handlers. Call once from `setup`.
 pub fn build<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
-    let toggle = MenuItem::with_id(app, "toggle", "Show / Hide Termhaus", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Termhaus", true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, "toggle", "Show / Hide Loom", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Loom", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&toggle, &quit])?;
 
     let mut builder = TrayIconBuilder::new()
-        .tooltip("Termhaus")
+        .tooltip("Loom")
         .menu(&menu)
         // Left-click toggles the window; right-click opens the menu (standard tray behaviour).
         .show_menu_on_left_click(false)
@@ -25,7 +25,7 @@ pub fn build<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
             "toggle" => toggle_window(app),
             // Hand off to the frontend so it flushes state before destroying the window.
             "quit" => {
-                let _ = app.emit("termhaus://quit", ());
+                let _ = app.emit("loom://quit", ());
             }
             _ => {}
         })

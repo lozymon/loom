@@ -953,7 +953,7 @@ body,
   align-items: center;
   justify-content: center;
   z-index: 50;
-  animation: th-scrim-in 0.14s ease-out;
+  animation: loom-scrim-in 0.14s ease-out;
 }
 
 .wizard {
@@ -965,7 +965,7 @@ body,
   font: 13px var(--font-ui);
   box-shadow: var(--shadow-overlay);
   overflow: hidden;
-  animation: th-ov-in 0.16s ease-out;
+  animation: loom-ov-in 0.16s ease-out;
 }
 
 .wizard-steps {
@@ -1737,7 +1737,7 @@ body,
 .pane-dot[data-state='working'] {
   background: var(--state-working);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-working) 22%, transparent);
-  animation: th-dot-pulse 2.4s ease-in-out infinite;
+  animation: loom-dot-pulse 2.4s ease-in-out infinite;
 }
 .pane-dot[data-state='needs'] {
   background: var(--state-needs);
@@ -1746,7 +1746,7 @@ body,
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--text-dim);
 }
-@keyframes th-dot-pulse {
+@keyframes loom-dot-pulse {
   0%,
   100% {
     opacity: 1;
@@ -1821,7 +1821,7 @@ body,
   color: var(--text-mid);
 }
 
-/* Agent-pushed status word (`th status "…"`) — rendered in the pane's state colour, no pill. */
+/* Agent-pushed status word (`loom status "…"`) — rendered in the pane's state colour, no pill. */
 .pane-chip .pane-statuslabel {
   flex: 0 1 auto;
   min-width: 0;
@@ -2174,7 +2174,7 @@ body,
   align-items: center;
   justify-content: center;
   z-index: 60;
-  animation: th-scrim-in 0.14s ease-out;
+  animation: loom-scrim-in 0.14s ease-out;
 }
 
 /* ---- Settings: centered scrim overlay (like the command palette) ---- */
@@ -2190,7 +2190,7 @@ body,
   padding: 56px 24px;
   z-index: 70;
   box-sizing: border-box;
-  animation: th-scrim-in 0.14s ease-out;
+  animation: loom-scrim-in 0.14s ease-out;
 }
 
 .settings {
@@ -2206,7 +2206,7 @@ body,
   overflow: hidden;
   color: var(--text-bright);
   font: 13px var(--font-ui);
-  animation: th-ov-in 0.16s ease-out;
+  animation: loom-ov-in 0.16s ease-out;
 }
 /* Horizontal padding lives on the header/tabs/body/footer (not the card) so the scrolling body
    spans the full card width: its scrollbar sits at the card edge with a comfortable gap to the
@@ -2252,7 +2252,7 @@ body,
   overflow: hidden;
   color: var(--text-bright);
   font: 13px var(--font-ui);
-  animation: th-ov-in 0.16s ease-out;
+  animation: loom-ov-in 0.16s ease-out;
 }
 .log-dialog {
   width: 760px;
@@ -3747,7 +3747,7 @@ body,
   align-items: flex-start;
   padding-top: 96px;
   z-index: 70;
-  animation: th-scrim-in 0.14s ease-out;
+  animation: loom-scrim-in 0.14s ease-out;
 }
 
 .palette {
@@ -3760,7 +3760,7 @@ body,
   border-radius: 16px;
   box-shadow: var(--shadow-overlay);
   overflow: hidden;
-  animation: th-ov-in 0.16s ease-out;
+  animation: loom-ov-in 0.16s ease-out;
 }
 
 .palette-head {
@@ -3887,7 +3887,7 @@ body,
 }
 
 /* ---- Shared overlay motion (Frameless) ---- */
-@keyframes th-ov-in {
+@keyframes loom-ov-in {
   from {
     opacity: 0;
     transform: translateY(8px) scale(0.99);
@@ -3897,7 +3897,7 @@ body,
     transform: none;
   }
 }
-@keyframes th-scrim-in {
+@keyframes loom-scrim-in {
   from {
     opacity: 0;
   }

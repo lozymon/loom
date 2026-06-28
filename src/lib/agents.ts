@@ -1,5 +1,5 @@
 // Agent identity from a pane's launch command. Panes are opaque (ADR-0001) — we never parse
-// what a pane prints — but Termhaus owns each pane's PaneSpec.command, so deriving "this pane
+// what a pane prints — but Loom owns each pane's PaneSpec.command, so deriving "this pane
 // was launched as Claude / Codex / …" from that string is metadata about our own spec, not
 // output inspection. The result drives a small title-bar badge (see Terminal.tsx).
 //

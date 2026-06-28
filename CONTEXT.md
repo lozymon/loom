@@ -1,11 +1,11 @@
-# Termhaus
+# Loom
 
 A Linux-first desktop "control room" of real terminals — a GUI terminal multiplexer that runs many PTYs at once in resizable split grids and a left rail of workspaces.
 
 ## Language
 
 **Pane**:
-A single tile in the grid, bound one-to-one to a PTY running an arbitrary command. The fundamental unit Termhaus renders. Panes are *opaque* — Termhaus streams their bytes but never interprets them. A Pane is **Live** (PTY running) or **Dead** (child exited; tile stays in place showing its exit code with a restart affordance). A Pane only leaves the layout when explicitly closed (✕), never automatically on child exit.
+A single tile in the grid, bound one-to-one to a PTY running an arbitrary command. The fundamental unit Loom renders. Panes are *opaque* — Loom streams their bytes but never interprets them. A Pane is **Live** (PTY running) or **Dead** (child exited; tile stays in place showing its exit code with a restart affordance). A Pane only leaves the layout when explicitly closed (✕), never automatically on child exit.
 _Avoid_: terminal (the visible thing is a Pane; "terminal" is ambiguous between the UI tile and the OS device), window, cell
 
 **Pane name**:
@@ -21,7 +21,7 @@ The OS pseudo-terminal (master/slave pair) behind a Pane. Owned by Rust; one per
 _Avoid_: tty, console
 
 **Agent**:
-Not a first-class concept. An "agent" is merely a Pane whose launch command happens to be a CLI like `claude`. Termhaus has no awareness of what runs inside a Pane.
+Not a first-class concept. An "agent" is merely a Pane whose launch command happens to be a CLI like `claude`. Loom has no awareness of what runs inside a Pane.
 _Avoid_: session, bot (do not reintroduce an Agent entity)
 
 **Working folder**:

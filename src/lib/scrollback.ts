@@ -15,7 +15,7 @@
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { PtyHandle } from "../ipc/protocol";
 
-const key = (handle: PtyHandle) => `th:replay:${handle}`;
+const key = (handle: PtyHandle) => `loom:replay:${handle}`;
 
 /**
  * Snapshot a terminal's screen + scrollback and stash it for the window that next binds this PTY.

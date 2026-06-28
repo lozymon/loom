@@ -50,7 +50,7 @@ export function forgetDetached(id: PaneId) {
 export async function detachPaneToWindow(id: PaneId, handle: PtyHandle, title: string): Promise<void> {
   setDetached(id, { handle, redocking: false });
   // The main window's <Terminal> just unmounted (and unregistered itself). Keep the pane reachable
-  // from here — broadcast and `th send` — by routing writes straight to the live PTY by handle.
+  // from here — broadcast and `loom send` — by routing writes straight to the live PTY by handle.
   // Scrollback reads aren't available (the xterm now lives in the other window), so `read` is empty.
   registerPane(id, {
     write: (data) => void writePty(handle, data),
@@ -63,7 +63,7 @@ export async function detachPaneToWindow(id: PaneId, handle: PtyHandle, title: s
   try {
     const w = new WebviewWindow(label, {
       url,
-      title: `${title} — Termhaus`,
+      title: `${title} — Loom`,
       width: 760,
       height: 480,
       decorations: true,

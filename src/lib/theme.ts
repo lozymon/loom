@@ -42,7 +42,7 @@ const ANSI_LIGHT = {
 export const THEMES: Theme[] = [
   {
     id: "dark",
-    name: "Termhaus Dark",
+    name: "Loom Dark",
     dark: true,
     terminal: {
       background: "#191b20", foreground: "#e7e7ea",
@@ -52,7 +52,7 @@ export const THEMES: Theme[] = [
   },
   {
     id: "light",
-    name: "Termhaus Light",
+    name: "Loom Light",
     dark: false,
     terminal: {
       background: "#ffffff", foreground: "#1c1e22",

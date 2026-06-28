@@ -1,6 +1,6 @@
-# Panes are opaque; Termhaus is not agent-aware
+# Panes are opaque; Loom is not agent-aware
 
-The reference app (BridgeSpace) parses agent output to show per-pane status and token counts, and the project began life (pre-pivot) coupled to the Claude Agent SDK. For v1 we deliberately reject both: a Pane is an opaque PTY byte stream that Termhaus streams but never interprets, and an "agent" is nothing more than a Pane whose launch command is a CLI like `claude`. We chose this to keep the make-or-break PTY-throughput core simple, keep Rust thin, and avoid re-importing the bundled-CLI packaging risk we escaped by dropping the SDK.
+The reference app (BridgeSpace) parses agent output to show per-pane status and token counts, and the project began life (pre-pivot) coupled to the Claude Agent SDK. For v1 we deliberately reject both: a Pane is an opaque PTY byte stream that Loom streams but never interprets, and an "agent" is nothing more than a Pane whose launch command is a CLI like `claude`. We chose this to keep the make-or-break PTY-throughput core simple, keep Rust thin, and avoid re-importing the bundled-CLI packaging risk we escaped by dropping the SDK.
 
 ## Consequences
 
@@ -12,7 +12,7 @@ The reference app (BridgeSpace) parses agent output to show per-pane status and 
 
 The Source Control panel (M8, a git diff viewer) needs to know *which folder* the focused
 terminal is actually in. The original rule — restated in PLAN's persistence section as
-"Termhaus does not read `/proc/<pid>/cwd`; panes stay opaque" — was written for **respawn**:
+"Loom does not read `/proc/<pid>/cwd`; panes stay opaque" — was written for **respawn**:
 on relaunch we re-run a pane's command in its *launch* cwd, never the live wandered cwd, so
 restored layouts are deterministic. That rule still holds for persistence.
 

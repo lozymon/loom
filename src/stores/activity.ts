@@ -8,7 +8,7 @@
 //     PTY's foreground process group in Rust (pty_busy). null = unknown.
 //   • attention — a sticky "needs you" flag drawn as a coloured border around the pane. Raised
 //     automatically on the busy→idle transition (a command just finished while you weren't
-//     looking) or explicitly by a process inside the pane via `th attention` (ADR-0007). Like
+//     looking) or explicitly by a process inside the pane via `loom attention` (ADR-0007). Like
 //     busy, it's metadata only — the foreground-pgrp fact or an inbound command, never output.
 //
 // unseen/bell/attention are "sticky until looked at" (cleared by seePane on focus); busy is a
@@ -22,7 +22,7 @@ export interface PaneActivity {
   bell: boolean;
   busy: boolean | null;
   attention: boolean;
-  // A short agent-pushed status label (`th status "running tests"`), shown in the title bar and
+  // A short agent-pushed status label (`loom status "running tests"`), shown in the title bar and
   // overview tile. "" = no status. Like attention, it's metadata only — never read from output —
   // but unlike the sticky signals it is NOT cleared by looking at the pane; only the agent (or a
   // respawn) clears it. Lets overview read as a fleet dashboard.
@@ -63,7 +63,7 @@ export function setBusy(id: PaneId, busy: boolean | null) {
   if (activity[id].busy !== busy) setActivity(id, "busy", busy);
 }
 
-/** Raise a pane's sticky attention flag (busy→idle transition, or `th attention`). Returns true
+/** Raise a pane's sticky attention flag (busy→idle transition, or `loom attention`). Returns true
  *  only when it was newly raised (was clear before) — callers use that to fire a one-shot OS
  *  notification without re-notifying a pane that's already flagged. */
 export function noteAttention(id: PaneId): boolean {
@@ -73,12 +73,12 @@ export function noteAttention(id: PaneId): boolean {
   return true;
 }
 
-/** Clear a pane's attention flag explicitly (`th attention --clear`). */
+/** Clear a pane's attention flag explicitly (`loom attention --clear`). */
 export function clearAttention(id: PaneId) {
   if (activity[id]?.attention) setActivity(id, "attention", false);
 }
 
-/** Set a pane's agent-pushed status label (`th status "…"`); empty text clears it. Unlike the
+/** Set a pane's agent-pushed status label (`loom status "…"`); empty text clears it. Unlike the
  *  sticky signals this survives focus — only the agent or a respawn clears it. */
 export function setStatus(id: PaneId, text: string) {
   ensure(id);
@@ -86,7 +86,7 @@ export function setStatus(id: PaneId, text: string) {
   if (activity[id].status !== next) setActivity(id, "status", next);
 }
 
-/** Clear a pane's status label (respawn, or `th status --clear`). */
+/** Clear a pane's status label (respawn, or `loom status --clear`). */
 export function clearStatus(id: PaneId) {
   if (activity[id]?.status) setActivity(id, "status", "");
 }
@@ -126,7 +126,7 @@ export function anyAttention(ids: Iterable<PaneId>): boolean {
 }
 
 /** Does any pane in `ids` have the strict "needs you" attention flag (busy→idle finish or
- *  `th attention`)? Drives the rail's amber border — not raised by mere background output. */
+ *  `loom attention`)? Drives the rail's amber border — not raised by mere background output. */
 export function anyNeedsAttention(ids: Iterable<PaneId>): boolean {
   for (const id of ids) {
     const a = activity[id];

@@ -1,4 +1,4 @@
-# Termhaus — What to Add or Remove
+# Loom — What to Add or Remove
 
 Notes for discussion. My honest read after going through the whole app.
 
@@ -74,7 +74,7 @@ dead weight that blurs the product.
   served anyway. So instead of extending broadcast across workspaces, we **removed
   the human bar entirely** (and its targeting/groups/snippets/history/stagger, the
   per-pane ◉/○ toggle, and the now-orphaned glob matchers). The agent-facing
-  fan-out is kept: `th broadcast` / the `th-mcp` `broadcast` tool still fan a
+  fan-out is kept: `loom broadcast` / the `loom mcp` `broadcast` tool still fan a
   prompt to every pane in a workspace via the control bus (ADR-0007), so one agent
   can still drive the fleet. Net −~600 lines; bundle −3.4KB gzip.
 

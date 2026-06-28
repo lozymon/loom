@@ -1,16 +1,16 @@
-# Handoff: Termhaus — "Frameless" chrome redesign
+# Handoff: Loom — "Frameless" chrome redesign
 
 ## Overview
 
-Termhaus is a desktop **control room of real terminals** — a graphical terminal multiplexer (a GUI tmux) for running many CLI tools/agents at once in resizable split grids, with a left rail of workspaces and a **broadcast bar** that types one prompt into many panes. This handoff covers a full visual redesign codenamed **Frameless**: the chrome around panes is quieted into floating cards, glassy identity chips, a detached broadcast bar, a slim borderless rail, and a single cool accent per theme. It spans every surface: workspace grid, fleet-at-scale grid, empty state, side panels (Git / Preview / Docs), command palette, new-workspace launcher, and settings — across four themes.
+Loom is a desktop **control room of real terminals** — a graphical terminal multiplexer (a GUI tmux) for running many CLI tools/agents at once in resizable split grids, with a left rail of workspaces and a **broadcast bar** that types one prompt into many panes. This handoff covers a full visual redesign codenamed **Frameless**: the chrome around panes is quieted into floating cards, glassy identity chips, a detached broadcast bar, a slim borderless rail, and a single cool accent per theme. It spans every surface: workspace grid, fleet-at-scale grid, empty state, side panels (Git / Preview / Docs), command palette, new-workspace launcher, and settings — across four themes.
 
-**Hard product constraint:** a _pane_ is **opaque**. Termhaus renders the raw bytes of whatever runs inside (xterm.js) and never interprets them. So this redesign is entirely about the **chrome around panes** — never the terminal content. Hierarchy is exactly two levels: **Workspace → Pane** (no tabs, no windows).
+**Hard product constraint:** a _pane_ is **opaque**. Loom renders the raw bytes of whatever runs inside (xterm.js) and never interprets them. So this redesign is entirely about the **chrome around panes** — never the terminal content. Hierarchy is exactly two levels: **Workspace → Pane** (no tabs, no windows).
 
 ## About the Design Files
 
 The files in this bundle are **design references created in HTML** — prototypes that show the intended look and behavior. They are **not production code to copy**. They are authored as "Design Components" (a streaming HTML format) and use a `support.js` runtime that is included only so the prototypes open and run in a browser for reference.
 
-Termhaus' real frontend is **React + TypeScript (Tauri + WebKitGTK desktop app)**, components in `src/components/` (`WorkspaceRail`, `LayoutNode`, `Terminal`, `BroadcastBar`, `NewWorkspaceWizard`, `GitPanel`, `PreviewPanel`, `DocsPanel`, `CommandPalette`, `Settings`, `TitleBar`, `ShortcutsOverlay`). **The task is to recreate these designs in that existing React/TS codebase, using its established patterns** (component structure, state, theming via `data-theme` CSS custom properties) — not to port the HTML. Keep the opacity constraint and the two-level hierarchy intact.
+Loom' real frontend is **React + TypeScript (Tauri + WebKitGTK desktop app)**, components in `src/components/` (`WorkspaceRail`, `LayoutNode`, `Terminal`, `BroadcastBar`, `NewWorkspaceWizard`, `GitPanel`, `PreviewPanel`, `DocsPanel`, `CommandPalette`, `Settings`, `TitleBar`, `ShortcutsOverlay`). **The task is to recreate these designs in that existing React/TS codebase, using its established patterns** (component structure, state, theming via `data-theme` CSS custom properties) — not to port the HTML. Keep the opacity constraint and the two-level hierarchy intact.
 
 ## Fidelity
 
@@ -93,7 +93,7 @@ A theme drives **both** the app chrome and every terminal palette, live. Four bu
 ### 1. Top bar
 
 - Height `50px`, transparent over `--canvas`, `padding 0 18px`.
-- Left: app mark — `17px` circle, `radial-gradient(circle at 30% 30%, --accent-text, --accent)` — + "Termhaus" (14.5/600, -.01em). Clicking returns to Overview.
+- Left: app mark — `17px` circle, `radial-gradient(circle at 30% 30%, --accent-text, --accent)` — + "Loom" (14.5/600, -.01em). Clicking returns to Overview.
 - Nav (left of center, `gap 24px`, 13px): **Overview · Palette · Git · Preview · Docs · Settings**. Active item = `--text-bright`, others `--text-dim` (hover → `#c9ccd1`). Active item reflects current surface: Git/Preview/Docs highlight when their panel is open; Palette when its overlay is open; Settings when on settings; else Overview.
 - Right: window controls — minimize (`12×1.5px` bar), maximize (`9×9px` 1.5px-border square), close (`×`, 16px). Color `--text-faint`/`--text-dim`.
 
@@ -101,11 +101,11 @@ A theme drives **both** the app chrome and every terminal palette, live. Four bu
 
 - `WORKSPACES` mono label + a `+` button (24px, radius 7) that opens the launcher.
 - Workspace rows: height `44px`, radius `12px`, `gap 11px`, `padding 0 14px`. Each = live dot (6px) + name (13.5/500) + mono count badge. On hover bg `rgba(255,255,255,.04)`; active = accent gradient fill, name `--text-bright`, count `--accent-text`, dot glows (dark only). Inline duplicate/✕ controls fade in on hover (`.wsact`, opacity 0→1).
-- Default rows: **Termhaus** (4, active), **Fleet** (12), **Scratch** (0).
+- Default rows: **Loom** (4, active), **Fleet** (12), **Scratch** (0).
 - A dashed/tinted **New** row (radius 12, `--tint-weak`) opens the launcher.
 - Footer: avatar (24px) + `lozymon`, mono, `--text-faint`, pinned bottom (`margin-top:auto`).
 
-### 3. Overview — workspace grid (Termhaus, hero layout)
+### 3. Overview — workspace grid (Loom, hero layout)
 
 - Main area = flex column. Grid: `display:grid; grid-template-columns:1.45fr 1fr; grid-template-rows:1fr 1fr; gap:14px`. When a side panel is open, columns collapse to `1fr` and the panel docks at right.
 - Four **pane cards** (one per state) demonstrate the language: **Faye** working+focused (accent ring), **Cleo** idle, **Wade** needs-you (amber ring), **Dext** dead (dimmed + restart).
@@ -156,7 +156,7 @@ A theme drives **both** the app chrome and every terminal palette, live. Four bu
 ## Interactions & Behavior
 
 - **Top nav** switches the main surface. Overview/Settings are full-area views; Git/Preview/Docs toggle a docked side panel (clicking the active one again closes it); Palette/Launcher open as scrim overlays. Opening a panel or settings clears any overlay.
-- **Rail rows** switch the active workspace (Termhaus hero / Fleet / Scratch empty) and return to Overview.
+- **Rail rows** switch the active workspace (Loom hero / Fleet / Scratch empty) and return to Overview.
 - **Overlays** close on scrim click or Esc; inner card stops propagation. Card animates in: `@keyframes ovin { from{opacity:0; transform:translateY(8px) scale(.99)} to{opacity:1;transform:none} }`, `.16s ease-out`. Scrim fades `.14s`.
 - **Targets chip** toggles the scope dropdown (stops propagation so a document click can close it); selecting a scope updates label + hint.
 - **Hover reveals:** pane controls (`.pctl`) and rail row controls (`.wsact`) transition opacity 0→1 over `.12s`. (A "pane controls: always visible" option forces opacity 1.)
@@ -169,7 +169,7 @@ A theme drives **both** the app chrome and every terminal palette, live. Four bu
 Prototype state (recreate as component/store state):
 
 - `theme`: `dark | light | midnight | paper` — drives `data-theme` / token set, app-wide.
-- `activeWorkspace`: `termhaus | fleet | scratch` — selects grid content.
+- `activeWorkspace`: `loom | fleet | scratch` — selects grid content.
 - `surface/nav`: `overview | settings`.
 - `panel`: `null | git | preview | docs` — docked side panel (toggle).
 - `overlay`: `null | palette | launcher` — scrim overlay.
@@ -183,10 +183,10 @@ No raster assets or icon files — all glyphs are Unicode (`+ × ⤢ ⎇ ⌖ ⌘
 
 ## Files (in this bundle)
 
-- `Termhaus App.dc.html` — the full interactive prototype: all surfaces, 4 themes, fleet, empty state, targets dropdown, panels, overlays, settings. **Primary reference.**
-- `Termhaus Themes.dc.html` — the workspace grid rendered in all four themes side by side (accent/state verification).
-- `Termhaus Frameless.dc.html` — standalone single-window workspace grid (clean reference for the hero layout).
-- `Termhaus Minimal.dc.html` — the original three exploration directions (Quiet / Instrument / Frameless) for context on why Frameless was chosen.
+- `Loom App.dc.html` — the full interactive prototype: all surfaces, 4 themes, fleet, empty state, targets dropdown, panels, overlays, settings. **Primary reference.**
+- `Loom Themes.dc.html` — the workspace grid rendered in all four themes side by side (accent/state verification).
+- `Loom Frameless.dc.html` — standalone single-window workspace grid (clean reference for the hero layout).
+- `Loom Minimal.dc.html` — the original three exploration directions (Quiet / Instrument / Frameless) for context on why Frameless was chosen.
 - `ThemeWorkspace.dc.html` — the themed grid component used by the matrix (per-theme token sets in its logic).
 - `support.js` — runtime so the `.dc.html` references open in a browser. **Not part of the design**; do not port.
 

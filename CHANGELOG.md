@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Termhaus are documented here. The format is loosely based on
+All notable changes to Loom are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
@@ -30,7 +30,7 @@ versioning.
 - **Human broadcast bar** — the manual prompt-to-many-panes bar (and its target modes, saved
   groups, snippets, history, stagger, and per-pane target toggle) was removed as unused;
   multi-agent work here is cross-project, which the single-workspace bar never served. The
-  agent-facing fan-out is kept: `th broadcast` and the `th-mcp` `broadcast` tool still fan a
+  agent-facing fan-out is kept: `loom broadcast` and the `loom mcp` `broadcast` tool still fan a
   prompt to every pane in a workspace via the inter-pane control bus.
 
 ### Fixed
@@ -61,8 +61,8 @@ versioning.
   sees EOF while the pseudoconsole stays open, so the exit was never detected. Exit is now
   observed independently and the pseudoconsole torn down in the documented ConPTY order,
   so the pane reports the exit and recovers.
-- **External editor & `th` CLI resolution on Windows** — a bare editor command like `code`
-  now resolves via PATH×PATHEXT (`code.cmd`), and the `th`/`th-mcp` sidecar binaries are
+- **External editor & `loom` CLI resolution on Windows** — a bare editor command like `code`
+  now resolves via PATH×PATHEXT (`code.cmd`), and the `loom`/`loom mcp` sidecar binaries are
   found with their `.exe` suffix so a pane's inter-pane control bus is wired up.
 
 ## [0.9.0] — 2026
@@ -86,7 +86,7 @@ versioning.
   is captured from the active terminal when you open it and pinned to that
   workspace. Switching workspaces shows only what that workspace had open.
 - Project (repo) name in the Source Control header, beside the branch.
-- Documentation: `docs/cli.md` (the `th` CLI reference), `docs/troubleshooting.md`,
+- Documentation: `docs/cli.md` (the `loom` CLI reference), `docs/troubleshooting.md`,
   and this `CHANGELOG.md`.
 
 ## [0.7.0] — 2026
@@ -105,14 +105,14 @@ versioning.
 
 ### Added
 - Multi-window **tear-off**: pop a pane into its own window; torn-off panes stay
-  reachable via broadcast and `th send`.
+  reachable via broadcast and `loom send`.
 - Right-side **preview panel** (docked browser view).
 - **System tray** + global summon/hide hotkey + close-to-tray.
 - Faithful preset layouts, overview drag-reorder, and the **session-log viewer**.
 - Workspace polish: `Ctrl+Shift+1–9` jump, duplicate workspace, shortcuts cheat-sheet,
   per-agent tint.
-- **`th-mcp`** — the Termhaus MCP server, exposing the control bus as agent tools.
-- **`th hooks`** — bridge Claude Code lifecycle events to the control bus.
+- **`loom mcp`** — the Loom MCP server, exposing the control bus as agent tools.
+- **`loom hooks`** — bridge Claude Code lifecycle events to the control bus.
 - **Docs reader**: Raw/Preview markdown toggle; mark a passage and send it to a pane.
 - **Fleet console**: flagged-reply broadcast, saved groups, agent status.
 - Windows support (Linux-side, cross-checked).
@@ -130,7 +130,7 @@ versioning.
 ### Added
 - **Overview mode** — uniform tile wall for fleet-glance (`Ctrl+Shift+O`).
 - Desktop notifications on attention + persisted broadcast history.
-- `th attention` — self-flagged "needs you" pane border.
+- `loom attention` — self-flagged "needs you" pane border.
 - Per-pane AI agent badges and title-bar polish.
 - Single-page workspace launcher with visual layout + fleet fill.
 - `Ctrl+Shift+,` opens Settings; app shortcuts work without pane focus.
@@ -140,7 +140,7 @@ versioning.
 ## [0.3.0]
 
 ### Added
-- **Inter-pane control bus** + the `th` CLI (ADR-0007).
+- **Inter-pane control bus** + the `loom` CLI (ADR-0007).
 - Source-control panel with a git diff viewer; send selected diff lines to a pane.
 - Per-pane button to launch Claude in the terminal's cwd.
 - Snapshot a screen region into the focused pane.
@@ -155,12 +155,12 @@ versioning.
 
 ## [0.1.0] — initial release
 
-- Termhaus terminal multiplexer (milestones M0–M6): real PTYs in resizable split grids,
+- Loom terminal multiplexer (milestones M0–M6): real PTYs in resizable split grids,
   the left workspace rail, the Start→Layout→Agents wizard, broadcast input, and local
   JSON persistence of workspace intent.
 
-[0.8.0]: https://github.com/lozymon/termhaus/releases/tag/v0.8.0
-[0.7.0]: https://github.com/lozymon/termhaus/releases/tag/v0.7.0
-[0.6.0]: https://github.com/lozymon/termhaus/releases/tag/v0.6.0
-[0.5.1]: https://github.com/lozymon/termhaus/releases/tag/v0.5.1
-[0.3.0]: https://github.com/lozymon/termhaus/releases/tag/v0.3.0
+[0.8.0]: https://github.com/lozymon/loom/releases/tag/v0.8.0
+[0.7.0]: https://github.com/lozymon/loom/releases/tag/v0.7.0
+[0.6.0]: https://github.com/lozymon/loom/releases/tag/v0.6.0
+[0.5.1]: https://github.com/lozymon/loom/releases/tag/v0.5.1
+[0.3.0]: https://github.com/lozymon/loom/releases/tag/v0.3.0

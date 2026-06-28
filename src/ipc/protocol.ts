@@ -70,18 +70,18 @@ export const Cmd = {
 } as const;
 
 // ---- Inter-pane control bus (ADR-0007) -----------------------------------------------
-// A process inside a pane (e.g. the `th` CLI) sends one of these requests over the unix
+// A process inside a pane (e.g. the `loom` CLI) sends one of these requests over the unix
 // socket; Rust relays the raw string to the webview as a `ControlEvent`; the frontend
 // (src/lib/paneControl.ts) parses it, acts, and replies. Rust never parses the protocol —
 // this module is the only place it's defined.
 
 /** The Tauri event Rust emits for each inbound request. */
-export const PANE_CMD_EVENT = "termhaus://pane-cmd";
+export const PANE_CMD_EVENT = "loom://pane-cmd";
 
 /** Event Rust emits when a pane's session-log write fails mid-stream (disk full, file removed).
  *  The owning pane matches `id` to its live PtyHandle and drops its "recording" indicator —
  *  without it a broken log would keep claiming to record. Carries the OS error for the tooltip. */
-export const LOG_ERROR_EVENT = "termhaus://log-error";
+export const LOG_ERROR_EVENT = "loom://log-error";
 export interface LogErrorEvent {
   /** The PtyHandle whose session log broke. */
   id: PtyHandle;
@@ -94,13 +94,13 @@ export interface ControlEvent {
   request: string;
 }
 
-/** Requests the `th` CLI can make. `target`/`name` are pane display titles (e.g. "Cleo"). */
+/** Requests the `loom` CLI can make. `target`/`name` are pane display titles (e.g. "Cleo"). */
 export type ControlRequest =
   | { op: "list" }
   | { op: "send"; target: string; text: string; enter?: boolean }
   | { op: "spawn"; command: string; name?: string; cwd?: string }
   // Read the tail of a pane's scrollback (so an agent can consume another pane's output). An
-  // explicit, requested inbound read — distinct from ADR-0001's ban on Termhaus itself parsing
+  // explicit, requested inbound read — distinct from ADR-0001's ban on Loom itself parsing
   // pane output for product logic; nothing here drives the UI off the content.
   | { op: "read"; target: string; lines?: number }
   // Broadcast text to every live pane in a workspace (the active one, or one named explicitly).

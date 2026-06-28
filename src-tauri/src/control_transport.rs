@@ -1,15 +1,15 @@
 //! Transport seam for the inter-pane control bus (ADR-0007 / PLAN M7.5).
 //!
 //! The line protocol — one JSON request line in, one JSON response line out — is platform-neutral
-//! and lives in `control.rs` (the relay) and `control_sock.rs` (the `th` / `th-mcp` client). This
+//! and lives in `control.rs` (the relay) and `control_sock.rs` (the `loom` / `loom mcp` client). This
 //! module is the ONLY place that knows *how the bytes travel*: a unix-domain socket today, behind
 //! `#[cfg(unix)]`. The Windows named-pipe transport (M7.5) drops in here behind `#[cfg(windows)]`
 //! by providing the same items — `Stream`, `Listener`, `endpoint`, `connect`, `bind`,
 //! `probe_alive` — so neither the relay nor the client changes. Splitting it out now (Linux-only)
 //! lets the seam be proven before any Windows code exists.
 //!
-//! Shared by the lib (`control.rs`) and both bins (`control_sock.rs`, pulled in via `#[path]`), so
-//! it stays std-only — no Tauri, matching `control_sock.rs`. The platform `Stream` must implement
+//! Shared by the relay (`control.rs`) and the CLI/MCP faces (via `control_sock.rs`), so it stays
+//! std-only — no Tauri, matching `control_sock.rs`. The platform `Stream` must implement
 //! `Read`/`Write` on a *shared* `&Stream` (as `UnixStream` does), so the relay can read and write
 //! over one borrowed handle without cloning it.
 
@@ -57,7 +57,7 @@ mod unix {
     /// Accepts connections via `.incoming()` (used by the relay's accept loop).
     pub type Listener = UnixListener;
 
-    /// The server's bind address, also injected to pane children as `$TERMHAUS_SOCK`. Prefer
+    /// The server's bind address, also injected to pane children as `$LOOM_SOCK`. Prefer
     /// `$XDG_RUNTIME_DIR` (a per-user, 0700 dir on every systemd Linux); fall back to a per-user
     /// name in `/tmp`. Same-user access is the whole trust boundary (ADR-0007) — the principals who
     /// can connect are exactly those who could already drive these terminals another way.
@@ -69,16 +69,16 @@ mod unix {
         if let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR") {
             let p = PathBuf::from(dir);
             if p.is_dir() {
-                return p.join("termhaus.sock");
+                return p.join("loom.sock");
             }
         }
         let who = std::env::var("USER")
             .or_else(|_| std::env::var("LOGNAME"))
             .unwrap_or_else(|_| "user".to_string());
-        std::env::temp_dir().join(format!("termhaus-{who}.sock"))
+        std::env::temp_dir().join(format!("loom-{who}.sock"))
     }
 
-    /// Connect to a running relay (the client reads the address from `$TERMHAUS_SOCK`).
+    /// Connect to a running relay (the client reads the address from `$LOOM_SOCK`).
     pub fn connect(addr: &str) -> io::Result<Stream> {
         UnixStream::connect(addr)
     }
@@ -101,7 +101,7 @@ mod unix {
 
 #[cfg(windows)]
 mod windows {
-    //! Windows transport over a **named pipe** (`\\.\pipe\termhaus-<user>`), the analogue of the
+    //! Windows transport over a **named pipe** (`\\.\pipe\loom-<user>`), the analogue of the
     //! unix UDS. Built on raw Win32 FFI (`windows-sys`) to avoid a cross-platform dependency. The
     //! pipe is created with an owner-only DACL — the Windows equivalent of the UDS `0600` chmod, so
     //! only the same user (plus the machine's admins, who could drive these terminals anyway) can
@@ -153,7 +153,7 @@ mod windows {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
-    /// The bus address, also injected to pane children as `$TERMHAUS_SOCK`. A per-user pipe name so
+    /// The bus address, also injected to pane children as `$LOOM_SOCK`. A per-user pipe name so
     /// two users' instances don't collide; the name is *not* the trust boundary (the DACL is), so a
     /// best-effort identity is enough. Non-alphanumerics are squashed to `_` (pipe names forbid `\`).
     pub fn endpoint() -> String {
@@ -167,7 +167,7 @@ mod windows {
             .chars()
             .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
             .collect();
-        format!(r"\\.\pipe\termhaus-{safe}")
+        format!(r"\\.\pipe\loom-{safe}")
     }
 
     /// Owns the security descriptor allocated by `ConvertStringSecurityDescriptor...`; freed with

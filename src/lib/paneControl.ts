@@ -1,5 +1,5 @@
 // Frontend half of the inter-pane control bus (ADR-0007). Rust relays each socket request to
-// the webview as a `termhaus://pane-cmd` event carrying an opaque JSON line; we parse it here,
+// the webview as a `loom://pane-cmd` event carrying an opaque JSON line; we parse it here,
 // do the routing (the part that must live in TS — names, the pane registry, layout mutation),
 // and hand the answer back through `pane_cmd_reply`. All product logic stays on this side; Rust
 // is just transport.
@@ -120,7 +120,7 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
 
 /** Block on a native confirm before letting an external pane spawn a command-running pane. Uses
  *  `window.confirm` (as the close-confirm path does) — synchronous, so dispatch's reply waits on
- *  the user's choice and the requesting `th spawn` only returns once they've decided. */
+ *  the user's choice and the requesting `loom spawn` only returns once they've decided. */
 function confirmExternalSpawn(command: string, cwd?: string): boolean {
   const where = cwd ? `\nin: ${cwd}` : "";
   return window.confirm(

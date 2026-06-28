@@ -1,4 +1,4 @@
-// Launch the user's external code editor, detached from Termhaus. A pure OS concern: the TS
+// Launch the user's external code editor, detached from Loom. A pure OS concern: the TS
 // side (src/lib/editor.ts) builds the argv — splitting the configured command, substituting the
 // target folder — and Rust just spawns it. No product logic here (CLAUDE.md), and nothing about
 // the pane's contents: this opens a folder, the same as `git`/`docs` reading a working dir.
@@ -36,7 +36,7 @@ fn resolve_program(program: &str) -> String {
     program.to_string()
 }
 
-/// Spawn `program` with `args` in `cwd`, detached: no stdio wired to Termhaus and not awaited, so
+/// Spawn `program` with `args` in `cwd`, detached: no stdio wired to Loom and not awaited, so
 /// a long-lived GUI editor keeps running independently. Used by the title-bar "Editor" button to
 /// open the user's editor at the focused pane's working folder.
 #[tauri::command]

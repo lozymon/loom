@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Termhaus",
+  "productName": "Loom",
   "version": "0.11.0",
-  "identifier": "com.termhaus.app",
+  "identifier": "com.loom.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Termhaus",
+        "title": "Loom",
         "width": 1200,
         "height": 760,
         "decorations": false,
@@ -28,7 +28,7 @@
     "targets": ["deb", "appimage"],
     "category": "Utility",
     "shortDescription": "A control room of live terminals",
-    "longDescription": "Termhaus is a Linux-first desktop terminal multiplexer: many real PTYs arranged in resizable split grids and a left workspace rail, tuned for driving fleets of CLI agents — including broadcast-input to prompt many panes at once.",
+    "longDescription": "Loom is a Linux-first desktop terminal multiplexer: many real PTYs arranged in resizable split grids and a left workspace rail, tuned for driving fleets of CLI agents — including broadcast-input to prompt many panes at once.",
     "linux": {
       "deb": {
         "depends": ["gnome-screenshot", "libayatana-appindicator3-1"]

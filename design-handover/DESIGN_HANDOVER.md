@@ -1,7 +1,7 @@
-# Termhaus — Design Handover
+# Loom — Design Handover
 
 > A self-contained brief for a **design session** (e.g. claude.ai/design). It
-> describes what Termhaus is, what it looks like today, the interaction model,
+> describes what Loom is, what it looks like today, the interaction model,
 > and the visual system — with annotated screenshots of every key surface.
 >
 > For engineering internals (PTYs, IPC, the Rust/TS split) see
@@ -12,7 +12,7 @@
 
 ---
 
-## 1. What Termhaus is (in one breath)
+## 1. What Loom is (in one breath)
 
 A **desktop "control room" of real terminals** — a GUI terminal multiplexer (a
 graphical tmux/Terminator) for running *many* command-line tools at once,
@@ -21,7 +21,7 @@ tuned for driving fleets of CLI agents, so it has a **broadcast bar** that types
 one prompt into many panes at once.
 
 **The single most important design constraint:** a *pane* is **opaque** —
-Termhaus renders the raw bytes of whatever program runs inside it (via a real
+Loom renders the raw bytes of whatever program runs inside it (via a real
 terminal emulator, xterm.js) and **never interprets that content**. So design
 work is about the **chrome around panes** (rail, title bars, grid gutters,
 panels, bars, modals) — *not* the contents of the terminals themselves.
@@ -128,8 +128,8 @@ Four built-in themes, shown as live "Ab" swatch tiles:
 
 | Theme | id | Background | Foreground | Cursor/accent |
 |---|---|---|---|---|
-| **Termhaus Dark** (default) | `dark` | `#1a1b1e` | `#e6e6e6` | `#5b8cff` |
-| **Termhaus Light** | `light` | `#ffffff` | `#1c1e22` | `#2f6bff` |
+| **Loom Dark** (default) | `dark` | `#1a1b1e` | `#e6e6e6` | `#5b8cff` |
+| **Loom Light** | `light` | `#ffffff` | `#1c1e22` | `#2f6bff` |
 | **Midnight** | `midnight` | `#0f1117` | `#e3e8f0` | `#6ea8fe` |
 | **Paper** | `paper` | `#faf7f0` | `#2b2620` | `#5a55d6` |
 

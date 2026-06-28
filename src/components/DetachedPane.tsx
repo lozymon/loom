@@ -73,7 +73,7 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
     const un = await getCurrentWindow().onCloseRequested(() => {
       // Hand this window's painted buffer back so the re-mounted grid pane replays it (vs blank).
       stashScrollback(props.handle, serialize);
-      void emit("termhaus://redock", { paneId: props.paneId });
+      void emit("loom://redock", { paneId: props.paneId });
     });
     onCleanup(un);
 

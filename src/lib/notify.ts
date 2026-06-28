@@ -1,11 +1,11 @@
 // Desktop notifications for the "needs you" signal. When a pane raises attention (a command
-// finished in an unfocused pane, or a process called `th attention`) and Termhaus itself isn't
+// finished in an unfocused pane, or a process called `loom attention`) and Loom itself isn't
 // the focused window, optionally surface an OS notification so a finished/blocked agent pulls you
 // back even when the app is in the background. Opt-in (settings.notifyOnAttention, default off)
 // and best-effort — any failure (no permission, headless, plugin missing) is swallowed.
 //
 // Metadata only: the trigger is the same attention flag as the in-app border (foreground-pgrp
-// fact or an inbound `th` command), never pane output (ADR-0001).
+// fact or an inbound `loom` command), never pane output (ADR-0001).
 
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -28,7 +28,7 @@ async function ensurePermission(): Promise<boolean> {
 
 /**
  * Fire a desktop notification that a pane needs you — but only when the user opted in AND the
- * Termhaus window isn't focused (no point interrupting someone already looking at the app; the
+ * Loom window isn't focused (no point interrupting someone already looking at the app; the
  * amber border is enough there). Call only on a *fresh* attention raise (noteAttention returned
  * true), so a pane already flagged doesn't re-notify on every poll.
  */

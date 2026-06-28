@@ -1,10 +1,10 @@
-# Termhaus
+# Loom
 
-[![CI](https://github.com/lozymon/termhaus/actions/workflows/ci.yml/badge.svg)](https://github.com/lozymon/termhaus/actions/workflows/ci.yml)
+[![CI](https://github.com/lozymon/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/lozymon/loom/actions/workflows/ci.yml)
 
-**A Linux-first desktop control room of real terminals** — a GUI terminal multiplexer (think a graphical tmux / Terminator) that runs many PTYs at once in resizable split grids and a left workspace rail. It's tuned for driving fleets of CLI agents: spawn a wall of terminals, watch which ones need you, and let one agent drive the others over the `th` control bus (including fanning a prompt to every pane with `th broadcast`).
+**A Linux-first desktop control room of real terminals** — a GUI terminal multiplexer (think a graphical tmux / Terminator) that runs many PTYs at once in resizable split grids and a left workspace rail. It's tuned for driving fleets of CLI agents: spawn a wall of terminals, watch which ones need you, and let one agent drive the others over the `loom` control bus (including fanning a prompt to every pane with `loom broadcast`).
 
-Generic first: a pane is just a real pseudo-terminal running *any* command — a shell, `claude`, a dev server, `tail -f`, `vim`. Termhaus never parses what a pane prints ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)); agents are simply the most interesting thing you can run in one.
+Generic first: a pane is just a real pseudo-terminal running *any* command — a shell, `claude`, a dev server, `tail -f`, `vim`. Loom never parses what a pane prints ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)); agents are simply the most interesting thing you can run in one.
 
 > Status: all milestones **M0–M6** complete. See [PLAN.md](PLAN.md) for the milestone-by-milestone build log and [docs/adr/](docs/adr/) for the architecture decisions.
 
@@ -14,10 +14,10 @@ Generic first: a pane is just a real pseudo-terminal running *any* command — a
 - **Split-grid layout** — a binary split tree per workspace: split any pane right/down, drag the gutters to resize, close to collapse and promote the sibling. Zoom a pane to fullscreen and back.
 - **Workspace rail** — group panes into workspaces on a left rail; switching keeps hidden workspaces' terminals alive.
 - **New-workspace wizard** — pick a working folder (with Recents) → tap a grid preset (1/2/4/6/8/10/12 terminals) → optionally set a per-pane launch command → go.
-- **Pane attention signals** — a per-pane status dot shows when a pane is running a command, produced output you haven't looked at, or rang the bell — so you can tell at a glance which of a fleet of agents needs you. A pane also lights an **amber "needs you" border** when a command finishes in a pane you weren't watching, or when a process inside it calls `th attention` (so an agent can flag itself the moment it's blocked on your input — see [Light a pane when an agent needs you](#light-a-pane-when-an-agent-needs-you)). Hidden workspaces flag activity on the rail. Optionally pop a **desktop notification** when a pane needs you while Termhaus is in the background (off by default; Settings → Notifications). (Metadata only — pane output is never parsed; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).)
+- **Pane attention signals** — a per-pane status dot shows when a pane is running a command, produced output you haven't looked at, or rang the bell — so you can tell at a glance which of a fleet of agents needs you. A pane also lights an **amber "needs you" border** when a command finishes in a pane you weren't watching, or when a process inside it calls `loom attention` (so an agent can flag itself the moment it's blocked on your input — see [Light a pane when an agent needs you](#light-a-pane-when-an-agent-needs-you)). Hidden workspaces flag activity on the rail. Optionally pop a **desktop notification** when a pane needs you while Loom is in the background (off by default; Settings → Notifications). (Metadata only — pane output is never parsed; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).)
 - **Overview mode** (`Ctrl+Shift+O`) — reflow the active workspace into a uniform tile wall to triage a whole fleet at a glance (agent badges, attention borders, and timers stay visible); click a tile or press Esc to drop back to the split grid. The terminals keep running — it's a view, not a re-layout.
 - **Command palette** (`Ctrl+Shift+P`) — fuzzy-search every action plus jump-to-pane-by-name across all workspaces.
-- **Inter-pane control bus** — a process *inside* a pane (e.g. a `claude` CLI) can drive the others with the bundled `th` command: `th list`, `th send`, `th spawn`, `th read` (capture another pane's scrollback), `th broadcast`, `th focus`, and `th attention` (light a pane's "needs you" border). One agent can kick off, prompt, and read back from another, without Termhaus ever parsing pane output ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
+- **Inter-pane control bus** — a process *inside* a pane (e.g. a `claude` CLI) can drive the others with the bundled `loom` command: `loom list`, `loom send`, `loom spawn`, `loom read` (capture another pane's scrollback), `loom broadcast`, `loom focus`, and `loom attention` (light a pane's "needs you" border). One agent can kick off, prompt, and read back from another, without Loom ever parsing pane output ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
 - **Drag to rearrange** — grab a pane's title-bar grip and drop it on another to swap their grid positions (the terminals keep running).
 - **Presets** — save a workspace (folder + layout + per-pane commands) and relaunch it in one click.
 - **Persistence** — workspaces, layouts, and per-pane intent are saved as JSON and respawned on launch (intent, not scrollback — terminals are ephemeral).
@@ -27,11 +27,11 @@ Generic first: a pane is just a real pseudo-terminal running *any* command — a
 - **Terminal polish** — OS clipboard copy/paste, scrollback search, clickable web links, unicode11 widths, a focus ring, and pane titles that show the **current folder** (double-click to set a custom name; full path on hover, git branch alongside).
 - **Settings & rebindable keys** — a tabbed Settings page (Appearance / Terminal / Keys): theme, font, cursor, scrollback, default shell/cwd, and every shortcut is rebindable within the `Ctrl+Shift` namespace.
 - **Themes** — light and dark out of the box plus extra palettes (Midnight, Paper), switched from the rail and remembered across restarts. Each theme styles both the app chrome and the terminals; adding one is a CSS `[data-theme]` block + a registry entry (`src/lib/theme.ts`).
-- **Plain keys pass through** — Termhaus claims only the `Ctrl+Shift` namespace ([ADR-0005](docs/adr/0005-ctrl-shift-shortcut-namespace.md)); everything else (plain `Ctrl+C` → SIGINT, arrows, function keys, `tmux`/`vim` keys) reaches the pane untouched.
+- **Plain keys pass through** — Loom claims only the `Ctrl+Shift` namespace ([ADR-0005](docs/adr/0005-ctrl-shift-shortcut-namespace.md)); everything else (plain `Ctrl+C` → SIGINT, arrows, function keys, `tmux`/`vim` keys) reaches the pane untouched.
 
 ## AI agents — bring your own CLI
 
-A pane is just a real terminal, so any agent that ships a **command-line tool** runs in Termhaus today with no integration work — launch it from the wizard's per-pane command, type it into a shell, or `th spawn` it. There's no standard API and Termhaus doesn't need one: it never parses pane output ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)), so a CLI agent is just a command.
+A pane is just a real terminal, so any agent that ships a **command-line tool** runs in Loom today with no integration work — launch it from the wizard's per-pane command, type it into a shell, or `loom spawn` it. There's no standard API and Loom doesn't need one: it never parses pane output ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)), so a CLI agent is just a command.
 
 Known to work because they're terminal-native:
 
@@ -45,7 +45,7 @@ Known to work because they're terminal-native:
 | Aider (model-agnostic) | `aider` |
 | Cursor (headless) | `cursor-agent` |
 
-Run a fleet of them side by side and let one agent drive the others over the `th` control bus — including fanning a prompt to every pane with `th broadcast`. When a pane is launched as one of these, its title bar shows a small **agent badge** so you can tell at a glance which terminal is running which assistant. (Derived from the pane's launch command — still no output parsing; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).) The wizard's Agents step has a quick-fill dropdown for the same list.
+Run a fleet of them side by side and let one agent drive the others over the `loom` control bus — including fanning a prompt to every pane with `loom broadcast`. When a pane is launched as one of these, its title bar shows a small **agent badge** so you can tell at a glance which terminal is running which assistant. (Derived from the pane's launch command — still no output parsing; [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md).) The wizard's Agents step has a quick-fill dropdown for the same list.
 
 **Not a fit:** editor-only assistants that live inside VS Code / JetBrains (the classic Copilot autocomplete, Cline, Continue, Windsurf) — they speak an editor-extension protocol, not a terminal, so there's no command to host. Raw HTTP model APIs likewise aren't supported directly; run a CLI that wraps them (e.g. Aider) instead of building a chat client into a pane.
 
@@ -80,28 +80,28 @@ You can also double-click a pane's title to rename it.
 
 ## Driving panes from inside a pane
 
-Every pane's process gets a `th` CLI on its `PATH` and a few env vars (`$TERMHAUS_SOCK`, and `$TERMHAUS_PANE` — its own name). So a CLI agent running in one pane can orchestrate the others:
+Every pane's process gets a `loom` CLI on its `PATH` and a few env vars (`$LOOM_SOCK`, and `$LOOM_PANE` — its own name). So a CLI agent running in one pane can orchestrate the others:
 
 ```bash
-th list                                   # every pane: name, live/dead, workspace
-th send Cleo claude "investigate the auth bug"   # type into pane "Cleo" + press Enter
-th send Cleo --no-enter ls                # type without the trailing newline
-echo "$PROMPT" | th send Cleo             # no text arg → reads stdin
-th spawn --name Cleo --cwd /repo claude   # open a NEW pane running a command
-th read Cleo -n 100                        # capture Cleo's last 100 scrollback lines
-th broadcast "run the tests"              # send to every live pane in the active workspace
-th focus Cleo                              # switch to Cleo's workspace and focus it
-th attention                              # light THIS pane's "needs you" border (clears on focus)
-th attention Cleo --clear                 # drop pane Cleo's border
+loom list                                   # every pane: name, live/dead, workspace
+loom send Cleo claude "investigate the auth bug"   # type into pane "Cleo" + press Enter
+loom send Cleo --no-enter ls                # type without the trailing newline
+echo "$PROMPT" | loom send Cleo             # no text arg → reads stdin
+loom spawn --name Cleo --cwd /repo claude   # open a NEW pane running a command
+loom read Cleo -n 100                        # capture Cleo's last 100 scrollback lines
+loom broadcast "run the tests"              # send to every live pane in the active workspace
+loom focus Cleo                              # switch to Cleo's workspace and focus it
+loom attention                              # light THIS pane's "needs you" border (clears on focus)
+loom attention Cleo --clear                 # drop pane Cleo's border
 ```
 
-It works over a per-user unix socket (`$XDG_RUNTIME_DIR/termhaus.sock`, mode 0600): Rust is a pure relay, all routing/naming/spawn logic lives in the frontend, and pane *output* is never parsed — this is an inbound command channel, distinct from the opacity rule ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md) / [ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
+It works over a per-user unix socket (`$XDG_RUNTIME_DIR/loom.sock`, mode 0600): Rust is a pure relay, all routing/naming/spawn logic lives in the frontend, and pane *output* is never parsed — this is an inbound command channel, distinct from the opacity rule ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md) / [ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
 
-See **[docs/cli.md](docs/cli.md)** for the full `th` command reference (every flag, `th status`, `th hooks`), and **[docs/agent-mcp.md](docs/agent-mcp.md)** / **[docs/agent-hooks.md](docs/agent-hooks.md)** for the model-native MCP tools and the auto-status hooks.
+See **[docs/cli.md](docs/cli.md)** for the full `loom` command reference (every flag, `loom status`, `loom hooks`), and **[docs/agent-mcp.md](docs/agent-mcp.md)** / **[docs/agent-hooks.md](docs/agent-hooks.md)** for the model-native MCP tools and the auto-status hooks.
 
 ### Light a pane when an agent needs you
 
-Termhaus can't tell "an agent is waiting for your answer" from "an agent is working" just by watching the process — both are a live foreground command, and pane output is never parsed ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)). So the agent flags itself: a single `th attention` call lights its pane's amber border, which clears the moment you focus it.
+Loom can't tell "an agent is waiting for your answer" from "an agent is working" just by watching the process — both are a live foreground command, and pane output is never parsed ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)). So the agent flags itself: a single `loom attention` call lights its pane's amber border, which clears the moment you focus it.
 
 Claude Code can do this automatically with hooks. Add to `~/.claude/settings.json`:
 
@@ -109,16 +109,16 @@ Claude Code can do this automatically with hooks. Add to `~/.claude/settings.jso
 {
   "hooks": {
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "th attention 2>/dev/null || true" } ] }
+      { "hooks": [ { "type": "command", "command": "loom attention 2>/dev/null || true" } ] }
     ],
     "Notification": [
-      { "hooks": [ { "type": "command", "command": "th attention 2>/dev/null || true" } ] }
+      { "hooks": [ { "type": "command", "command": "loom attention 2>/dev/null || true" } ] }
     ]
   }
 }
 ```
 
-`Stop` fires when Claude finishes and yields back to you; `Notification` fires when it wants permission. The hook runs inside the pane, so `$TERMHAUS_SOCK`/`$TERMHAUS_PANE` are already set and `th` is on `PATH` (the `2>/dev/null || true` makes it a no-op when run outside Termhaus). Any agent with a "done"/"needs input" hook — or even a plain `&& th attention` after a long shell command — works the same way.
+`Stop` fires when Claude finishes and yields back to you; `Notification` fires when it wants permission. The hook runs inside the pane, so `$LOOM_SOCK`/`$LOOM_PANE` are already set and `loom` is on `PATH` (the `2>/dev/null || true` makes it a no-op when run outside Loom). Any agent with a "done"/"needs input" hook — or even a plain `&& loom attention` after a long shell command — works the same way.
 
 ## Getting started
 
@@ -145,7 +145,7 @@ npm run tauri dev      # opens the window; starts Vite + the Rust shell
 npm run tauri build    # release binary + bundles (.deb, AppImage)
 ```
 
-Artifacts land in `src-tauri/target/release/bundle/` (e.g. `deb/Termhaus_<version>_amd64.deb`). The `.deb` declares its WebKitGTK/GTK runtime deps automatically. The AppImage bundler downloads helper tools from GitHub on first run, so it needs network access.
+Artifacts land in `src-tauri/target/release/bundle/` (e.g. `deb/Loom_<version>_amd64.deb`). The `.deb` declares its WebKitGTK/GTK runtime deps automatically. The AppImage bundler downloads helper tools from GitHub on first run, so it needs network access.
 
 ## Project structure
 
@@ -154,18 +154,20 @@ src/                         SolidJS frontend (all UX + state)
   components/                Terminal, LayoutNode, WorkspaceRail, NewWorkspaceWizard, Settings, GitPanel
   stores/workspace.ts        normalized store: workspaces, trees, panes, focus/zoom, presets
   lib/                       grid (balanced tree + names), layout (geometry + neighbour),
-                             ptyClient, paneRegistry, paneControl (th relay handler), persist, theme
+                             ptyClient, paneRegistry, paneControl (loom relay handler), persist, theme
   ipc/protocol.ts            shared types: PaneId, PaneSpec, LayoutNode, Workspace, command names
 src-tauri/src/               Rust shell (PTY engine + OS concerns)
   pty.rs                     PtyManager: spawn, reader/flusher coalescing, write/resize/kill, reaping
   control.rs                 inter-pane control bus: unix-socket relay + pane_cmd_reply
-  bin/th.rs                  the `th` control CLI (a second binary)
+  main.rs                    one binary, three faces: GUI / control CLI / `loom mcp` dispatch
+  cli.rs                     the `loom` control CLI (a face of the loom binary)
+  mcp.rs                     the `loom mcp` MCP server (a face of the loom binary)
   lib.rs                     Tauri command handlers + Channel wiring (the frontend contract)
   workspace.rs               schema-agnostic JSON state load/save
 docs/adr/                    architecture decision records
-docs/cli.md                  the `th` inter-pane control CLI reference
-docs/agent-mcp.md            the `th-mcp` MCP server (agent tools)
-docs/agent-hooks.md          wire a Claude Code agent into Termhaus
+docs/cli.md                  the `loom` inter-pane control CLI reference
+docs/agent-mcp.md            the `loom mcp` MCP server (agent tools)
+docs/agent-hooks.md          wire a Claude Code agent into Loom
 docs/troubleshooting.md      file locations, rendering, control-bus, build fixes
 PLAN.md                      the milestone-by-milestone build plan + status
 CHANGELOG.md                 release-by-release change log
@@ -181,7 +183,7 @@ A few decisions shape most of the code:
 - **Flat, PaneId-keyed render layer** — the split tree is flattened into absolutely-positioned panes rather than a recursive flex tree, so splitting or closing never remounts a pane's `<Terminal>` and its PTY survives.
 - **Login shells** — every pane runs `$SHELL -l(c)` so PATH / rc files / version managers load, even when launched from a desktop entry ([ADR-0004](docs/adr/0004-launch-via-login-interactive-shell.md)).
 - **Persist intent, not scrollback** — on restart the trees rebuild and each pane re-runs its command in its cwd.
-- **Inter-pane control = relay in Rust, routing in TS** — the `th` CLI talks to a unix socket; Rust forwards the raw request to the webview and writes back the reply, never parsing the protocol; name resolution, writes, and `spawn` layout mutation stay in TypeScript ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
+- **Inter-pane control = relay in Rust, routing in TS** — the `loom` CLI talks to a unix socket; Rust forwards the raw request to the webview and writes back the reply, never parsing the protocol; name resolution, writes, and `spawn` layout mutation stay in TypeScript ([ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
 
 ## License
 

@@ -8,7 +8,7 @@
 
 ## TL;DR
 
-Termhaus is a **Linux-first GUI terminal multiplexer** (a GUI tmux/Terminator)
+Loom is a **Linux-first GUI terminal multiplexer** (a GUI tmux/Terminator)
 for driving fleets of CLI agents: many real PTYs in resizable split grids with a
 left workspace rail and broadcast-input. It is **implemented and shipping** —
 the whole M0–M11 plan *and* the IDEAS.md follow-up roadmap are done. Treat new
@@ -44,9 +44,10 @@ cargo clippy           # lints
 cargo fmt --check      # CI enforces rustfmt (there's also an auto-format hook)
 ```
 
-The Rust crate builds the app **plus two extra binaries**: `th` (inter-pane
-control CLI, ADR-0007) and `th-mcp` (MCP server) — both std + serde_json only,
-sharing `src-tauri/src/control_sock.rs`.
+The Rust crate builds a **single `loom` binary** with three faces (chosen by the first
+arg in `main.rs`): the GUI, the inter-pane control CLI (ADR-0007), and the MCP server
+(`loom mcp`). The CLI/MCP faces (`cli.rs`/`mcp.rs`) are std + serde_json only and share
+`src-tauri/src/control_sock.rs`.
 
 ## The architecture rules that bite if ignored
 
@@ -65,7 +66,7 @@ change:
    tick *or* 32–64KB, whichever first; bounded/drop buffers. **Do not regress the
    coalescing/back-pressure in `pty.rs`** (ADR-0003, ADR-0006). Canvas renderer,
    not WebGL (ADR-0006).
-5. **Panes are opaque** — Termhaus never parses pane *output* (ADR-0001). The
+5. **Panes are opaque** — Loom never parses pane *output* (ADR-0001). The
    inter-pane control bus (ADR-0007) is an *inbound* command channel and is the
    only exception; Rust is a pure socket relay, routing stays in TS.
 6. **Persist intent, not scrollback** — `workspaces.json` stores trees + per-pane
@@ -75,10 +76,11 @@ change:
 
 ## Where things live (the map)
 
-**Rust (`src-tauri/src/`):** `pty.rs` (PtyManager) · `lib.rs` (command handlers +
-Channel wiring + tray/plugin setup) · `control.rs` + `bin/th.rs` (control bus +
-CLI) · `bin/th-mcp.rs` (MCP server) · `control_sock.rs` · `tray.rs` · `git.rs` ·
-`docs.rs` · `logs.rs` · `capture.rs` · `workspace.rs`.
+**Rust (`src-tauri/src/`):** `pty.rs` (PtyManager) · `main.rs` (GUI/CLI/MCP dispatch) ·
+`lib.rs` (command handlers + Channel wiring + tray/plugin setup) · `control.rs` (control
+bus relay) · `cli.rs` (the `loom` CLI) · `mcp.rs` (the `loom mcp` MCP server) ·
+`control_sock.rs` · `tray.rs` · `git.rs` · `docs.rs` · `logs.rs` · `capture.rs` ·
+`workspace.rs`.
 
 **Frontend (`src/`):** `ipc/protocol.ts` (shared types/commands) · `lib/ptyClient.ts` ·
 `lib/paneControl.ts` (bus routing) · `lib/detach.ts` (multi-window tear-off) ·
@@ -97,7 +99,7 @@ into CI (`cargo test`). UI/integration is not unit-tested — verify by running.
 - **New shortcut** → add an action to `lib/keybindings.ts`, wire *both* dispatch
   maps (App global + Terminal). Shortcut namespace is `Ctrl+Shift+…` (ADR-0005).
 - **New bus op** → extend `ControlRequest` in `protocol.ts`, handle in
-  `paneControl.ts`, add a `th` / `th-mcp` front-end.
+  `paneControl.ts`, add a `loom` / `loom mcp` front-end.
 
 ## Source-of-truth docs
 
@@ -111,7 +113,7 @@ into CI (`cargo test`). UI/integration is not unit-tested — verify by running.
   0006 canvas not WebGL · 0007 inter-pane control bus.
 - [docs/IDEAS.md](docs/IDEAS.md) — post-v1 feature log (each item has "✅ Built as").
 - [docs/agent-hooks.md](docs/agent-hooks.md) · [docs/agent-mcp.md](docs/agent-mcp.md)
-  — the `th hooks` + `th-mcp` integration arc.
+  — the `loom hooks` + `loom mcp` integration arc.
 - [docs/PRE_WINDOWS_CHECKLIST.md](docs/PRE_WINDOWS_CHECKLIST.md) ·
   [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 

@@ -35,7 +35,7 @@
   <div style="height:50px;flex:none;display:flex;align-items:center;padding:0 18px;z-index:5">
     <div class="clk navitem" onClick="{{ goOverview }}" style="display:flex;align-items:center;gap:10px">
       <div style="width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 30% 30%, {{ accentText }}, {{ accent }})"></div>
-      <span style="font-weight:600;font-size:14.5px;letter-spacing:-.01em;color:{{ bright }}">Termhaus</span>
+      <span style="font-weight:600;font-size:14.5px;letter-spacing:-.01em;color:{{ bright }}">Loom</span>
     </div>
     <nav style="display:flex;gap:24px;margin-left:34px;font-size:13px">
       <span class="navitem" onClick="{{ goOverview }}" style="color:{{ nav.overview }}">Overview</span>
@@ -61,10 +61,10 @@
         <div class="clk" onClick="{{ openLauncher }}" style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:{{ dim }};font-size:16px;font-weight:300">+</div>
       </div>
 
-      <div class="wsrow clk" onClick="{{ wsTermhausFn }}" style="display:flex;align-items:center;gap:11px;height:44px;padding:0 14px;border-radius:12px;background:{{ railTermhausBg }};color:{{ railTermhausText }}">
-        <div class="livedot" style="width:6px;height:6px;border-radius:50%;background:{{ accent }};flex:none;box-shadow:{{ railTermhausGlow }}"></div>
-        <span style="flex:1;font-size:13.5px;font-weight:500">Termhaus</span>
-        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ railTermhausCount }}">4</span>
+      <div class="wsrow clk" onClick="{{ wsLoomFn }}" style="display:flex;align-items:center;gap:11px;height:44px;padding:0 14px;border-radius:12px;background:{{ railLoomBg }};color:{{ railLoomText }}">
+        <div class="livedot" style="width:6px;height:6px;border-radius:50%;background:{{ accent }};flex:none;box-shadow:{{ railLoomGlow }}"></div>
+        <span style="flex:1;font-size:13.5px;font-weight:500">Loom</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ railLoomCount }}">4</span>
       </div>
 
       <div class="wsrow clk" onClick="{{ wsFleetFn }}" style="display:flex;align-items:center;gap:11px;height:44px;padding:0 14px;border-radius:12px;background:{{ railFleetBg }};color:{{ railFleetText }}">
@@ -98,8 +98,8 @@
 
         <div style="flex:1;display:flex;flex-direction:column;min-width:0">
 
-          <!-- TERMHAUS — hero 4-pane -->
-          <sc-if value="{{ wsTermhaus }}" hint-placeholder-val="{{ true }}">
+          <!-- LOOM — hero 4-pane -->
+          <sc-if value="{{ wsLoom }}" hint-placeholder-val="{{ true }}">
           <div style="flex:1;display:grid;grid-template-columns:{{ gridCols }};grid-template-rows:1fr 1fr;gap:14px;min-height:0">
 
             <div class="pane" style="position:relative;background:{{ surface }};border-radius:14px;overflow:hidden;box-shadow:{{ focusRingShadow }}">
@@ -263,7 +263,7 @@
             <span style="padding:5px 11px;border-radius:7px;color:{{ mid }}">CONTRIBUTING.md</span>
           </div>
           <div style="flex:1;min-height:0;overflow:auto;padding:22px 24px;line-height:1.6">
-            <div style="font-size:21px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px">Termhaus</div>
+            <div style="font-size:21px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px">Loom</div>
             <div style="font-size:13.5px;color:{{ mid }};margin-bottom:20px">A control room of real terminals — a graphical multiplexer for driving fleets of CLI agents.</div>
             <div style="font-size:12.5px;font-weight:600;color:{{ bright }};margin-bottom:8px">Getting started</div>
             <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:{{ well }};border:1px solid {{ hair }};border-radius:8px;padding:12px 14px;color:{{ working }};margin-bottom:18px">$ pnpm install<br>$ pnpm tauri dev</div>
@@ -291,11 +291,11 @@
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:34px">
               <div class="clk" onClick="{{ setThemeDark }}" style="border-radius:12px;overflow:hidden;box-shadow:{{ tileDark }}">
                 <div style="height:84px;background:#1a1b1e;display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#e6e6e6">Ab</span><div style="position:absolute;bottom:10px;right:10px;width:14px;height:14px;border-radius:50%;background:#5b8cff"></div></div>
-                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;font-weight:500;color:{{ bright }}">Termhaus Dark</div>
+                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;font-weight:500;color:{{ bright }}">Loom Dark</div>
               </div>
               <div class="clk" onClick="{{ setThemeLight }}" style="border-radius:12px;overflow:hidden;box-shadow:{{ tileLight }}">
                 <div style="height:84px;background:#ffffff;display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#1c1e22">Ab</span><div style="position:absolute;bottom:10px;right:10px;width:14px;height:14px;border-radius:50%;background:#2f6bff"></div></div>
-                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;color:{{ bright }}">Termhaus Light</div>
+                <div style="padding:10px 12px;background:{{ surface }};font-size:12.5px;color:{{ bright }}">Loom Light</div>
               </div>
               <div class="clk" onClick="{{ setThemeMidnight }}" style="border-radius:12px;overflow:hidden;box-shadow:{{ tileMidnight }}">
                 <div style="height:84px;background:#0f1117;display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#e3e8f0">Ab</span><div style="position:absolute;bottom:10px;right:10px;width:14px;height:14px;border-radius:50%;background:#6ea8fe"></div></div>
@@ -387,8 +387,8 @@
         <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><span style="color:{{ dim }};width:16px">⊞</span><span style="flex:1;font-size:13.5px">Split pane down</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">Ctrl+Shift+E</span></div>
         <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><span style="color:{{ dim }};width:16px">⤢</span><span style="flex:1;font-size:13.5px">Zoom focused pane</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ mid }}">Ctrl+Shift+Enter</span></div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:{{ faint }};padding:14px 12px 6px">GO TO PANE</div>
-        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><div class="livedot" style="width:7px;height:7px;border-radius:50%;background:{{ working }};margin:0 5px"></div><span style="flex:1;font-size:13.5px">Termhaus / Faye <span style="color:{{ faint }};font-family:'IBM Plex Mono',monospace;font-size:11.5px">⎇ main</span></span></div>
-        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><div style="width:7px;height:7px;border-radius:50%;background:{{ needs }};margin:0 5px"></div><span style="flex:1;font-size:13.5px">Termhaus / Wade <span style="color:{{ needs }};font-family:'IBM Plex Mono',monospace;font-size:11.5px">needs you</span></span></div>
+        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><div class="livedot" style="width:7px;height:7px;border-radius:50%;background:{{ working }};margin:0 5px"></div><span style="flex:1;font-size:13.5px">Loom / Faye <span style="color:{{ faint }};font-family:'IBM Plex Mono',monospace;font-size:11.5px">⎇ main</span></span></div>
+        <div class="clk" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px"><div style="width:7px;height:7px;border-radius:50%;background:{{ needs }};margin:0 5px"></div><span style="flex:1;font-size:13.5px">Loom / Wade <span style="color:{{ needs }};font-family:'IBM Plex Mono',monospace;font-size:11.5px">needs you</span></span></div>
       </div>
     </div>
   </div>
@@ -407,12 +407,12 @@
           <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;color:{{ faint }}">WHERE</div>
           <div>
             <div style="font-size:12.5px;color:{{ mid }};margin-bottom:8px">Workspace name</div>
-            <div style="height:38px;border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ accent }};display:flex;align-items:center;padding:0 13px;font-size:13.5px">Termhaus<span class="cursor" style="display:inline-block;width:7px;height:15px;background:{{ dim }};vertical-align:middle;margin-left:2px"></span></div>
+            <div style="height:38px;border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ accent }};display:flex;align-items:center;padding:0 13px;font-size:13.5px">Loom<span class="cursor" style="display:inline-block;width:7px;height:15px;background:{{ dim }};vertical-align:middle;margin-left:2px"></span></div>
           </div>
           <div>
             <div style="font-size:12.5px;color:{{ mid }};margin-bottom:8px">Working folder</div>
             <div style="display:flex;gap:8px">
-              <div style="flex:1;height:38px;border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ chipBorder }};display:flex;align-items:center;padding:0 13px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ mid }}">~/code/termhaus</div>
+              <div style="flex:1;height:38px;border-radius:9px;background:{{ well }};box-shadow:inset 0 0 0 1px {{ chipBorder }};display:flex;align-items:center;padding:0 13px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:{{ mid }}">~/code/loom</div>
               <div style="height:38px;padding:0 14px;border-radius:9px;background:{{ tintWeak }};display:flex;align-items:center;font-size:12.5px;color:{{ bright }}">Browse…</div>
             </div>
             <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap">
@@ -471,7 +471,7 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;paneControls&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;On hover&quot;,&quot;Always&quot;],&quot;default&quot;:&quot;On hover&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;liveGlow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
 class Component extends DCLogic {
-  state = { ws:'termhaus', theme:'dark', nav:'overview', panel:null, overlay:null, settingsTab:'appearance', targetsOpen:false, scope:'all' };
+  state = { ws:'loom', theme:'dark', nav:'overview', panel:null, overlay:null, settingsTab:'appearance', targetsOpen:false, scope:'all' };
 
   renderVals() {
     const P = {
@@ -549,11 +549,11 @@ class Component extends DCLogic {
       nav:{ overview:navColor('overview'), palette:navColor('palette'), git:navColor('git'), preview:navColor('preview'), docs:navColor('docs'), settings:navColor('settings') },
 
       showGrid: !isSettings, showSettings: isSettings, showCmdBar: !isSettings && s.ws!=='scratch',
-      wsTermhaus: s.ws==='termhaus', wsFleet: s.ws==='fleet', wsScratch: s.ws==='scratch',
+      wsLoom: s.ws==='loom', wsFleet: s.ws==='fleet', wsScratch: s.ws==='scratch',
       panelGit:s.panel==='git', panelPreview:s.panel==='preview', panelDocs:s.panel==='docs',
       overlayPalette:s.overlay==='palette', overlayLauncher:s.overlay==='launcher',
 
-      railTermhausBg:railBg('termhaus'), railTermhausText:railText('termhaus'), railTermhausCount:railCount('termhaus'), railTermhausGlow: (glowOn && s.ws==='termhaus')?`0 0 8px rgba(${t.glow},.85)`:'none',
+      railLoomBg:railBg('loom'), railLoomText:railText('loom'), railLoomCount:railCount('loom'), railLoomGlow: (glowOn && s.ws==='loom')?`0 0 8px rgba(${t.glow},.85)`:'none',
       railFleetBg:railBg('fleet'), railFleetText:railText('fleet'), railFleetCount:railCount('fleet'),
       railScratchBg:railBg('scratch'), railScratchText:railText('scratch'),
 
@@ -574,10 +574,10 @@ class Component extends DCLogic {
       openDocs:()=>this.setState({nav:'overview',panel:this.state.panel==='docs'?null:'docs',overlay:null}),
       closePanel:()=>this.setState({panel:null}),
       closeOverlay:()=>this.setState({overlay:null}),
-      wsTermhausFn:()=>this.setState({ws:'termhaus',nav:'overview'}),
+      wsLoomFn:()=>this.setState({ws:'loom',nav:'overview'}),
       wsFleetFn:()=>this.setState({ws:'fleet',nav:'overview'}),
       wsScratchFn:()=>this.setState({ws:'scratch',nav:'overview'}),
-      createScratch:()=>this.setState({overlay:null,ws:'termhaus',nav:'overview'}),
+      createScratch:()=>this.setState({overlay:null,ws:'loom',nav:'overview'}),
       tabAppearanceFn:()=>this.setState({settingsTab:'appearance'}),
       tabKeysFn:()=>this.setState({settingsTab:'keys'}),
       setThemeDark:()=>this.setState({theme:'dark'}),

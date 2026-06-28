@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "th attention"
+            "command": "loom attention"
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "th status"
+            "command": "loom status"
           }
         ]
       }
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "th status working"
+            "command": "loom status working"
           }
         ]
       }

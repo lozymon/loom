@@ -18,14 +18,14 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::control_transport::{self, Stream};
 
-/// The control-bus address, also injected to pane children as `$TERMHAUS_SOCK`. Re-exported from
+/// The control-bus address, also injected to pane children as `$LOOM_SOCK`. Re-exported from
 /// the transport seam so `pty.rs` keeps a single call site (`control::endpoint()`).
 pub use crate::control_transport::endpoint;
 
 /// How long a parked socket connection waits for the webview's reply before giving up.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(10);
 /// The Tauri event the relay emits to the webview for each inbound request.
-const EVENT: &str = "termhaus://pane-cmd";
+const EVENT: &str = "loom://pane-cmd";
 
 /// Socket connections parked while the frontend handles their request, keyed by request id.
 /// The accept thread inserts a sender and blocks on the matching receiver; `pane_cmd_reply`
@@ -54,7 +54,7 @@ impl PendingReplies {
     }
 }
 
-/// Payload carried by the `termhaus://pane-cmd` event: the raw request line plus the id the
+/// Payload carried by the `loom://pane-cmd` event: the raw request line plus the id the
 /// frontend must echo back via `pane_cmd_reply`.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -63,26 +63,12 @@ struct ControlEvent {
     request: String,
 }
 
-/// Absolute path to the `th` CLI, which sits beside the running app binary in `target/…`
-/// (dev) or the install bindir (packaged). `None` if it isn't built yet — the bus still
-/// works, callers just have to invoke the socket directly.
-pub fn cli_path() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    // `EXE_SUFFIX` is ".exe" on Windows, "" on Unix — the sibling binary is `th.exe` there.
-    let cand = exe
-        .parent()?
-        .join(format!("th{}", std::env::consts::EXE_SUFFIX));
-    cand.exists().then_some(cand)
-}
-
-/// Absolute path to the `th-mcp` MCP server, beside the app binary like `th`. `None` if it isn't
-/// built. Exposed to pane children as `$TERMHAUS_MCP` so an agent's `.mcp.json` can point at it.
-pub fn mcp_path() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let cand = exe
-        .parent()?
-        .join(format!("th-mcp{}", std::env::consts::EXE_SUFFIX));
-    cand.exists().then_some(cand)
+/// Absolute path to the running `loom` binary. The control CLI and the MCP server are subcommands
+/// of it now (`loom <cmd>`, `loom mcp`), so this is the single thing panes need on PATH and in
+/// `$LOOM_BIN` (e.g. for an agent's `.mcp.json` to launch `loom mcp`). `None` only if the OS can't
+/// resolve our own executable path, in which case the bus still works via the raw socket.
+pub fn loom_bin() -> Option<PathBuf> {
+    std::env::current_exe().ok()
 }
 
 /// Bind the socket and start accepting on a background thread.
@@ -96,7 +82,7 @@ pub fn start(app: AppHandle, pending: Arc<PendingReplies>) {
     let addr = control_transport::endpoint();
     if control_transport::probe_alive(&addr) {
         eprintln!(
-            "termhaus: another instance already owns the control socket at {addr}; bus disabled here"
+            "loom: another instance already owns the control socket at {addr}; bus disabled here"
         );
         return;
     }
@@ -105,7 +91,7 @@ pub fn start(app: AppHandle, pending: Arc<PendingReplies>) {
     let listener = match control_transport::bind(&addr) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("termhaus: inter-pane control socket unavailable ({e}); bus disabled");
+            eprintln!("loom: inter-pane control socket unavailable ({e}); bus disabled");
             return;
         }
     };
@@ -122,7 +108,7 @@ pub fn start(app: AppHandle, pending: Arc<PendingReplies>) {
 
 /// Read one newline-delimited request line, relay it to the webview, and write back the one
 /// response line the frontend produces. Errors and timeouts become an `ok:false` response so
-/// `th` never hangs a pane.
+/// `loom` never hangs a pane.
 fn handle_conn(stream: Stream, app: AppHandle, pending: Arc<PendingReplies>) {
     // `&Stream` reads and writes (UnixStream impls Read/Write for shared refs), so one handle
     // serves the whole request/response exchange without cloning.

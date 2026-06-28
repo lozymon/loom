@@ -1,10 +1,13 @@
 mod capture;
+pub mod cli;
 mod control;
+mod control_sock;
 mod control_transport;
 mod docs;
 mod editor;
 mod git;
 mod logs;
+pub mod mcp;
 mod pty;
 mod tray;
 mod workspace;
@@ -137,7 +140,7 @@ pub fn run() {
             control::start(app.handle().clone(), pending.clone());
             // System tray (summon/hide). A missing tray host (some Linux sessions) is non-fatal.
             if let Err(e) = tray::build(app) {
-                eprintln!("termhaus: system tray unavailable ({e})");
+                eprintln!("loom: system tray unavailable ({e})");
             }
             Ok(())
         })

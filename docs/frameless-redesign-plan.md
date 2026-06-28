@@ -1,6 +1,6 @@
 # Frameless redesign — implementation plan
 
-Recreate the **Frameless** chrome redesign (`docs/design_handoff_termhaus_frameless/`) in the
+Recreate the **Frameless** chrome redesign (`docs/design_handoff_loom_frameless/`) in the
 live SolidJS frontend. This is a **visual/chrome refactor**, not a rebuild: every surface the
 design covers already exists as a component. We re-skin the token layer, restructure the pane
 card (the one real structural change), and tune each surface to the spec.
@@ -131,7 +131,7 @@ controls reveal on hover and respect the always-show setting.
 **TitleBar.tsx** (already has the nav + window controls — re-skin only):
 
 - 50px height, transparent over `--canvas`, `padding 0 18px`. Brand = 17px radial-gradient mark +
-  "Termhaus" (14.5/600); click → Overview.
+  "Loom" (14.5/600); click → Overview.
 - Nav `gap 24px`, 13px: Overview · Palette · Git · Preview · Docs · Settings. **Active item
   reflects current surface** — wire `panel`/`overlay`/`settings`/`overview` state in from `App.tsx`
   so Git/Preview/Docs highlight when open, Palette when its overlay is open, Settings on settings,
@@ -300,7 +300,7 @@ decided to match the spec.
 
 ## Out of scope (explicitly)
 
-Rust/`src-tauri`, PTY transport, the `th`/`th-mcp` bus, persistence format, multi-window
+Rust/`src-tauri`, PTY transport, the `loom`/`loom mcp` bus, persistence format, multi-window
 tear-off behavior, the `.dc.html`/`support.js` runtime. Rail icon-collapse below ~1100px is a
 future enhancement (not in mocks).
 

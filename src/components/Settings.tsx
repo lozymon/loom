@@ -336,7 +336,7 @@ export default function Settings(props: { onClose: () => void }) {
                 onToggle={() => setSetting("confirmClose", !settings.confirmClose)}
               />
               <ToggleRow
-                label={<>Confirm before another pane spawns a terminal <span class="muted">— the <code>th spawn</code> control bus</span></>}
+                label={<>Confirm before another pane spawns a terminal <span class="muted">— the <code>loom spawn</code> control bus</span></>}
                 checked={settings.confirmExternalSpawn}
                 onToggle={() => setSetting("confirmExternalSpawn", !settings.confirmExternalSpawn)}
               />
@@ -348,12 +348,12 @@ export default function Settings(props: { onClose: () => void }) {
             <h3>Notifications</h3>
             <div class="settings-card">
               <ToggleRow
-                label={<>Notify when a pane needs you <span class="muted">— desktop notification when a command finishes (or an agent calls <code>th attention</code>) while Termhaus is in the background</span></>}
+                label={<>Notify when a pane needs you <span class="muted">— desktop notification when a command finishes (or an agent calls <code>loom attention</code>) while Loom is in the background</span></>}
                 checked={settings.notifyOnAttention}
                 onToggle={() => setSetting("notifyOnAttention", !settings.notifyOnAttention)}
               />
             </div>
-            <p class="settings-hint muted">Only fires when the Termhaus window isn't focused — when it's up front the amber pane border is enough. Your OS may ask permission the first time.</p>
+            <p class="settings-hint muted">Only fires when the Loom window isn't focused — when it's up front the amber pane border is enough. Your OS may ask permission the first time.</p>
           </section>
 
           {/* ---- Window & tray ---- */}
@@ -361,7 +361,7 @@ export default function Settings(props: { onClose: () => void }) {
             <h3>Window &amp; tray</h3>
             <div class="settings-card">
               <ToggleRow
-                label={<>Close to tray <span class="muted">— the window's close button hides Termhaus instead of quitting (Quit from the tray menu still exits)</span></>}
+                label={<>Close to tray <span class="muted">— the window's close button hides Loom instead of quitting (Quit from the tray menu still exits)</span></>}
                 checked={settings.closeToTray}
                 onToggle={() => setSetting("closeToTray", !settings.closeToTray)}
               />
@@ -450,7 +450,7 @@ export default function Settings(props: { onClose: () => void }) {
           <button class="settings-btn" onClick={() => resetSettings()}>Reset to defaults</button>
           <span class="spacer" />
           <Show when={version()}>
-            <span class="settings-version">Termhaus v{version()}</span>
+            <span class="settings-version">Loom v{version()}</span>
           </Show>
           <span class="spacer" />
           <button class="settings-btn primary" onClick={() => props.onClose()}>Done</button>

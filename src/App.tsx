@@ -69,15 +69,15 @@ export default function App() {
     setReady(true);
   });
 
-  // Listen for inter-pane control requests (the `th` CLI → Rust relay → here). Registered in
+  // Listen for inter-pane control requests (the `loom` CLI → Rust relay → here). Registered in
   // the component body (not the async onMount) so onCleanup keeps its owner context.
   const unlistenCtrl = initPaneControl();
   onCleanup(() => { void unlistenCtrl.then((u) => u()); });
 
   // Ctrl+Shift+T from a focused pane (ADR-0005) opens the new-workspace wizard.
   const openWizard = () => setWizardOpen(true);
-  window.addEventListener("termhaus:new-workspace", openWizard);
-  onCleanup(() => window.removeEventListener("termhaus:new-workspace", openWizard));
+  window.addEventListener("loom:new-workspace", openWizard);
+  onCleanup(() => window.removeEventListener("loom:new-workspace", openWizard));
 
   // The two right-side panels (Git / Docs) share one docked slot — only one shows at a
   // time, and toggling the open one closes it (Frameless: dock right, never replace the grid; the
@@ -93,18 +93,18 @@ export default function App() {
 
   // Ctrl+Shift+G from a focused pane toggles the Source Control (git diff) panel.
   const openGit = () => togglePanel("git");
-  window.addEventListener("termhaus:source-control", openGit);
-  onCleanup(() => window.removeEventListener("termhaus:source-control", openGit));
+  window.addEventListener("loom:source-control", openGit);
+  onCleanup(() => window.removeEventListener("loom:source-control", openGit));
 
   // Ctrl+Shift+R from a focused pane toggles the Docs reader (mark a passage → send to a pane).
   const openDocs = () => togglePanel("docs");
-  window.addEventListener("termhaus:docs", openDocs);
-  onCleanup(() => window.removeEventListener("termhaus:docs", openDocs));
+  window.addEventListener("loom:docs", openDocs);
+  onCleanup(() => window.removeEventListener("loom:docs", openDocs));
 
   // Ctrl+Shift+? opens the keyboard cheat-sheet (toggle so a second press closes it).
   const openShortcuts = () => setShortcutsOpen((v) => !v);
-  window.addEventListener("termhaus:shortcuts", openShortcuts);
-  onCleanup(() => window.removeEventListener("termhaus:shortcuts", openShortcuts));
+  window.addEventListener("loom:shortcuts", openShortcuts);
+  onCleanup(() => window.removeEventListener("loom:shortcuts", openShortcuts));
 
   // A pane's "view log" button (or the palette) opens the session-log viewer; the event may carry
   // a path to preselect that pane's log.
@@ -112,19 +112,19 @@ export default function App() {
     setLogPreselect((e as CustomEvent).detail?.path ?? null);
     setLogsOpen(true);
   };
-  window.addEventListener("termhaus:view-session-log", openLogs);
-  onCleanup(() => window.removeEventListener("termhaus:view-session-log", openLogs));
+  window.addEventListener("loom:view-session-log", openLogs);
+  onCleanup(() => window.removeEventListener("loom:view-session-log", openLogs));
 
   // Ctrl+Shift+, from a focused pane opens Settings — a centered overlay over the grid (like the
   // command palette). Opening it closes any docked panel.
   const openSettings = () => { showPanel(null); setSettingsOpen(true); };
-  window.addEventListener("termhaus:settings", openSettings);
-  onCleanup(() => window.removeEventListener("termhaus:settings", openSettings));
+  window.addEventListener("loom:settings", openSettings);
+  onCleanup(() => window.removeEventListener("loom:settings", openSettings));
 
   // Ctrl+Shift+P opens the command palette (toggles so a second press closes it).
   const openPalette = () => setPaletteOpen((v) => !v);
-  window.addEventListener("termhaus:command-palette", openPalette);
-  onCleanup(() => window.removeEventListener("termhaus:command-palette", openPalette));
+  window.addEventListener("loom:command-palette", openPalette);
+  onCleanup(() => window.removeEventListener("loom:command-palette", openPalette));
 
   // Global fallback for the app-level Ctrl+Shift shortcuts. Terminal.tsx intercepts these via
   // xterm's key handler, but that only fires while a *terminal* owns focus — so when focus is on
@@ -195,12 +195,12 @@ export default function App() {
   onCleanup(() => { void unlistenClose.then((u) => u()); });
 
   // The tray's "Quit" menu item routes here so it flushes state like the close path does.
-  const unlistenQuit = listen("termhaus://quit", () => { void quitApp(); });
+  const unlistenQuit = listen("loom://quit", () => { void quitApp(); });
   onCleanup(() => { void unlistenQuit.then((u) => u()); });
 
   // A torn-off pane window closing → reclaim that pane into the main grid (backs up the per-window
   // destroyed listener in lib/detach, in case that event doesn't reach us).
-  const unlistenRedock = listen<{ paneId: number }>("termhaus://redock", (e) => {
+  const unlistenRedock = listen<{ paneId: number }>("loom://redock", (e) => {
     if (typeof e.payload?.paneId === "number") redock(e.payload.paneId);
   });
   onCleanup(() => { void unlistenRedock.then((u) => u()); });

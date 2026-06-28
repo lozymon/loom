@@ -42,16 +42,16 @@ So M7's platform split is mechanical (additive `#[cfg(windows)]` arms), not arch
   cmd, no login shell, USERPROFILE, advisory check skipped) and are **drafted but only
   compile on a Windows build — unverified on the Linux dev box, verify at M7.4** per the
   project's own deferral. The manual PATH `:` join was replaced with portable
-  `std::env::join_paths` (no cfg, fully verified). clippy + fmt clean; `th spawn`
+  `std::env::join_paths` (no cfg, fully verified). clippy + fmt clean; `loom spawn`
   round-trips a command pane through the new launch path unchanged.
 - [x] **B5 — Define a control-bus transport seam, move UDS impl behind it** (M7.5
   pre-work). **Done:** new std-only `src-tauri/src/control_transport.rs` owns the transport
   (`endpoint`/`connect`/`bind`/`probe_alive`/`Stream`/`Listener` + line framing) behind
   `#[cfg(unix)]`; the Windows named-pipe arm drops into the same file at M7.5 with no change
-  to `control.rs` (relay) or `control_sock.rs` (client). Wired into `lib.rs` + both bins via
-  `#[path]` (mirrors `control_sock.rs`); `pty.rs` injects `control::endpoint()`. Linux build
+  to `control.rs` (relay) or `control_sock.rs` (client). Wired into `lib.rs` and the CLI/MCP
+  faces (`cli.rs`/`mcp.rs`); `pty.rs` injects `control::endpoint()`. Linux build
   byte-identical (same XDG/tmp path, 0600 perms, stale-socket detection). `cargo check`
-  (lib + th + th-mcp) + clippy + fmt all clean; **live-verified**: `th list` round-trips
+  (the `loom` binary) + clippy + fmt all clean; **live-verified**: `loom list` round-trips
   against the running app across both workspaces.
 - [x] **B6 — Settle the M9-vs-M7.6 capture decision. DECIDED (2026-06-14): keep the existing
   shell-out capture for Linux; revisit capture tooling per-platform when that platform's port

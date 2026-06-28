@@ -38,7 +38,7 @@ const CHANNEL_DEPTH: usize = 16;
 /// never starts); this covers the case where logging was running and then broke — without it the
 /// failure is silently swallowed and the UI keeps claiming the pane is recording. The frontend
 /// matches `id` to its pane and stops showing the active-recording state. See pty.rs flusher.
-pub const LOG_ERROR_EVENT: &str = "termhaus://log-error";
+pub const LOG_ERROR_EVENT: &str = "loom://log-error";
 
 #[derive(Clone, Serialize)]
 struct LogError {
@@ -323,7 +323,7 @@ pub fn spawn(
     // plain pane gets an interactive `$SHELL -l`, a command pane gets `$SHELL -lc "<cmd>"`
     // (not a direct execvp), so a missing binary just prints into the pane and exits to a
     // Dead pane rather than failing the spawn. See ADR-0004. The `-l` is also what fixes
-    // PATH when Termhaus is started from a desktop launcher (M6): a bundled launch inherits
+    // PATH when Loom is started from a desktop launcher (M6): a bundled launch inherits
     // only the session env, so the login shell must re-source the profile.
     let shell = resolve_shell(shell.as_deref());
     let command = command.as_deref().filter(|c| !c.trim().is_empty());
@@ -338,17 +338,19 @@ pub fn spawn(
     }
     apply_locale_env(&mut cmd);
 
-    // Inter-pane control bus discovery (ADR-0007): tell the child where the socket is, what
-    // its own pane is called (so an agent can address panes relative to itself), and make the
-    // `th` CLI directly invokable by exposing its path and prepending its dir to PATH.
-    cmd.env("TERMHAUS_SOCK", crate::control::endpoint());
+    // Inter-pane control bus discovery (ADR-0007): tell the child where the socket is, what its
+    // own pane is called (so an agent can address panes relative to itself), and make `loom`
+    // directly invokable by exposing its path and prepending its dir to PATH. The control CLI and
+    // the MCP server are subcommands of the same binary now (`loom <cmd>`, `loom mcp`), so one
+    // `$LOOM_BIN` covers both — e.g. an agent's `.mcp.json` launches `loom mcp` (IDEAS.md step C).
+    cmd.env("LOOM_SOCK", crate::control::endpoint());
     if let Some(name) = name.as_deref().filter(|n| !n.is_empty()) {
-        cmd.env("TERMHAUS_PANE", name);
+        cmd.env("LOOM_PANE", name);
     }
-    if let Some(cli) = crate::control::cli_path() {
-        cmd.env("TERMHAUS_CLI", cli.to_string_lossy().into_owned());
-        if let Some(dir) = cli.parent() {
-            // Prepend the CLI's dir to PATH using the platform list separator (`:` unix, `;` win).
+    if let Some(bin) = crate::control::loom_bin() {
+        cmd.env("LOOM_BIN", bin.to_string_lossy().into_owned());
+        if let Some(dir) = bin.parent() {
+            // Prepend loom's dir to PATH using the platform list separator (`:` unix, `;` win).
             let existing = std::env::var_os("PATH").unwrap_or_default();
             let mut entries = vec![dir.to_path_buf()];
             entries.extend(std::env::split_paths(&existing));
@@ -356,11 +358,6 @@ pub fn spawn(
                 cmd.env("PATH", joined);
             }
         }
-    }
-    // The MCP server sits beside `th` (already on PATH above); also expose its absolute path so an
-    // agent's `.mcp.json` can reference `$TERMHAUS_MCP` directly (ADR-0007, IDEAS.md step C).
-    if let Some(mcp) = crate::control::mcp_path() {
-        cmd.env("TERMHAUS_MCP", mcp.to_string_lossy().into_owned());
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
@@ -417,7 +414,7 @@ pub fn spawn(
                 Ok(f) => Some(std::io::BufWriter::new(f)),
                 Err(e) => {
                     eprintln!(
-                        "termhaus: session log unavailable at {p} ({e}); logging off for this pane"
+                        "loom: session log unavailable at {p} ({e}); logging off for this pane"
                     );
                     None
                 }
@@ -488,7 +485,7 @@ pub fn spawn(
                 .and_then(|w| w.write_all(&acc).and_then(|()| w.flush()).err());
             if let Some(e) = log_err {
                 eprintln!(
-                    "termhaus: session log write failed for {} ({e}); logging off for this pane",
+                    "loom: session log write failed for {} ({e}); logging off for this pane",
                     log_path.as_deref().unwrap_or("?")
                 );
                 let _ = app.emit(
@@ -548,7 +545,7 @@ pub fn retarget(
 }
 
 /// Best-effort current working directory of a pane's shell, read from `/proc/<pid>/cwd`.
-/// This is the one place Termhaus inspects a pane's live process state — used only for the
+/// This is the one place Loom inspects a pane's live process state — used only for the
 /// explicit Source Control action to scope `git` to where the focused terminal actually is
 /// (see ADR-0001's "live cwd" carve-out). Returns `None` (not an error) when the pid is
 /// unknown or the link can't be read — e.g. the child already exited — so callers fall back.

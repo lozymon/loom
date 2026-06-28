@@ -1,27 +1,26 @@
-//! `th-mcp` — a Model Context Protocol server exposing the Termhaus control bus (ADR-0007) as
-//! agent *tools*. It's the model-native face of the same relay the `th` CLI drives: each tool
-//! builds the identical `ControlRequest` JSON and sends it over `$TERMHAUS_SOCK`, so the agent can
+//! `loom mcp` — a Model Context Protocol server exposing the Loom control bus (ADR-0007) as
+//! agent *tools*. It's the model-native face of the same relay the `loom` CLI drives: each tool
+//! builds the identical `ControlRequest` JSON and sends it over `$LOOM_SOCK`, so the agent can
 //! "spawn a pane", "broadcast to a group", or "flag myself blocked" as first-class tools instead
 //! of shelling out (IDEAS.md's agent-integration arc, step C). No protocol logic lives here — the
 //! webview owns routing (src/ipc/protocol.ts); we only translate MCP ⇄ the bus.
 //!
 //! Transport: newline-delimited JSON-RPC 2.0 over stdio (MCP stdio). stdout carries protocol
 //! messages ONLY — anything diagnostic goes to stderr (the same byte-protocol discipline as the
-//! PTY output channel). Pure std + serde_json; the socket client is shared with `th`.
+//! PTY output channel). Pure std + serde_json; the socket client is shared with `loom`.
 
 use std::env;
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Value};
 
-// The bus client, shared with the `th` CLI (two front-ends, one bus). `control_sock` frames
-// requests; `control_transport` is the platform transport it connects over (UDS today).
-#[path = "../control_sock.rs"]
-mod control_sock;
-#[path = "../control_transport.rs"]
-mod control_transport;
+// The bus client, shared with the `loom` CLI (two faces, one bus): `control_sock` frames requests
+// over the platform transport (`control_transport`, UDS today). Both live in the lib crate now, so
+// we reach them through `crate::` rather than the old `#[path]` bin includes.
+use crate::control_sock;
 
-fn main() {
+/// The MCP-server entry point (`loom mcp`), invoked from `main.rs`. Speaks JSON-RPC 2.0 over stdio.
+pub fn run() {
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -87,8 +86,8 @@ fn initialize_result(params: Option<&Value>) -> Value {
     json!({
         "protocolVersion": pv,
         "capabilities": { "tools": {} },
-        "serverInfo": { "name": "termhaus", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Drive a fleet of Termhaus terminal panes: list/spawn/focus panes, send \
+        "serverInfo": { "name": "loom", "version": env!("CARGO_PKG_VERSION") },
+        "instructions": "Drive a fleet of Loom terminal panes: list/spawn/focus panes, send \
             text or broadcast to many at once, read a pane's scrollback, and flag your own pane's \
             attention/status so the UI lights up. Panes are addressed by their display name (e.g. \
             \"Cleo\"). attention/status default to your own pane when no target is given."
@@ -169,7 +168,7 @@ fn tools() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "target": { "type": "string", "description": "Pane name (default: your own pane, $TERMHAUS_PANE)." },
+                    "target": { "type": "string", "description": "Pane name (default: your own pane, $LOOM_PANE)." },
                     "clear": { "type": "boolean", "description": "Clear the flag instead of raising it." }
                 },
                 "required": []
@@ -181,7 +180,7 @@ fn tools() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "target": { "type": "string", "description": "Pane name (default: your own pane, $TERMHAUS_PANE)." },
+                    "target": { "type": "string", "description": "Pane name (default: your own pane, $LOOM_PANE)." },
                     "text": { "type": "string", "description": "Status text, e.g. \"running tests\" (omit/empty to clear)." }
                 },
                 "required": []
@@ -268,15 +267,15 @@ fn arg_bool(args: &Value, key: &str, default: bool) -> bool {
     args.get(key).and_then(Value::as_bool).unwrap_or(default)
 }
 
-/// A pane target, defaulting to the caller's own pane ($TERMHAUS_PANE) — lets an agent flag itself.
+/// A pane target, defaulting to the caller's own pane ($LOOM_PANE) — lets an agent flag itself.
 fn arg_target_or_self(args: &Value) -> Result<String, String> {
     if let Some(t) = arg_opt(args, "target") {
         return Ok(t);
     }
-    env::var("TERMHAUS_PANE")
+    env::var("LOOM_PANE")
         .ok()
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| "no \"target\" given and TERMHAUS_PANE not set — name a pane".to_string())
+        .ok_or_else(|| "no \"target\" given and LOOM_PANE not set — name a pane".to_string())
 }
 
 /// Map a control-bus response (`{ok, data|error}`) to an MCP `tools/call` result.

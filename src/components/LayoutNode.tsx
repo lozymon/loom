@@ -87,7 +87,7 @@ export default function LayoutView(props: { ws: WorkspaceUI }) {
     <div ref={root} class="layout-root" classList={{ overview: overview() }}>
       <Show when={paneIds().length === 0}>
         <EmptyWorkspace
-          onChooseLayout={() => window.dispatchEvent(new CustomEvent("termhaus:new-workspace"))}
+          onChooseLayout={() => window.dispatchEvent(new CustomEvent("loom:new-workspace"))}
         />
       </Show>
       <For each={paneIds()}>

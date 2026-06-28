@@ -15,7 +15,7 @@ export interface PaneEntry {
   isLive: () => boolean;
   /** The shell's live working directory, or null if dead/unavailable (Source Control). */
   cwd: () => Promise<string | null>;
-  /** The last `lines` rows of the pane's scrollback as plain text (`th read`). */
+  /** The last `lines` rows of the pane's scrollback as plain text (`loom read`). */
   read: (lines: number) => string;
 }
 
