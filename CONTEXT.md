@@ -21,8 +21,28 @@ The OS pseudo-terminal (master/slave pair) behind a Pane. Owned by Rust; one per
 _Avoid_: tty, console
 
 **Agent**:
-Not a first-class concept. An "agent" is merely a Pane whose launch command happens to be a CLI like `claude`. Loom has no awareness of what runs inside a Pane.
-_Avoid_: session, bot (do not reintroduce an Agent entity)
+A *kind* of CLI agent Loom can run and represent — Claude Code, Codex, Aider, or a user-defined one — held as a registry entry (stable `AgentId`) and resolved from a Pane's launch command. The kind, not the running instance (that is a Session). See [ADR-0008](docs/adr/0008-agents-first-class-via-self-report.md).
+_Avoid_: agent type, bot, tool
+
+**Session**:
+One run of an Agent inside a Pane, over time — the durable unit the fleet view and session log key off (not the Pane, not an ephemeral status flag). A Pane hosts many Sessions in sequence (each launch, including a `--resume`, is a new one); at most one is Live at a time. Its record outlives the Pane.
+_Avoid_: agent (the run is a Session, the kind is an Agent), conversation, thread
+
+**Task**:
+A unit of work an Agent reports doing within a Session — granularity is the agent's to set (one per turn by default, finer when it explicitly declares them). Its title and touched files are always agent-pushed, never inferred from a Pane's output.
+_Avoid_: turn, job, step
+
+**Approval**:
+The structured "needs you" a Task carries while blocked on the user — the agent's actual prompt plus its kind (permission / question / choice). The rich form of the coarse `attention` signal; it lives and dies with its Task's blocked state, not as a standalone entity.
+_Avoid_: prompt (just one field of it), notification
+
+**Attention**:
+The coarse "needs you" signal — a binary amber border a Pane's agent raises and clears by pushing a signal (never inferred from output). The opacity-safe floor beneath Approval.
+_Avoid_: alert, notification, badge
+
+**Status**:
+A short, agent-pushed label for what a Pane's agent is doing (e.g. "running tests"), shown in the title bar and overview. The coarse floor beneath Task.
+_Avoid_: state (a Session/Task has a `state`; this is a free-text label)
 
 **Working folder**:
 The directory a Workspace's Panes launch in. It is the default launch cwd for every Pane; a Pane may override it. Only the *launch* cwd is persisted and restored — never the live directory a shell later `cd`s into.

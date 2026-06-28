@@ -1,5 +1,11 @@
 # Panes are opaque; Loom is not agent-aware
 
+> **Superseded by [ADR-0008](0008-agents-first-class-via-self-report.md) (2026-06-28).** ADR-0008
+> keeps this ADR's output-scraping ban (and the live-cwd amendment below) but reverses the
+> "no `Agent`/`Session` entity" stance: agents are now first-class entities (`Agent`/`Session`/`Task`),
+> fed by agent-pushed signals and kernel state — never by parsing a Pane's output. The dividing
+> line is the *provenance* of a fact, not whether Loom models it.
+
 The reference app (BridgeSpace) parses agent output to show per-pane status and token counts, and the project began life (pre-pivot) coupled to the Claude Agent SDK. For v1 we deliberately reject both: a Pane is an opaque PTY byte stream that Loom streams but never interprets, and an "agent" is nothing more than a Pane whose launch command is a CLI like `claude`. We chose this to keep the make-or-break PTY-throughput core simple, keep Rust thin, and avoid re-importing the bundled-CLI packaging risk we escaped by dropping the SDK.
 
 ## Consequences
