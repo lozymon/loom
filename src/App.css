@@ -2868,11 +2868,82 @@ body,
   background: var(--accent);
 }
 .git-scm .git-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 6px 8px;
   font: 10.5px var(--font-mono);
   letter-spacing: 0.14em;
   text-transform: none;
   color: var(--text-faint);
+}
+/* Stage-all / Unstage-all on a group header — quiet until the header is hovered. */
+.git-scm .git-group-act {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font: 10.5px var(--font-mono);
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0;
+}
+.git-scm .git-group-head:hover .git-group-act,
+.git-scm .git-group-act:focus-visible {
+  opacity: 1;
+}
+.git-scm .git-group-act:hover {
+  color: var(--accent);
+  background: var(--tint-weak);
+}
+/* A file row pairs the open-diff button with its stage/unstage (+/−) action. */
+.git-scm .git-file-row {
+  display: flex;
+  align-items: center;
+}
+.git-scm .git-file-row .git-file {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.git-scm .git-file-act {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  font: 15px var(--font-mono);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+.git-scm .git-file-row:hover .git-file-act,
+.git-scm .git-file-act:focus-visible {
+  opacity: 1;
+}
+.git-scm .git-file-act:hover {
+  background: var(--tint-weak);
+  color: var(--text-bright);
+}
+/* Commit bar (ADR-0010): message input + Commit button, above the changes list. */
+.git-scm .git-commit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.git-scm .git-commit-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.git-scm .git-act-flash {
+  font: 11px var(--font-mono);
+  color: var(--text-faint);
+  white-space: nowrap;
 }
 .git-scm .git-file {
   display: flex;

@@ -6,7 +6,11 @@
 // drag lines, or click a hunk header to grab the whole hunk — optionally attach a note, then either
 // Send it to the focused agent pane now or ＋ queue it. Queued comments accumulate in a review bar
 // and go out together as one numbered "Code review — N comments" message. The panel stays open
-// across sends (review is iterative). Strictly read-only — staging/commit stays with the agent.
+// across sends (review is iterative).
+//
+// Stage / commit (ADR-0010): the same panel closes the loop — stage or unstage a file (the +/−
+// on its row, or Stage all / Unstage all on a group), type a message, and Commit. Every write is
+// user-initiated; Loom never auto-commits and the writes are not exposed over the control bus.
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { activeWorkspace, setPanelCwd } from "../stores/workspace";
@@ -14,8 +18,11 @@ import { countLive, paneCwd, writeToPanes } from "../lib/paneRegistry";
 import { settings, setSetting } from "../stores/settings";
 import {
   formatDiffSelection,
+  gitCommit,
   gitDiff,
+  gitStage,
   gitStatus,
+  gitUnstage,
   parseUnifiedDiff,
   type DiffRow,
   type GitFile,
@@ -89,6 +96,16 @@ export default function GitPanel(props: { onClose: () => void }) {
   // A note annotates the current selection; the review queue accumulates comments to send together.
   const [note, setNote] = createSignal("");
   const [review, setReview] = createSignal<ReviewItem[]>([]);
+  // Draft commit message for the staged changes (ADR-0010), plus a transient feedback line for
+  // stage/unstage/commit results — kept separate from the send `flash` so they never collide.
+  const [commitMsg, setCommitMsg] = createSignal("");
+  const [gitMsg, setGitMsg] = createSignal<string | null>(null);
+  let gitMsgTimer: ReturnType<typeof setTimeout> | undefined;
+  function showGitMsg(m: string) {
+    clearTimeout(gitMsgTimer);
+    setGitMsg(m);
+    gitMsgTimer = setTimeout(() => setGitMsg(null), 2600);
+  }
 
   // ---- line selection → send-to-terminal ----
   // Selection is a contiguous row range [anchor, head]; drag or shift-click extends it.
@@ -293,6 +310,55 @@ export default function GitPanel(props: { onClose: () => void }) {
   const staged = createMemo(() => status()?.files.filter((f) => f.staged) ?? []);
   const changes = createMemo(() => status()?.files.filter((f) => f.unstaged || f.untracked) ?? []);
 
+  // ---- stage / unstage / commit (ADR-0010) ----
+  // Each write refreshes status afterward so the Staged/Changes split (and the diff) stay in
+  // sync; failures surface git's own message via the action flash. Sequential awaits in the
+  // "all" variants keep the error handling simple (these lists are short).
+  async function stage(file: GitFile) {
+    try {
+      await gitStage(cwd(), file.path);
+      await refresh();
+    } catch (e) {
+      showGitMsg(String(e));
+    }
+  }
+  async function unstage(file: GitFile) {
+    try {
+      await gitUnstage(cwd(), file.path);
+      await refresh();
+    } catch (e) {
+      showGitMsg(String(e));
+    }
+  }
+  async function stageAll() {
+    try {
+      for (const f of changes()) await gitStage(cwd(), f.path);
+      await refresh();
+    } catch (e) {
+      showGitMsg(String(e));
+    }
+  }
+  async function unstageAll() {
+    try {
+      for (const f of staged()) await gitUnstage(cwd(), f.path);
+      await refresh();
+    } catch (e) {
+      showGitMsg(String(e));
+    }
+  }
+  async function commit() {
+    const msg = commitMsg().trim();
+    if (!msg) return;
+    try {
+      await gitCommit(cwd(), msg);
+      setCommitMsg("");
+      showGitMsg("committed ✓");
+      await refresh();
+    } catch (e) {
+      showGitMsg(String(e));
+    }
+  }
+
   const isSelected = (path: string, stagedView: boolean) => {
     const s = selected();
     return !!s && s.path === path && s.staged === stagedView;
@@ -362,15 +428,24 @@ export default function GitPanel(props: { onClose: () => void }) {
   const fileRow = (file: GitFile, stagedView: boolean) => {
     const b = badge(file, stagedView);
     return (
-      <button
-        class="git-file"
-        classList={{ on: isSelected(file.path, stagedView) }}
-        onClick={() => openFile(file, stagedView)}
-        title={file.path}
-      >
-        <span class="git-file-badge" data-s={b}>{b}</span>
-        <span class="git-file-path">{file.path}</span>
-      </button>
+      <div class="git-file-row">
+        <button
+          class="git-file"
+          classList={{ on: isSelected(file.path, stagedView) }}
+          onClick={() => openFile(file, stagedView)}
+          title={file.path}
+        >
+          <span class="git-file-badge" data-s={b}>{b}</span>
+          <span class="git-file-path">{file.path}</span>
+        </button>
+        <button
+          class="git-file-act"
+          title={stagedView ? "Unstage this file" : "Stage this file"}
+          onClick={() => void (stagedView ? unstage(file) : stage(file))}
+        >
+          {stagedView ? "−" : "+"}
+        </button>
+      </div>
     );
   };
 
@@ -425,16 +500,59 @@ export default function GitPanel(props: { onClose: () => void }) {
             </div>
           }
         >
+          {/* Commit bar (ADR-0010) — present whenever something is staged, and a transient slot for
+              stage/unstage/commit feedback (which lingers briefly after a commit empties the bar). */}
+          <Show when={staged().length > 0 || gitMsg()}>
+            <div class="git-commit">
+              <Show when={staged().length > 0}>
+                <input
+                  class="git-note-input git-commit-msg"
+                  type="text"
+                  placeholder="Message — commit the staged changes"
+                  value={commitMsg()}
+                  onInput={(e) => setCommitMsg(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && commitMsg().trim()) {
+                      e.preventDefault();
+                      void commit();
+                    }
+                  }}
+                />
+                <button
+                  class="git-send-btn"
+                  disabled={!commitMsg().trim()}
+                  title="Commit the staged changes"
+                  onClick={() => void commit()}
+                >
+                  Commit {staged().length} ▸
+                </button>
+              </Show>
+              <Show when={gitMsg()}>
+                <span class="git-act-flash">{gitMsg()}</span>
+              </Show>
+            </div>
+          </Show>
+
           <div class="git-list" style={{ height: `${settings.gitListHeight}px` }}>
             <Show when={staged().length === 0 && changes().length === 0}>
               <div class="git-empty">No changes.</div>
             </Show>
             <Show when={staged().length > 0}>
-              <div class="git-group-head">STAGED · {staged().length}</div>
+              <div class="git-group-head">
+                <span>STAGED · {staged().length}</span>
+                <button class="git-group-act" title="Unstage all staged files" onClick={() => void unstageAll()}>
+                  Unstage all
+                </button>
+              </div>
               <For each={staged()}>{(f) => fileRow(f, true)}</For>
             </Show>
             <Show when={changes().length > 0}>
-              <div class="git-group-head">CHANGES · {changes().length}</div>
+              <div class="git-group-head">
+                <span>CHANGES · {changes().length}</span>
+                <button class="git-group-act" title="Stage all changes" onClick={() => void stageAll()}>
+                  Stage all
+                </button>
+              </div>
               <For each={changes()}>{(f) => fileRow(f, false)}</For>
             </Show>
           </div>

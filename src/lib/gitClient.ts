@@ -39,6 +39,21 @@ export const gitDiff = (
   untracked: boolean,
 ): Promise<string> => invoke<string>("git_diff", { cwd, path, staged, untracked });
 
+// ---- write path (ADR-0010): stage / unstage / commit, all user-initiated ----
+// Thin invoke wrappers over the Rust shell-outs; `path` is a repo-root-relative path straight
+// from `gitStatus`. Each rejects with git's own message on failure (nothing staged, missing
+// identity, a rejecting hook…), which the panel surfaces inline.
+
+export const gitStage = (cwd: string, path: string): Promise<void> =>
+  invoke<void>("git_stage", { cwd, path });
+
+export const gitUnstage = (cwd: string, path: string): Promise<void> =>
+  invoke<void>("git_unstage", { cwd, path });
+
+/** Commit the staged changes; resolves with git's summary line, rejects with git's error text. */
+export const gitCommit = (cwd: string, message: string): Promise<string> =>
+  invoke<string>("git_commit", { cwd, message });
+
 // ---- unified-diff parsing → single-column rows ----
 
 /**

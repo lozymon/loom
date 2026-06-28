@@ -1,8 +1,11 @@
-//! Read-only git integration for the Source Control panel (a VSCode-style diff viewer).
+//! Git integration for the Source Control panel (a VSCode-style diff viewer + stage/commit).
 //!
 //! Shelling out to `git` is an OS concern, so it lives in Rust (CLAUDE.md: OS/syscalls in
-//! Rust, UX/state in TS). These commands are strictly read-only — list the changed files and
-//! return a file's unified diff text; all parsing/rendering of that diff happens in TS.
+//! Rust, UX/state in TS). The read commands list the changed files and return a file's unified
+//! diff text; the write commands (`git_stage`/`git_unstage`/`git_commit`, ADR-0010) are equally
+//! thin shell-outs — they run one `git` subcommand and hand back success/stderr. All
+//! parsing/rendering of diffs and all commit-message/UX state live in TS. Every write is a
+//! user-initiated action (Loom never auto-commits) and none are exposed over the control bus.
 //!
 //! Path handling, the one subtlety: `git status --porcelain` always prints paths relative to
 //! the *repository root*, and `git diff -- <path>` only resolves those paths when run from the
@@ -55,6 +58,21 @@ fn git(dir: &str, args: &[&str]) -> Result<(bool, String, String), String> {
         String::from_utf8_lossy(&out.stdout).into_owned(),
         String::from_utf8_lossy(&out.stderr).into_owned(),
     ))
+}
+
+/// Resolve the repository root for `cwd` — where every porcelain path is rooted, and where the
+/// write commands run so their pathspecs resolve. Errors when `cwd` isn't inside a work tree.
+fn repo_root(cwd: &str) -> Result<String, String> {
+    let (ok, out, err) = git(cwd, &["rev-parse", "--show-toplevel"])?;
+    if !ok {
+        let e = err.trim();
+        return Err(if e.is_empty() {
+            "not a git repository".into()
+        } else {
+            e.to_string()
+        });
+    }
+    Ok(out.trim().to_string())
 }
 
 /// Parse `-z` porcelain-v1 output into changed-file entries. Records are NUL-terminated; a
@@ -206,4 +224,62 @@ pub async fn git_diff(
         return Err(String::from_utf8_lossy(&out.stderr).into_owned());
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Stage one path (`git add`). Works for tracked-modified and untracked files alike. `path` is
+/// repo-root-relative (straight from `git_status`); it runs from the root so the pathspec
+/// resolves regardless of which subfolder `cwd` points at.
+#[tauri::command]
+pub async fn git_stage(cwd: String, path: String) -> Result<(), String> {
+    let root = repo_root(&cwd)?;
+    let (ok, _, err) = git(&root, &["add", "--", &path])?;
+    if ok {
+        Ok(())
+    } else {
+        Err(err.trim().to_string())
+    }
+}
+
+/// Unstage one path. Normally `git reset HEAD -- <path>` (restore the index entry from HEAD); on
+/// an unborn branch (a fresh repo with no commit yet) HEAD can't be resolved, so we drop the
+/// index entry directly with `git rm --cached` instead.
+#[tauri::command]
+pub async fn git_unstage(cwd: String, path: String) -> Result<(), String> {
+    let root = repo_root(&cwd)?;
+    let has_head = git(&root, &["rev-parse", "--verify", "-q", "HEAD"])?.0;
+    let args: Vec<&str> = if has_head {
+        vec!["reset", "-q", "HEAD", "--", &path]
+    } else {
+        vec!["rm", "-q", "--cached", "--", &path]
+    };
+    let (ok, _, err) = git(&root, &args)?;
+    if ok {
+        Ok(())
+    } else {
+        Err(err.trim().to_string())
+    }
+}
+
+/// Commit the staged changes with `message`. The message is passed as a process argument (never
+/// through a shell), so it can't be injected. On failure — nothing staged, missing
+/// `user.name`/`user.email`, a rejecting pre-commit hook — git's own message is surfaced verbatim
+/// (preferring stderr, falling back to stdout). Returns git's summary line on success.
+#[tauri::command]
+pub async fn git_commit(cwd: String, message: String) -> Result<String, String> {
+    let msg = message.trim();
+    if msg.is_empty() {
+        return Err("empty commit message".into());
+    }
+    let root = repo_root(&cwd)?;
+    let (ok, out, err) = git(&root, &["commit", "-m", msg])?;
+    if ok {
+        Ok(out.trim().to_string())
+    } else {
+        let e = err.trim();
+        Err(if e.is_empty() {
+            out.trim().to_string()
+        } else {
+            e.to_string()
+        })
+    }
 }
