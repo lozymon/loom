@@ -18,6 +18,14 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # xterm 6.0 is stable, but its addons (canvas/webgl/fit/...) only ship
+      # beta pre-releases for v6 — and the canvas renderer we depend on
+      # (ADR-0003/0006) has no v6-compatible release at all. Adopting v6 now
+      # would pin the whole rendering stack to moving betas. Hold at 5.x until
+      # the addons go stable, then drop this ignore. (See closed PR #9.)
+      - dependency-name: "@xterm/xterm"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directory: "/src-tauri"
