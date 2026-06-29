@@ -51,6 +51,21 @@ const taskId = (): TaskId => `t${++synthSeq}`;
 
 const now = (): number => Date.now();
 
+// Persistence sink (ADR-0009): the app wires this to the SQLite client (lib/sessionLogClient.ts);
+// tests leave it unset so the reducers stay pure and decoupled. Each mutator persists the row it
+// just changed — best-effort, so a failed write never disrupts the live store.
+type Sink = { session: (s: Session) => void; task: (t: Task) => void };
+let sink: Sink | null = null;
+export function setSessionSink(s: Sink | null): void {
+  sink = s;
+}
+function persistSession(id: SessionId): void {
+  if (sink && sessions[id]) sink.session(sessions[id]);
+}
+function persistTask(id: TaskId): void {
+  if (sink && tasks[id]) sink.task(tasks[id]);
+}
+
 /** The Session Live in `paneId`, if any. */
 function liveSession(paneId: PaneId): Session | undefined {
   const id = livePane[paneId];
@@ -85,6 +100,7 @@ function createSession(paneId: PaneId, agentId: AgentId, id: SessionId, cwd: str
   };
   setSessions(id, session);
   setLivePane(paneId, id);
+  persistSession(id);
   return session;
 }
 
@@ -96,6 +112,7 @@ function endSession(paneId: PaneId, outcome: TaskOutcome): void {
   if (active) finishTask(active, outcome);
   setSessions(session.id, "state", outcome);
   setSessions(session.id, "endedAt", now());
+  persistSession(session.id);
   setLivePane(paneId, undefined);
 }
 
@@ -104,6 +121,7 @@ function finishTask(id: TaskId, outcome: TaskOutcome): void {
   setTasks(id, "state", outcome);
   setTasks(id, "endedAt", now());
   setTasks(id, "approval", undefined);
+  persistTask(id);
 }
 
 /** Get the active Task for a Pane's Live Session, lazily creating both if absent. */
@@ -127,6 +145,8 @@ function startTask(session: Session, title: string): TaskId {
   setTasks(id, task);
   setSessions(session.id, "taskIds", (ids) => [...ids, id]);
   setSessions(session.id, "state", "running");
+  persistTask(id);
+  persistSession(session.id);
   return id;
 }
 
@@ -179,6 +199,7 @@ export function taskUpdate(
   }
   const trimmed = note?.trim();
   if (trimmed) setTasks(id, "title", trimmed);
+  persistTask(id);
 }
 
 /** `task.end` — finish the active Task; its Session goes idle. */
@@ -188,6 +209,7 @@ export function taskEnd(paneId: PaneId, outcome: TaskOutcome = "done"): void {
   const active = activeTaskId(session);
   if (active) finishTask(active, outcome);
   setSessions(session.id, "state", "idle");
+  persistSession(session.id);
 }
 
 /** `approval.request` — the active Task is now blocked on the user (the rich form of `attention`). */
@@ -202,6 +224,8 @@ export function approvalRequest(
   setTasks(id, "approval", { prompt: prompt.trim(), kind });
   const sid = tasks[id].sessionId;
   setSessions(sid, "state", "blocked");
+  persistTask(id);
+  persistSession(sid);
 }
 
 /** `approval.resolve` — the agent signalled it's unblocked (or the user answered). */
@@ -213,6 +237,8 @@ export function approvalResolve(paneId: PaneId): void {
   setTasks(active, "approval", "resolvedAt", now());
   setTasks(active, "state", "running");
   setSessions(session.id, "state", "running");
+  persistTask(active);
+  persistSession(session.id);
 }
 
 /** Drop all state — test isolation only (the store is module-scoped). */

@@ -9,6 +9,7 @@ mod git;
 mod logs;
 pub mod mcp;
 mod pty;
+mod sessionlog;
 mod tray;
 mod workspace;
 
@@ -17,7 +18,7 @@ use std::sync::Arc;
 use control::PendingReplies;
 use pty::PtyManager;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // a flat IPC payload mirrors the JS spawn call 1:1
@@ -137,10 +138,22 @@ pub fn run() {
             workspace::state_save,
             workspace::state_load,
             workspace::session_log_path,
+            sessionlog::session_log_save_session,
+            sessionlog::session_log_save_task,
+            sessionlog::session_log_search,
+            sessionlog::session_log_recent,
         ])
         .setup(move |app| {
             // Start the inter-pane control bus once the app handle exists (ADR-0007).
             control::start(app.handle().clone(), pending.clone());
+            // Open the durable Session/Task history DB (ADR-0009). A failure here is non-fatal —
+            // the live in-memory store still works; we just lose persistence/search this run.
+            match sessionlog::open(app.handle()) {
+                Ok(conn) => {
+                    app.manage(sessionlog::SessionLog(std::sync::Mutex::new(conn)));
+                }
+                Err(e) => eprintln!("loom: session history DB unavailable ({e})"),
+            }
             // System tray (summon/hide). A missing tray host (some Linux sessions) is non-fatal.
             if let Err(e) = tray::build(app) {
                 eprintln!("loom: system tray unavailable ({e})");

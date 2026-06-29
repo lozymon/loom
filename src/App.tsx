@@ -33,6 +33,8 @@ import { redock } from "./lib/detach";
 import { openEditorForActivePane } from "./lib/editor";
 import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
+import { setSessionSink } from "./stores/sessions";
+import { saveSession, saveTask } from "./lib/sessionLogClient";
 import "./App.css";
 
 export default function App() {
@@ -63,6 +65,14 @@ export default function App() {
   void syncWindowChrome();
   const unlistenResize = win.onResized(() => void syncWindowChrome());
   onCleanup(() => { void unlistenResize.then((u) => u()); });
+
+  // Mirror the in-memory Session/Task store to the durable SQLite history (ADR-0009). Best-effort:
+  // a failed write (e.g. the history DB couldn't open) must never disrupt the live store/UI.
+  setSessionSink({
+    session: (s) => void saveSession(s).catch(() => {}),
+    task: (t) => void saveTask(t).catch(() => {}),
+  });
+  onCleanup(() => setSessionSink(null));
 
   onMount(async () => {
     await Promise.all([initTheme(), initSettings(), init()]);
