@@ -35,6 +35,7 @@ import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
 import { detectAgent } from "../lib/agents";
+import { paneActiveTask } from "../stores/sessions";
 import type { PaneId, PtyHandle, LogErrorEvent } from "../ipc/protocol";
 import { LOG_ERROR_EVENT } from "../ipc/protocol";
 import {
@@ -125,6 +126,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   /** Is the user actually looking at this pane right now? (active workspace + focused) */
   const looking = () => appState.activeId === props.ws.id && isFocused();
   const act = () => activity[props.paneId];
+  // The pane's live agent Task — drives the overview fleet caption (ADR-0008).
+  const task = () => paneActiveTask(props.paneId);
 
   // The single chip state dot (Frameless): one of working / idle / needs / dead, by precedence.
   // Derived purely from existing metadata (exit code + the activity store) — never pane output,
@@ -675,6 +678,21 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           ? `EXITED · ${dead() ?? ""}`.trim()
           : paneState() === "needs" ? "NEEDS YOU" : paneState().toUpperCase()}
       </span>
+
+      {/* Fleet caption (overview only, ADR-0008): the live agent Task — its title + files touched,
+          tinted for a "needs you" pane. CSS hides it outside overview. */}
+      <Show when={task()}>
+        {(t) => (
+          <div class="pane-fleet" data-state={paneState()}>
+            <span class="pf-task" title={t().title}>{t().title}</span>
+            <span class="pf-meta">
+              <Show when={t().files.length}>
+                <span>{t().files.length} file{t().files.length === 1 ? "" : "s"}</span>
+              </Show>
+            </span>
+          </div>
+        )}
+      </Show>
 
       {/* Controls (top-right): revealed on pane hover only; a dead pane swaps in restart. */}
       <div class="pane-ctl pctl">

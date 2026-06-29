@@ -3994,24 +3994,57 @@ body,
     monospace;
 }
 
-/* ============ Approvals triage (Phase 3, ADR-0008) ============ */
+/* ============ Fleet view enrichment + approvals triage (Phase 3, ADR-0008) ============ */
 
-/* Approvals triage strip: bottom-docked over the stage, shown only when agents are blocked. */
-.fleet-approvals {
+/* Overview tile caption: the live agent Task — title + files touched. Bottom-docked over the tile
+   with a scrim for legibility; hidden outside overview (like the state label). The approvals strip
+   is in-flow (not an overlay), so it never covers this. */
+.pane-fleet {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 30;
+  z-index: 6;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 12px 10px;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), transparent);
+}
+.layout-root.overview .pane-fleet {
+  display: flex;
+}
+.pane-fleet .pf-task {
+  font: 500 11px var(--font-mono);
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pane-fleet[data-state="needs"] .pf-task {
+  color: var(--state-needs);
+}
+.pane-fleet .pf-meta {
+  font: 10px var(--font-mono);
+  color: var(--text-faint);
+}
+
+/* Approvals triage strip: bottom-docked over the stage, shown only when agents are blocked. */
+.fleet-approvals {
+  /* In-flow flex child (not an absolute overlay): docks below .stage-grid and shrinks the grid so
+     it never covers the bottom row of tiles / their fleet captions. */
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
   max-height: 45%;
   overflow-y: auto;
+  margin-top: 6px;
   padding: 10px 14px 12px;
   background: var(--surface);
-  border-top: 2px solid var(--state-needs);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--state-needs);
+  border-radius: 12px;
 }
 .fa-head {
   display: flex;
