@@ -12,12 +12,24 @@ import {
   activeWorkspace,
   broadcastTargets,
   listPanes,
+  paneSpecById,
   resolvePaneByName,
   revealPaneByName,
   spawnPane,
   workspaceByName,
 } from "../stores/workspace";
-import { noteAttention, clearAttention, setStatus } from "../stores/activity";
+import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
+import {
+  sessionStart,
+  sessionEnd,
+  taskBegin,
+  taskUpdate,
+  taskEnd,
+  approvalRequest,
+  approvalResolve,
+} from "../stores/sessions";
+import { detectAgent } from "./agents";
+import type { AgentId, PaneId } from "../ipc/protocol";
 import { notifyAttention } from "./notify";
 import { settings } from "../stores/settings";
 
@@ -113,9 +125,82 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       return { ok: true, data: { name: req.target, text, cleared: text === "" } };
     }
 
+    // ---- Agent lifecycle (ADR-0008) — feed the entity store, and bridge to the coarse floor
+    // (attention/status) so existing UI keeps reflecting state until the fleet board lands. ----
+    case "session.start": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      sessionStart(r.paneId, paneAgentId(r.paneId, req.agent), req.sessionId, req.cwd);
+      clearStatus(r.paneId);
+      return { ok: true, data: { name: req.target } };
+    }
+
+    case "session.end": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      sessionEnd(r.paneId, req.outcome ?? "done");
+      clearStatus(r.paneId);
+      return { ok: true, data: { name: req.target } };
+    }
+
+    case "task.begin": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      const title = (req.title ?? "").trim();
+      taskBegin(r.paneId, paneAgentId(r.paneId), title);
+      setStatus(r.paneId, floorLabel(title));
+      return { ok: true, data: { name: req.target } };
+    }
+
+    case "task.update": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      taskUpdate(r.paneId, paneAgentId(r.paneId), req.files, req.note);
+      return { ok: true, data: { name: req.target } };
+    }
+
+    case "task.end": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      taskEnd(r.paneId, req.outcome ?? "done");
+      clearStatus(r.paneId);
+      return { ok: true, data: { name: req.target } };
+    }
+
+    case "approval.request": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      const prompt = (req.prompt ?? "").trim();
+      approvalRequest(r.paneId, paneAgentId(r.paneId), prompt, req.kind ?? "question");
+      // A fresh raise fires the OS notification (mirrors the `attention` op).
+      if (noteAttention(r.paneId)) void notifyAttention(req.target, prompt.slice(0, 80));
+      return { ok: true, data: { name: req.target } };
+    }
+
+    case "approval.resolve": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      approvalResolve(r.paneId);
+      clearAttention(r.paneId);
+      return { ok: true, data: { name: req.target } };
+    }
+
     default:
       return { ok: false, error: `unknown op "${(req as { op?: string }).op}"` };
   }
+}
+
+/** The Agent *kind* for a pane: the op's explicit hint (the hook knows it's Claude), else detected
+ *  from the pane's launch command, else a generic fallback. Used only to label a Session. */
+function paneAgentId(paneId: PaneId, hint?: string): AgentId {
+  return hint?.trim() || detectAgent(paneSpecById(paneId)?.command)?.id || "agent";
+}
+
+/** A pane's coarse status label from a Task title — short enough for the title bar; "working" if empty. */
+function floorLabel(title: string): string {
+  const t = title.trim();
+  if (!t) return "working";
+  return t.length > 48 ? `${t.slice(0, 47)}…` : t;
 }
 
 /** Block on a native confirm before letting an external pane spawn a command-running pane. Uses

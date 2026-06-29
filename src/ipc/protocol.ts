@@ -113,7 +113,19 @@ export type ControlRequest =
   // Set (or, with no/empty text, clear) a pane's short status label, shown in its title bar and
   // overview tile. Same opacity-safe category as `attention`: the agent *pushes* the label; we
   // never read it from output. Turns overview mode into a fleet dashboard (building/blocked/idle).
-  | { op: "status"; target: string; text?: string };
+  | { op: "status"; target: string; text?: string }
+  // ---- Agent lifecycle (ADR-0008) ----
+  // The rich form of attention/status: an agent reports its own Session/Task lifecycle, pushed
+  // (via `loom hooks` / the MCP server), never parsed from output. `target` is the calling pane.
+  // A pane has at most one Live Session; task/approval ops act on that session's current Task,
+  // lazily creating a Session/Task if an agent emits work before a start signal.
+  | { op: "session.start"; target: string; agent?: AgentId; sessionId?: string; cwd?: string }
+  | { op: "session.end"; target: string; outcome?: TaskOutcome }
+  | { op: "task.begin"; target: string; title: string }
+  | { op: "task.update"; target: string; files?: string[]; note?: string }
+  | { op: "task.end"; target: string; outcome?: TaskOutcome }
+  | { op: "approval.request"; target: string; prompt: string; kind?: ApprovalKind }
+  | { op: "approval.resolve"; target: string };
 
 /** One pane in a `list` response. */
 export interface PaneInfo {
@@ -133,3 +145,64 @@ export type ControlResponse =
  * (on its own or via `pty_kill`). `-1` means the exit status was unavailable.
  */
 export type ExitCode = number;
+
+// ---- Agent-awareness domain model (ADR-0008) -----------------------------------------
+// Agents become first-class entities fed by agent-pushed signals (hooks / the MCP server) and
+// the kernel floor — never by parsing pane output. `Agent` is the *kind* (registry); `Session`
+// is one *run* of an Agent in a Pane; `Task` is a unit of work within a Session; `Approval` is
+// the payload a Task carries while blocked on the user (not a standalone entity). Product state,
+// so it lives here in TS (stores/sessions.ts), not Rust.
+
+/** Identity of an Agent *kind* (Claude Code, Codex…). Resolves a registry entry (lib/agents.ts). */
+export type AgentId = string;
+/** Identity of one Session — the agent's own session id when it provides one, else synthesised. */
+export type SessionId = string;
+/** Identity of one Task (always synthesised; agents don't name tasks stably). */
+export type TaskId = string;
+
+/** How a Session or Task finished. */
+export type TaskOutcome = "done" | "failed";
+/** A live Session's coarse state. `blocked` = its current Task is waiting on the user. */
+export type SessionState = "running" | "idle" | "blocked" | "done" | "failed";
+/** A Task's state. `blocked` carries an {@link Approval}. */
+export type TaskState = "running" | "blocked" | "done" | "failed";
+/** What kind of thing the user is being asked, when a Task blocks. */
+export type ApprovalKind = "permission" | "question" | "choice";
+
+/** The structured "needs you" a Task carries while blocked — the rich form of the `attention` flag. */
+export interface Approval {
+  /** The agent's actual prompt, e.g. "Run `rm -rf build`?". Pushed by the agent, never scraped. */
+  prompt: string;
+  kind: ApprovalKind;
+  /** Set when the agent signals it's unblocked (or the user answers). */
+  resolvedAt?: number;
+}
+
+/** A unit of work an Agent reports doing within a Session (granularity the agent's to set). */
+export interface Task {
+  id: TaskId;
+  sessionId: SessionId;
+  /** Agent-pushed (a prompt, or a declared title); never inferred from output. */
+  title: string;
+  state: TaskState;
+  startedAt: number;
+  endedAt?: number;
+  /** Paths the agent says it touched (→ interactive git review). Agent-pushed only. */
+  files: string[];
+  /** Present while `state === "blocked"`. */
+  approval?: Approval;
+}
+
+/** One run of an Agent inside a Pane, over time. The durable unit fleet view / log key off. */
+export interface Session {
+  id: SessionId;
+  /** Which Pane it ran in. The record may outlive the Pane (history). */
+  paneId: PaneId;
+  agentId: AgentId;
+  cwd: string;
+  startedAt: number;
+  endedAt?: number;
+  state: SessionState;
+  /** Its Tasks, oldest-first. */
+  taskIds: TaskId[];
+}

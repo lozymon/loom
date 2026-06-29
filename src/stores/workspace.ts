@@ -302,6 +302,15 @@ export function resolvePaneByName(name: string): { paneId: PaneId } | { error: s
   return { error: `"${name}" is ambiguous (${matches.length} panes share it)` };
 }
 
+/** A pane's launch spec by id (searches all workspaces). Used to derive its Agent kind (ADR-0008). */
+export function paneSpecById(paneId: PaneId): PaneSpec | undefined {
+  for (const w of app.workspaces) {
+    const spec = w.panes[paneId];
+    if (spec) return spec;
+  }
+  return undefined;
+}
+
 /** A workspace looked up by display name, preferring the active one (`loom broadcast --workspace`). */
 export function workspaceByName(name: string): WorkspaceUI | undefined {
   const active = activeWorkspace();

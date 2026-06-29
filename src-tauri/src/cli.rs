@@ -14,8 +14,9 @@
 //!   loom attention Cleo --clear        # drop pane Cleo's attention border
 //!   loom status "running tests"        # set this pane's status label (shown in its title/overview)
 //!   loom status Cleo --clear           # clear pane Cleo's status label
-//!   loom hooks --install               # wire a Claude Code agent's events to attention/status
+//!   loom hooks --install               # wire a Claude Code agent's events to the Session/Task model
 //!   loom hooks                         # print the recommended hooks profile (no changes made)
+//!   loom hook <event>                  # internal: a hook pushes one lifecycle op (ADR-0008)
 //!
 //! Pure std + serde_json (already a workspace dep): no protocol logic lives here or in Rust —
 //! the request is forwarded verbatim to the webview, which owns routing (src/ipc/protocol.ts).
@@ -47,6 +48,7 @@ pub fn is_command(cmd: &str) -> bool {
             | "attention"
             | "status"
             | "hooks"
+            | "hook"
     )
 }
 
@@ -66,6 +68,12 @@ pub fn run() {
                 exit(1);
             }
         }
+        return;
+    }
+    // `hook <event>` is the internal bridge the installed hooks call: read the hook's JSON on
+    // stdin, push the matching ADR-0008 lifecycle op. Fire-and-forget, silent, never fails.
+    if args[0] == "hook" {
+        run_hook_emit(&args[1..]);
         return;
     }
     let req = match build_request(&args) {
@@ -406,34 +414,106 @@ fn print_list(data: Option<&Value>) {
     }
 }
 
-// ---- `loom hooks` — bridge a Claude Code agent's lifecycle to the control bus (ADR-0007) ----
+// ---- `loom hooks` — bridge a Claude Code agent's lifecycle to the control bus (ADR-0007/0008) ----
 //
 // The agent *pushes* its own state through the channel we already built, no output parsing
-// (ADR-0001): a "needs you" notification raises the amber border; a prompt-submit/turn-end pair
-// drives the status label. This is the hook adapter from docs/IDEAS.md's agent-integration arc.
+// (ADR-0001): each Claude Code hook fires `loom hook <event>`, which reads the hook's JSON payload
+// and pushes the matching Session/Task/Approval op (ADR-0008). `loom hooks --install` writes the
+// profile; `run_hook_emit` is the runtime bridge. The coarse attention/status floor is driven from
+// the same ops frontend-side, so this fully supersedes the old coarse-only profile.
 
 /// The recommended hook entries, as (event, entry) pairs. Each entry is one Claude Code hook
-/// matcher-group with a single command. Kept conflict-free: `Notification` owns `attention`
-/// (cleared by focusing the pane), the prompt/stop pair owns `status` — they never touch the
-/// same flag, so firing order can't race.
+/// matcher-group with a single command — the internal `loom hook <event>` bridge, which reads the
+/// hook's JSON payload and pushes the matching ADR-0008 lifecycle op (Session/Task/Approval). The
+/// bridge also drives the coarse `attention`/`status` floor frontend-side, so installing these
+/// fully supersedes the old coarse-only profile. `PostToolUse` is scoped to the file-editing tools
+/// (the only ones carrying a `file_path` to attribute to a Task).
 fn hook_profile() -> Vec<(&'static str, Value)> {
+    let cmd = |c: &str| json!({ "hooks": [ { "type": "command", "command": c } ] });
+    let matched = |m: &str, c: &str| json!({ "matcher": m, "hooks": [ { "type": "command", "command": c } ] });
     vec![
-        // You submit a prompt → the pane shows "working" until the turn ends.
+        // A run begins (or --resume → a new Session). Carries session_id + cwd.
+        ("SessionStart", cmd("loom hook session-start")),
+        // You submit a prompt → a new Task titled with the prompt.
+        ("UserPromptSubmit", cmd("loom hook prompt")),
+        // A file-editing tool ran → attribute the touched file to the current Task.
         (
-            "UserPromptSubmit",
-            json!({ "hooks": [ { "type": "command", "command": "loom status working" } ] }),
+            "PostToolUse",
+            matched("Edit|Write|MultiEdit|NotebookEdit", "loom hook post-tool"),
         ),
-        // Claude needs input / permission / went idle → raise the "needs you" border.
-        (
-            "Notification",
-            json!({ "matcher": "", "hooks": [ { "type": "command", "command": "loom attention" } ] }),
-        ),
-        // Turn finished → clear the status label (attention is cleared by looking at the pane).
-        (
-            "Stop",
-            json!({ "hooks": [ { "type": "command", "command": "loom status" } ] }),
-        ),
+        // Claude needs input / permission → the Task blocks on you (the rich Approval + the border).
+        ("Notification", matched("", "loom hook notification")),
+        // Turn finished → the Task ends, the Session goes idle.
+        ("Stop", cmd("loom hook stop")),
+        // The run ended → close the Session.
+        ("SessionEnd", cmd("loom hook session-end")),
     ]
+}
+
+/// `loom hook <event>` — the bridge the installed Claude Code hooks call. Reads the hook's JSON
+/// payload from stdin and pushes the matching ADR-0008 lifecycle op over the control bus.
+///
+/// Three hard rules, because a hook must never disrupt the agent: (1) **silent on stdout** —
+/// Claude feeds some hooks' stdout (e.g. `UserPromptSubmit`) into the model's context, so we print
+/// nothing there; (2) **always exit 0** — bad JSON, no socket, no match are all clean no-ops; and
+/// (3) **only act inside Loom** — if `LOOM_PANE`/`LOOM_SOCK` are unset this `claude` isn't ours, so
+/// we do nothing (the same hooks can be installed globally and stay inert outside Loom).
+fn run_hook_emit(args: &[String]) {
+    let Some(event) = args.first() else { return };
+    let Ok(pane) = env::var("LOOM_PANE") else {
+        return;
+    };
+    if env::var("LOOM_SOCK").is_err() {
+        return;
+    }
+
+    let payload: Value = read_stdin()
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| json!({}));
+    let get = |k: &str| payload.get(k).and_then(Value::as_str).unwrap_or("");
+
+    let req = match event.as_str() {
+        "session-start" => {
+            let mut o = json!({ "op": "session.start", "target": pane, "agent": "claude" });
+            let sid = get("session_id");
+            if !sid.is_empty() {
+                o["sessionId"] = json!(sid);
+            }
+            let cwd = get("cwd");
+            if !cwd.is_empty() {
+                o["cwd"] = json!(cwd);
+            }
+            o
+        }
+        "session-end" => json!({ "op": "session.end", "target": pane, "outcome": "done" }),
+        "prompt" => json!({ "op": "task.begin", "target": pane, "title": get("prompt") }),
+        "post-tool" => {
+            // Only the file-editing tools carry a `file_path`; nothing to attribute otherwise.
+            let file = payload
+                .get("tool_input")
+                .and_then(|t| t.get("file_path"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if file.is_empty() {
+                return;
+            }
+            json!({ "op": "task.update", "target": pane, "files": [file] })
+        }
+        "notification" => {
+            let msg = get("message");
+            let kind = if msg.to_lowercase().contains("permission") {
+                "permission"
+            } else {
+                "question"
+            };
+            json!({ "op": "approval.request", "target": pane, "prompt": msg, "kind": kind })
+        }
+        "stop" => json!({ "op": "task.end", "target": pane, "outcome": "done" }),
+        _ => return,
+    };
+    // Best-effort: drop the reply and any transport error — a hook never reports failure upward.
+    let _ = control_sock::send(&req);
 }
 
 /// The profile as a full `{ "hooks": { … } }` settings fragment (what `loom hooks` prints).
