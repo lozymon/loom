@@ -18,10 +18,12 @@ export default function TitleBar(props: {
   onGit: () => void;
   onDocs: () => void;
   onShortcuts: () => void;
+  onHistory: () => void;
   gitOn: () => boolean;
   docsOn: () => boolean;
   settingsOn: () => boolean;
   paletteOn: () => boolean;
+  historyOn: () => boolean;
 }) {
   const win = getCurrentWindow();
   const openPalette = () =>
@@ -73,6 +75,16 @@ export default function TitleBar(props: {
             onClick={() => props.onDocs()}
           >
             Docs
+          </button>
+        </Show>
+        <Show when={settings.navVisible.history}>
+          <button
+            class="tb-btn"
+            classList={{ on: props.historyOn() }}
+            title="Search agent history — past sessions & tasks"
+            onClick={() => props.onHistory()}
+          >
+            History
           </button>
         </Show>
         <button

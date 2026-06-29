@@ -17,7 +17,7 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 /** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
  *  so this config stays reachable). */
-export type NavItemId = "overview" | "palette" | "git" | "docs";
+export type NavItemId = "overview" | "palette" | "git" | "docs" | "history";
 
 export interface Settings {
   // ---- Appearance (terminal text) ----
@@ -98,7 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   docsPreview: true,
   sessionLogging: false,
   keybindings: { ...DEFAULT_KEYBINDINGS },
-  navVisible: { overview: true, palette: true, git: true, docs: true },
+  navVisible: { overview: true, palette: true, git: true, docs: true, history: true },
   railWidth: 212,
   railCollapsed: false,
   gitWidth: 440,

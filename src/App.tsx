@@ -228,10 +228,12 @@ export default function App() {
         onGit={() => togglePanel("git")}
         onDocs={() => togglePanel("docs")}
         onShortcuts={() => setShortcutsOpen(true)}
+        onHistory={() => setHistoryOpen((v) => !v)}
         gitOn={gitOpen}
         docsOn={docsOpen}
         settingsOn={settingsOpen}
         paletteOn={paletteOpen}
+        historyOn={historyOpen}
       />
       <div class="body">
       <WorkspaceRail onNew={() => setWizardOpen(true)} />

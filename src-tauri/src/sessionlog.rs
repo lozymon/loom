@@ -98,7 +98,40 @@ pub fn open(app: &AppHandle) -> Result<Connection, String> {
          CREATE INDEX IF NOT EXISTS idx_tasks_started ON tasks(started_at);",
     )
     .map_err(|e| e.to_string())?;
+    prune(&conn).map_err(|e| e.to_string())?;
     Ok(conn)
+}
+
+/// Wall-clock millis since the epoch (used by pruning; the per-row timestamps come from TS).
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+// Bounded-window pruning policy (ADR-0009): the default keeps history small enough to stay fast
+// and unbounded growth at bay. Run once at startup — low cost, never on the hot path.
+const MAX_AGE_MS: i64 = 90 * 24 * 60 * 60 * 1000; // ~90 days
+const MAX_SESSIONS: i64 = 1000;
+
+/// Drop sessions older than `MAX_AGE_MS` or beyond the newest `MAX_SESSIONS`, then any tasks left
+/// orphaned by those deletions.
+fn prune(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "DELETE FROM sessions WHERE started_at < ?1",
+        params![now_ms() - MAX_AGE_MS],
+    )?;
+    conn.execute(
+        "DELETE FROM sessions WHERE id NOT IN \
+         (SELECT id FROM sessions ORDER BY started_at DESC LIMIT ?1)",
+        params![MAX_SESSIONS],
+    )?;
+    conn.execute(
+        "DELETE FROM tasks WHERE session_id NOT IN (SELECT id FROM sessions)",
+        [],
+    )?;
+    Ok(())
 }
 
 /// Upsert one Session row (on start / state change / end). Idempotent by `id`.
