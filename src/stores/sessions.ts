@@ -33,6 +33,16 @@ const [livePane, setLivePane] = createStore<Record<PaneId, SessionId | undefined
 /** Reactive read-only views (read `sessions[id]`, `tasks[id]`, `livePane[paneId]`). */
 export { sessions, tasks, livePane };
 
+// ---- read helpers for the fleet UI (reactive when called inside a tracking scope) ----
+
+/** The active (running or blocked) Task of a Pane's Live Session, or undefined. */
+export function paneActiveTask(paneId: PaneId): Task | undefined {
+  const session = liveSession(paneId);
+  if (!session) return undefined;
+  const id = activeTaskId(session);
+  return id != null ? tasks[id] : undefined;
+}
+
 // Synthesized ids for sessions an agent doesn't name, and for tasks (agents never name tasks
 // stably). Monotonic per process; the agent's own session id is preferred for SessionId.
 let synthSeq = 0;

@@ -13,6 +13,7 @@ import TitleBar from "./components/TitleBar";
 import WorkspaceRail from "./components/WorkspaceRail";
 import LayoutView from "./components/LayoutNode";
 import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
+import FleetApprovals from "./components/FleetApprovals";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
@@ -234,6 +235,8 @@ export default function App() {
             </For>
           </Show>
         </div>
+        {/* Approvals triage (Phase 3): bottom-docked, shown only when agents are blocked on you. */}
+        <FleetApprovals />
       </div>
       {/* The right-side docked panels — flex siblings of .stage, so opening one narrows the grid
           (panes refit via their ResizeObserver) rather than covering it. Mutually exclusive. */}
