@@ -4,6 +4,36 @@ All notable changes to Loom are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [1.0.0] — 2026-06-29
+
+First stable release. Loom is reoriented from a *generic GUI terminal multiplexer* into an
+**agent-first developer environment** — the multiplexer core is unchanged (real PTYs in split
+grids, the workspace rail, tear-off), but agents are now first-class and the defaults, surfaces,
+and brand lead with driving fleets of CLI agents.
+
+### Added
+- **Agents are first-class** (ADR-0008, superseding ADR-0001's "no agent entity" stance). A real
+  `Agent`/`Session`/`Task` domain model, fed only by agent-*pushed* signals — Claude Code hooks
+  (`loom hooks`, now the full lifecycle taxonomy) and the `loom mcp` server — **never** by parsing
+  pane output. The PTY engine stays byte-opaque.
+- **Fleet board** — overview mode shows each pane's live agent Task (title + files touched),
+  tinted amber for a "needs you" pane.
+- **Approvals triage** — a bottom strip lists agents blocked on you with their actual prompt;
+  answer the right pane inline (y/n or free text).
+- **Interactive git** (ADR-0010) — the Source Control panel grows from read-only to
+  review → stage → commit, with per-file and Stage-all controls and a commit bar. Every write is
+  user-initiated; Loom never auto-commits, and the writes are not exposed over the control bus.
+- **Durable agent history** (ADR-0009) — a SQLite session/task log with cross-session search (the
+  command palette and the new **History** top-bar entry), bounded-window pruning configurable in
+  Settings → Terminal → Agent history. History survives restarts; live PTYs do not (ADR-0002).
+- **New brand** — the woven Loom mark (cyan warp × amber weft) across the title bar, window/tray
+  icons, and favicon; the default theme accent moves to the brand cyan.
+
+### Changed
+- Reoriented the product identity and defaults toward agent-first. The generic-multiplexer engine
+  underneath is untouched — split grids, plain shells, freeform splitting, and multi-window
+  tear-off all still work.
+
 ## [0.11.0] — 2026-06-25
 
 ### Added
