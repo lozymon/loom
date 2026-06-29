@@ -3994,6 +3994,55 @@ body,
     monospace;
 }
 
+/* ---- Agent history search (Phase 2, ADR-0009): rows over the SQLite session/task log ---- */
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  font: 12px var(--font-mono);
+}
+.history-agent {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 10px;
+  color: #fff;
+  background: var(--agent-color, var(--accent));
+}
+.history-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-state {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.history-state[data-state="blocked"] {
+  color: var(--state-needs);
+}
+.history-state[data-state="running"] {
+  color: var(--state-working);
+}
+.history-files,
+.history-time {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
 /* ============ Fleet view enrichment + approvals triage (Phase 3, ADR-0008) ============ */
 
 /* Overview tile caption: the live agent Task — title + files touched. Bottom-docked over the tile

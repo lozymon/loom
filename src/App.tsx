@@ -19,6 +19,7 @@ import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
 import ShortcutsOverlay from "./components/ShortcutsOverlay";
 import SessionLogViewer from "./components/SessionLogViewer";
+import HistorySearch from "./components/HistorySearch";
 import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
@@ -48,6 +49,7 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const [logsOpen, setLogsOpen] = createSignal(false);
   const [logPreselect, setLogPreselect] = createSignal<string | null>(null);
+  const [historyOpen, setHistoryOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
@@ -271,6 +273,9 @@ export default function App() {
       <Show when={logsOpen()}>
         <SessionLogViewer preselectPath={logPreselect()} onClose={() => setLogsOpen(false)} />
       </Show>
+      <Show when={historyOpen()}>
+        <HistorySearch onClose={() => setHistoryOpen(false)} />
+      </Show>
       <Show when={paletteOpen()}>
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -280,6 +285,7 @@ export default function App() {
           onDocs={() => showPanel("docs")}
           onShortcuts={() => setShortcutsOpen(true)}
           onLogs={() => { setLogPreselect(null); setLogsOpen(true); }}
+          onHistory={() => setHistoryOpen(true)}
         />
       </Show>
     </div>
