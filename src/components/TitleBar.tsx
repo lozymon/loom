@@ -11,7 +11,7 @@ import { Show } from 'solid-js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { appState, toggleOverview, setOverview } from '../stores/workspace';
 import { settings } from '../stores/settings';
-import appIcon from '../assets/app-icon.png';
+import loomMark from '../assets/loom-mark.svg';
 
 export default function TitleBar(props: {
   onSettings: () => void;
@@ -32,7 +32,7 @@ export default function TitleBar(props: {
   return (
     <header class="titlebar" data-tauri-drag-region>
       <button class="tb-brand" title="Overview" onClick={() => setOverview(false)}>
-        <img class="tb-logo" src={appIcon} alt="" width="18" height="18" />
+        <img class="tb-logo" src={loomMark} alt="" width="18" height="18" />
         <span class="tb-name">Loom</span>
       </button>
 

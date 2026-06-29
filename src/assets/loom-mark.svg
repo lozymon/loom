@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100" fill="none" stroke-linecap="round">
+  
+  <g stroke="var(--loom-warp, #22d3ee)" stroke-width="9">
+    <path d="M40 20 V54"></path><path d="M40 66 V80"></path><path d="M60 20 V34"></path><path d="M60 46 V80"></path>
+  </g>
+  <g stroke="var(--loom-weft, #f59e0b)" stroke-width="9">
+    <path d="M20 40 H34"></path><path d="M46 40 H80"></path><path d="M20 60 H54"></path><path d="M66 60 H80"></path>
+  </g>
+</svg>

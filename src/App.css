@@ -19,9 +19,10 @@
   --text-mid: #9a9da3;
   --text-dim: #7b7e84;
   --text-faint: #5f6268;
-  --accent: #5b8cff;
-  --accent-text: #9bbcff;
-  --accent-rgb: 91, 140, 255;
+  /* Brand warp cyan (loom-brand handoff): the signature accent, matching the woven mark. */
+  --accent: #22d3ee;
+  --accent-text: #67e8f9;
+  --accent-rgb: 34, 211, 238;
   --well: #0f1013;
   --chip: rgba(12, 13, 16, 0.72);
   --chip-border: rgba(255, 255, 255, 0.07);
