@@ -35,7 +35,7 @@ import { openEditorForActivePane } from "./lib/editor";
 import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import { setSessionSink } from "./stores/sessions";
-import { saveSession, saveTask } from "./lib/sessionLogClient";
+import { saveSession, saveTask, pruneHistory } from "./lib/sessionLogClient";
 import "./App.css";
 
 export default function App() {
@@ -80,6 +80,9 @@ export default function App() {
     await Promise.all([initTheme(), initSettings(), init()]);
     startPersistence();
     setReady(true);
+    // Prune the agent-history DB to the configured bounded window (ADR-0009), once settings are
+    // loaded. Best-effort: a failure (e.g. history DB unavailable) must not disrupt startup.
+    void pruneHistory(settings.historyMaxAgeDays, settings.historyMaxSessions).catch(() => {});
   });
 
   // Listen for inter-pane control requests (the `loom` CLI → Rust relay → here). Registered in

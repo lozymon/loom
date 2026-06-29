@@ -35,3 +35,7 @@ export const searchTasks = (query: string, limit?: number): Promise<TaskHit[]> =
 /** Recent task history across all sessions (newest first). */
 export const recentTasks = (limit?: number): Promise<TaskHit[]> =>
   invoke<TaskHit[]>("session_log_recent", { limit });
+
+/** Prune the history to the configured bounded window (ADR-0009); a cap of 0 disables it. */
+export const pruneHistory = (maxAgeDays: number, maxSessions: number): Promise<void> =>
+  invoke<void>("session_log_prune", { maxAgeDays, maxSessions });

@@ -98,7 +98,6 @@ pub fn open(app: &AppHandle) -> Result<Connection, String> {
          CREATE INDEX IF NOT EXISTS idx_tasks_started ON tasks(started_at);",
     )
     .map_err(|e| e.to_string())?;
-    prune(&conn).map_err(|e| e.to_string())?;
     Ok(conn)
 }
 
@@ -110,27 +109,38 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-// Bounded-window pruning policy (ADR-0009): the default keeps history small enough to stay fast
-// and unbounded growth at bay. Run once at startup — low cost, never on the hot path.
-const MAX_AGE_MS: i64 = 90 * 24 * 60 * 60 * 1000; // ~90 days
-const MAX_SESSIONS: i64 = 1000;
-
-/// Drop sessions older than `MAX_AGE_MS` or beyond the newest `MAX_SESSIONS`, then any tasks left
-/// orphaned by those deletions.
-fn prune(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute(
-        "DELETE FROM sessions WHERE started_at < ?1",
-        params![now_ms() - MAX_AGE_MS],
-    )?;
-    conn.execute(
-        "DELETE FROM sessions WHERE id NOT IN \
-         (SELECT id FROM sessions ORDER BY started_at DESC LIMIT ?1)",
-        params![MAX_SESSIONS],
-    )?;
+/// Prune the history to a bounded window (ADR-0009). The *policy* lives in TS settings
+/// (`historyMaxAgeDays` / `historyMaxSessions`); TS calls this once at startup with the configured
+/// caps and we just run the SQL. A cap of `<= 0` disables it. Drops out-of-window sessions, then
+/// any tasks left orphaned. Low-cost, off the hot path.
+#[tauri::command]
+pub fn session_log_prune(
+    log: tauri::State<SessionLog>,
+    max_age_days: i64,
+    max_sessions: i64,
+) -> Result<(), String> {
+    let conn = log.0.lock().map_err(|e| e.to_string())?;
+    if max_age_days > 0 {
+        let cutoff = now_ms() - max_age_days * 24 * 60 * 60 * 1000;
+        conn.execute(
+            "DELETE FROM sessions WHERE started_at < ?1",
+            params![cutoff],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    if max_sessions > 0 {
+        conn.execute(
+            "DELETE FROM sessions WHERE id NOT IN \
+             (SELECT id FROM sessions ORDER BY started_at DESC LIMIT ?1)",
+            params![max_sessions],
+        )
+        .map_err(|e| e.to_string())?;
+    }
     conn.execute(
         "DELETE FROM tasks WHERE session_id NOT IN (SELECT id FROM sessions)",
         [],
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 

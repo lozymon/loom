@@ -26,6 +26,10 @@ export interface Settings {
   cursorStyle: CursorStyle;
   cursorBlink: boolean;
   scrollback: number;
+  // ---- Agent history (ADR-0009): bounded-window pruning of the session/task log, applied at
+  // startup. 0 disables that cap. ----
+  historyMaxAgeDays: number;
+  historyMaxSessions: number;
   // ---- Terminal behaviour ----
   copyOnSelect: boolean;
   middleClickPaste: boolean;
@@ -85,6 +89,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cursorStyle: "block",
   cursorBlink: true,
   scrollback: 5000,
+  historyMaxAgeDays: 90,
+  historyMaxSessions: 1000,
   copyOnSelect: false,
   middleClickPaste: false,
   defaultShell: "",

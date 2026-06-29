@@ -392,6 +392,39 @@ export default function Settings(props: { onClose: () => void }) {
             </div>
             <p class="settings-hint muted">Applies to terminals you open from now on. Useful for reviewing what a fleet of agents did; files can grow large.</p>
           </section>
+
+          {/* ---- Agent history (ADR-0009): bounded-window pruning of the session/task log ---- */}
+          <section class="settings-section">
+            <h3>Agent history</h3>
+            <p class="settings-sub">The searchable log of agent sessions &amp; tasks (History in the top bar). Pruned to this window at startup; set either to 0 to keep everything.</p>
+            <div class="settings-card">
+              <label class="settings-row">
+                <span class="settings-label">Keep for <span class="muted">— days</span></span>
+                <input
+                  class="settings-input narrow"
+                  type="number"
+                  min="0"
+                  max="3650"
+                  step="1"
+                  value={settings.historyMaxAgeDays}
+                  onChange={(e) => setSetting("historyMaxAgeDays", Math.max(0, Math.floor(e.currentTarget.valueAsNumber || 0)))}
+                />
+              </label>
+              <label class="settings-row">
+                <span class="settings-label">Max sessions</span>
+                <input
+                  class="settings-input narrow"
+                  type="number"
+                  min="0"
+                  max="100000"
+                  step="100"
+                  value={settings.historyMaxSessions}
+                  onChange={(e) => setSetting("historyMaxSessions", Math.max(0, Math.floor(e.currentTarget.valueAsNumber || 0)))}
+                />
+              </label>
+            </div>
+            <p class="settings-hint muted">Applied at the next launch: sessions older than the age, or beyond the newest N, are dropped (with their tasks).</p>
+          </section>
           </Show>
 
           <Show when={tab() === "keys"}>
