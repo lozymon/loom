@@ -8,8 +8,10 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import {
   activeWorkspace,
   appState,
+  closedItems,
   closePane,
   listPanes,
+  reopenClosed,
   revealPane,
   saveCurrentAsPreset,
   splitPane,
@@ -19,6 +21,7 @@ import {
   toggleZoom,
 } from "../stores/workspace";
 import { fuzzyScore } from "../lib/matching";
+import { ago } from "../lib/time";
 import { formatBinding, type ActionId } from "../lib/keybindings";
 import { settings } from "../stores/settings";
 import { activity } from "../stores/activity";
@@ -49,6 +52,7 @@ export default function CommandPalette(props: {
   onShortcuts: () => void;
   onLogs: () => void;
   onHistory: () => void;
+  onReopen: () => void;
 }) {
   const [query, setQuery] = createSignal("");
   const [sel, setSel] = createSignal(0);
@@ -68,6 +72,7 @@ export default function CommandPalette(props: {
       { label: "Keyboard shortcuts cheat-sheet", icon: "⌨", kind: "action", key: kb("shortcuts"), run: props.onShortcuts },
       { label: "View session logs", icon: "≣", kind: "action", hint: "Recorded pane output", run: props.onLogs },
       { label: "Search agent history", icon: "⏱", kind: "action", hint: "Past sessions & tasks", run: props.onHistory },
+      { label: "Reopen closed / resume a Claude session", icon: "↺", kind: "action", hint: "Closed panes & Claude sessions", run: props.onReopen },
       { label: "Toggle overview (fleet glance)", icon: "▦", kind: "action", key: kb("overview"), run: () => toggleOverview() },
       { label: "Save workspace as preset", icon: "★", kind: "action", run: () => saveCurrentAsPreset() },
       { label: "Next workspace", icon: "→", kind: "action", key: kb("next-workspace"), run: () => switchWorkspaceRelative(1) },
@@ -85,6 +90,11 @@ export default function CommandPalette(props: {
     for (const w of appState.workspaces) {
       if (w.id === appState.activeId) continue;
       list.push({ label: `Switch to workspace: ${w.name}`, icon: "▦", kind: "action", hint: "Workspace", run: () => switchWorkspace(w.id) });
+    }
+    // Reopen recently closed panes/workspaces — a Claude pane resumes its conversation on reopen.
+    for (const c of closedItems()) {
+      const what = c.kind === "workspace" ? "workspace" : "pane";
+      list.push({ label: `Reopen ${what}: ${c.title}`, icon: "↺", kind: "action", hint: ago(c.closedAt), run: () => reopenClosed(c.id) });
     }
     for (const p of listPanes()) {
       // Workspace in front of the pane name so same-named panes across workspaces (Faye in

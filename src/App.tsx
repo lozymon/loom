@@ -20,11 +20,12 @@ import DocsPanel from "./components/DocsPanel";
 import ShortcutsOverlay from "./components/ShortcutsOverlay";
 import SessionLogViewer from "./components/SessionLogViewer";
 import HistorySearch from "./components/HistorySearch";
+import ReopenPanel from "./components/ReopenPanel";
 import CommandPalette from "./components/CommandPalette";
 import {
   appState, init, startPersistence, flushPersistence,
   setOverview, toggleOverview, switchWorkspaceRelative, switchWorkspaceIndex,
-  activeWorkspace, activePanel, setActivePanel,
+  activeWorkspace, activePanel, setActivePanel, reopenLastClosed,
 } from "./stores/workspace";
 import type { DockedPanelKind } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
@@ -50,6 +51,7 @@ export default function App() {
   const [logsOpen, setLogsOpen] = createSignal(false);
   const [logPreselect, setLogPreselect] = createSignal<string | null>(null);
   const [historyOpen, setHistoryOpen] = createSignal(false);
+  const [reopenOpen, setReopenOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   // True when the window fills the screen (maximized or fullscreen). The .shell card is a rounded,
@@ -149,6 +151,7 @@ export default function App() {
   // focused pane and stay terminal-only; only workspace/app actions are wired here.
   const GLOBAL_ACTIONS: Partial<Record<ActionId, () => void>> = {
     "new-workspace": () => setWizardOpen(true),
+    "reopen-closed": () => reopenLastClosed(),
     "settings": () => openSettings(),
     "source-control": () => togglePanel("git"),
     "docs": () => togglePanel("docs"),
@@ -232,11 +235,13 @@ export default function App() {
         onDocs={() => togglePanel("docs")}
         onShortcuts={() => setShortcutsOpen(true)}
         onHistory={() => setHistoryOpen((v) => !v)}
+        onReopen={() => setReopenOpen((v) => !v)}
         gitOn={gitOpen}
         docsOn={docsOpen}
         settingsOn={settingsOpen}
         paletteOn={paletteOpen}
         historyOn={historyOpen}
+        reopenOn={reopenOpen}
       />
       <div class="body">
       <WorkspaceRail onNew={() => setWizardOpen(true)} />
@@ -281,6 +286,9 @@ export default function App() {
       <Show when={historyOpen()}>
         <HistorySearch onClose={() => setHistoryOpen(false)} />
       </Show>
+      <Show when={reopenOpen()}>
+        <ReopenPanel onClose={() => setReopenOpen(false)} />
+      </Show>
       <Show when={paletteOpen()}>
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -291,6 +299,7 @@ export default function App() {
           onShortcuts={() => setShortcutsOpen(true)}
           onLogs={() => { setLogPreselect(null); setLogsOpen(true); }}
           onHistory={() => setHistoryOpen(true)}
+          onReopen={() => setReopenOpen(true)}
         />
       </Show>
     </div>

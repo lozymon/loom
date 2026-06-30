@@ -65,11 +65,36 @@ export interface Preset {
   panes?: Record<PaneId, PaneSpec>;
 }
 
+/**
+ * A pane or workspace the user *explicitly* closed, retained so it can be reopened (the
+ * `reopen-closed` shortcut, the command palette, or the History panel). Only explicit closes
+ * are recorded — a normal app shutdown persists the live workspaces instead, so quitting doesn't
+ * flood this list. A reopened Claude pane resumes its conversation, because the captured spec
+ * keeps the managed `sessionId` (see lib/agents.ts). Persisted to disk, newest-first, capped.
+ */
+export interface ClosedItem {
+  id: string;
+  kind: "pane" | "workspace";
+  /** Pane title or workspace name, shown in the picker. */
+  title: string;
+  /** Working folder (pane cwd or workspace cwd) — display + restore context. */
+  cwd: string;
+  /** When it was closed (epoch ms). */
+  closedAt: number;
+  /** kind === "pane": the captured spec (command/cwd/shell/env/title/sessionId). */
+  spec?: PaneSpec;
+  /** kind === "workspace": the captured layout, rebuilt faithfully on reopen. */
+  tree?: LayoutNode;
+  panes?: Record<PaneId, PaneSpec>;
+}
+
 interface AppState {
   workspaces: WorkspaceUI[];
   activeId: string;
   recents: RecentFolder[];
   presets: Preset[];
+  /** Recently closed panes/workspaces, newest-first (reopen history). */
+  closed: ClosedItem[];
   /** Overview ("fleet glance") mode: the active workspace's panes reflow to a uniform tile grid
       (a view transform only — the split tree and PTYs are untouched). Active-workspace scoped. */
   overview: boolean;
@@ -78,9 +103,18 @@ interface AppState {
 let idSeq = 0;
 let wsSeq = 0;
 let presetSeq = 0;
+let closedSeq = 0;
 const nextPaneId = (): PaneId => ++idSeq;
 const nextWsId = (): string => `ws${++wsSeq}`;
 const nextPresetId = (): string => `ps${++presetSeq}`;
+const nextClosedId = (): string => `cl${++closedSeq}`;
+
+/** How many recently-closed items to retain. */
+const CLOSED_MAX = 30;
+
+/** Deep-copy a captured spec/tree off the reactive store, so the history holds a frozen snapshot
+ *  that survives the original pane/workspace being removed (and round-trips cleanly to disk). */
+const snapshotValue = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 export interface NewWorkspaceOpts {
   name: string;
@@ -97,6 +131,9 @@ export interface NewWorkspaceOpts {
    *  to a fresh PaneId; `paneCount`/`commands`/`cwds` are then ignored. */
   tree?: LayoutNode;
   panes?: Record<PaneId, PaneSpec>;
+  /** Keep each pane's Claude `sessionId` when rebuilding `tree`/`panes` so reopening a closed
+   *  workspace *resumes* its conversations. Off for duplicate/preset (they start fresh). */
+  keepSession?: boolean;
 }
 
 /**
@@ -107,6 +144,7 @@ export interface NewWorkspaceOpts {
 function cloneTreeWithFreshPanes(
   srcTree: LayoutNode,
   srcPanes: Record<PaneId, PaneSpec>,
+  keepSession = false,
 ): { tree: LayoutNode; panes: Record<PaneId, PaneSpec> } {
   const panes: Record<PaneId, PaneSpec> = {};
   const usedTitles: string[] = [];
@@ -116,6 +154,10 @@ function cloneTreeWithFreshPanes(
       const srcSpec = srcPanes[node.paneId];
       const spec: PaneSpec = srcSpec ? { ...srcSpec } : { title: allocName(usedTitles) };
       if (spec.env) spec.env = { ...spec.env }; // don't share env with the source
+      // A clone (duplicate workspace / preset relaunch) starts its own Claude conversation — the
+      // managed session id is per-pane, so copying it would make the clone hijack the original's.
+      // Reopening a *closed* workspace is the exception (keepSession): there we want it to resume.
+      if (!keepSession) delete spec.sessionId;
       if (!spec.title) spec.title = allocName(usedTitles);
       usedTitles.push(spec.title);
       panes[paneId] = spec;
@@ -127,9 +169,9 @@ function cloneTreeWithFreshPanes(
 }
 
 function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
-  // Faithful path: rebuild a saved tree verbatim (preset relaunch / duplicate), fresh PaneIds.
+  // Faithful path: rebuild a saved tree verbatim (preset relaunch / duplicate / reopen), fresh PaneIds.
   if (opts.tree && opts.panes) {
-    const { tree, panes } = cloneTreeWithFreshPanes(opts.tree, opts.panes);
+    const { tree, panes } = cloneTreeWithFreshPanes(opts.tree, opts.panes, opts.keepSession);
     return { id: nextWsId(), name: opts.name, cwd: opts.cwd, tree, panes, focused: firstLeaf(tree), zoomed: null, panel: freshPanel() };
   }
   const panes: Record<PaneId, PaneSpec> = {};
@@ -154,7 +196,7 @@ function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
 
 // Starts empty; `init()` (called once at startup) hydrates from disk or seeds a default
 // workspace. Rendering is gated on init completing so panes spawn exactly once.
-const [app, setApp] = createStore<AppState>({ workspaces: [], activeId: "", recents: [], presets: [], overview: false });
+const [app, setApp] = createStore<AppState>({ workspaces: [], activeId: "", recents: [], presets: [], closed: [], overview: false });
 
 /** Reactive read-only view for components. */
 export const appState = app;
@@ -204,6 +246,13 @@ export function clearPaneCommand(paneId: PaneId) {
   if (i >= 0) setApp("workspaces", i, "panes", paneId, "command", undefined);
 }
 
+/** Record the managed Claude session id pinned on a pane's first launch, so a later restart
+ *  resumes its conversation (persisted with the spec; see lib/agents.ts `resumeClaudeCommand`). */
+export function setPaneSessionId(paneId: PaneId, sessionId: string) {
+  const i = wsIdxByPane(paneId);
+  if (i >= 0) setApp("workspaces", i, "panes", paneId, "sessionId", sessionId);
+}
+
 /** Rename a workspace (rail double-click). Blank input is ignored — keeps the old name. */
 export function renameWorkspace(id: string, name: string) {
   const i = wsIdxById(id);
@@ -228,6 +277,13 @@ export function splitPane(paneId: PaneId, dir: "row" | "col") {
   });
 }
 
+/** Push a reopen-history entry (newest-first, capped). Captured values are snapshotted off the
+ *  store so they survive the pane/workspace being removed. */
+function recordClosed(item: Omit<ClosedItem, "id" | "closedAt">) {
+  const entry: ClosedItem = { ...item, id: nextClosedId(), closedAt: Date.now() };
+  setApp("closed", [entry, ...app.closed].slice(0, CLOSED_MAX));
+}
+
 export function closePane(paneId: PaneId) {
   const i = wsIdxByPane(paneId);
   if (i < 0) return;
@@ -238,6 +294,9 @@ export function closePane(paneId: PaneId) {
   if (settings.confirmClose && countLive([paneId]) > 0) {
     if (!window.confirm(`Close "${ws.panes[paneId]?.title}"? Its process is still running.`)) return;
   }
+  // Capture the spec (incl. any Claude sessionId) so the pane — and its conversation — can be reopened.
+  const spec = ws.panes[paneId];
+  if (spec) recordClosed({ kind: "pane", title: spec.title, cwd: spec.cwd || ws.cwd, spec: snapshotValue(spec) });
   batch(() => {
     setApp("workspaces", i, "tree", next);
     setApp("workspaces", i, "panes", paneId, undefined as unknown as PaneSpec);
@@ -369,6 +428,13 @@ export function spawnPane(opts: { title?: string; command: string; cwd?: string 
   return { name: title };
 }
 
+/** Open a past Claude conversation in a new pane in the active workspace, resuming it via
+ *  `claude --resume <id>` in its original folder. The pane persists that command, so later app
+ *  restarts resume it too (the resume flag is user-explicit, so the session-id manager leaves it). */
+export function openClaudeSession(id: string, cwd?: string): { name: string } | { error: string } {
+  return spawnPane({ command: `claude --resume ${id}`, cwd });
+}
+
 // ---- Workspace operations -----------------------------------------------------------
 
 function recordRecent(cwd: string, count: number) {
@@ -455,11 +521,69 @@ export function closeWorkspace(id: string) {
       `Close "${app.workspaces[i].name}"? ${live} running terminal${live === 1 ? "" : "s"} will be killed.`,
     )) return;
   }
+  // Capture the layout (tree + specs, incl. Claude sessionIds) so the whole workspace can be reopened.
+  const closing = app.workspaces[i];
+  recordClosed({ kind: "workspace", title: closing.name, cwd: closing.cwd, tree: snapshotValue(closing.tree), panes: snapshotValue(closing.panes) });
   const remaining = app.workspaces.filter((w) => w.id !== id);
   batch(() => {
     setApp("workspaces", remaining);
     if (app.activeId === id) setApp("activeId", remaining[Math.min(i, remaining.length - 1)].id);
   });
+}
+
+// ---- Reopen history (recently closed panes/workspaces) -------------------------------
+
+/** Reactive view of the reopen history (newest-first). */
+export const closedItems = (): ClosedItem[] => app.closed;
+
+/** Reopen a closed pane into the active workspace by splitting the focused leaf — keeping its
+ *  command/cwd/shell/env and its `sessionId`, so a Claude pane resumes its conversation. */
+function reopenPaneItem(item: ClosedItem) {
+  if (!item.spec) return;
+  const i = wsIdxById(app.activeId);
+  if (i < 0) return;
+  const ws = app.workspaces[i];
+  const target = ws.focused ?? firstLeaf(ws.tree);
+  const newId = nextPaneId();
+  const taken = Object.values(ws.panes).map((p) => p.title);
+  const title = item.spec.title && !taken.includes(item.spec.title) ? item.spec.title : allocName(taken);
+  const spec: PaneSpec = { ...snapshotValue(item.spec), title };
+  const newTree = replaceLeaf(ws.tree, target, (leaf) => ({
+    kind: "split", dir: "row", ratio: 0.5, a: leaf, b: { kind: "leaf", paneId: newId },
+  }));
+  batch(() => {
+    setApp("workspaces", i, "panes", newId, spec);
+    setApp("workspaces", i, "tree", newTree);
+    setApp("workspaces", i, "focused", newId);
+    setApp("workspaces", i, "zoomed", null);
+  });
+}
+
+/** Reopen a closed workspace, rebuilding its layout faithfully and *resuming* its Claude panes
+ *  (keepSession) — unlike duplicate/preset, which start fresh. Appended + made active. */
+function reopenWorkspaceItem(item: ClosedItem) {
+  if (!item.tree || !item.panes) return;
+  createWorkspace({ name: item.title, cwd: item.cwd, paneCount: 0, tree: item.tree, panes: item.panes, keepSession: true });
+}
+
+/** Reopen the closed pane/workspace `id`, then drop it from the history (it's live again). */
+export function reopenClosed(id: string) {
+  const item = app.closed.find((c) => c.id === id);
+  if (!item) return;
+  if (item.kind === "pane") reopenPaneItem(item);
+  else reopenWorkspaceItem(item);
+  setApp("closed", app.closed.filter((c) => c.id !== id));
+}
+
+/** Reopen the most recently closed item (the `reopen-closed` shortcut). No-op when empty. */
+export function reopenLastClosed() {
+  const first = app.closed[0];
+  if (first) reopenClosed(first.id);
+}
+
+/** Forget the whole reopen history. */
+export function clearClosedHistory() {
+  setApp("closed", []);
 }
 
 /** Set overview ("fleet glance") mode on/off. */
@@ -577,6 +701,12 @@ export async function init() {
       presetSeq = Math.max(0, ...ps.map((p) => parseInt(p.id.replace(/\D/g, ""), 10) || 0));
       setApp("presets", ps);
     }
+    const clRaw = await loadState("closed");
+    if (clRaw) {
+      const cl = JSON.parse(clRaw) as ClosedItem[];
+      closedSeq = Math.max(0, ...cl.map((c) => parseInt(c.id.replace(/\D/g, ""), 10) || 0));
+      setApp("closed", cl);
+    }
   } catch (e) {
     console.error("failed to load persisted state", e);
   }
@@ -589,7 +719,7 @@ export async function init() {
 // The most recent serialized state, kept current by the persistence effect so a flush (e.g.
 // on app close) writes the latest values without waiting on the debounce.
 let pendingTimer: ReturnType<typeof setTimeout> | undefined;
-let latest = { ws: "", rec: "", ps: "" };
+let latest = { ws: "", rec: "", ps: "", cl: "" };
 let dirty = false;
 
 /** Autosave workspaces + recents (debounced) on any change. Call once, inside a root owner. */
@@ -600,6 +730,7 @@ export function startPersistence() {
       ws: JSON.stringify(snapshot()),
       rec: JSON.stringify(app.recents),
       ps: JSON.stringify(app.presets),
+      cl: JSON.stringify(app.closed),
     };
     dirty = true;
     clearTimeout(pendingTimer);
@@ -617,5 +748,6 @@ export async function flushPersistence(): Promise<void> {
     saveState("workspaces", latest.ws),
     saveState("recents", latest.rec),
     saveState("presets", latest.ps),
+    saveState("closed", latest.cl),
   ]);
 }
