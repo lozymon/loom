@@ -544,6 +544,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("loom:new-workspace")),
       "reopen-closed": () => reopenLastClosed(),
+      "reopen": () => window.dispatchEvent(new CustomEvent("loom:reopen")),
+      "history": () => window.dispatchEvent(new CustomEvent("loom:history")),
       "command-palette": () => window.dispatchEvent(new CustomEvent("loom:command-palette")),
       "source-control": () => window.dispatchEvent(new CustomEvent("loom:source-control")),
       "docs": () => window.dispatchEvent(new CustomEvent("loom:docs")),

@@ -144,6 +144,15 @@ export default function App() {
   window.addEventListener("loom:command-palette", openPalette);
   onCleanup(() => window.removeEventListener("loom:command-palette", openPalette));
 
+  // Ctrl+Shift+H opens agent History; Ctrl+Shift+Y the Reopen panel — both toggle (centered
+  // overlays, like the palette). Routed from a focused pane via these events (Terminal.tsx).
+  const openHistory = () => setHistoryOpen((v) => !v);
+  window.addEventListener("loom:history", openHistory);
+  onCleanup(() => window.removeEventListener("loom:history", openHistory));
+  const openReopen = () => setReopenOpen((v) => !v);
+  window.addEventListener("loom:reopen", openReopen);
+  onCleanup(() => window.removeEventListener("loom:reopen", openReopen));
+
   // Global fallback for the app-level Ctrl+Shift shortcuts. Terminal.tsx intercepts these via
   // xterm's key handler, but that only fires while a *terminal* owns focus — so when focus is on
   // the rail, a dialog, a button, or nothing, the shortcuts would otherwise be dead. This window
@@ -152,6 +161,8 @@ export default function App() {
   const GLOBAL_ACTIONS: Partial<Record<ActionId, () => void>> = {
     "new-workspace": () => setWizardOpen(true),
     "reopen-closed": () => reopenLastClosed(),
+    "reopen": () => setReopenOpen((v) => !v),
+    "history": () => setHistoryOpen((v) => !v),
     "settings": () => openSettings(),
     "source-control": () => togglePanel("git"),
     "docs": () => togglePanel("docs"),
