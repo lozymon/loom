@@ -4,6 +4,26 @@ All notable changes to Loom are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [1.1.0] — 2026-06-29
+
+Preserve and restore agent work across restarts. Claude Code panes now keep their conversation,
+and closed panes/workspaces (and any past Claude session) can be brought back.
+
+### Added
+- **Claude session resume** — each Claude Code pane is pinned a stable session id (first run
+  `--session-id`, later runs `--resume`), so quitting and reopening Loom resumes that pane's own
+  conversation. Per-pane ids let many Claude panes share a folder and still resume their own
+  thread. A pinned id only resumes when its transcript actually exists on disk, otherwise it
+  re-pins and starts fresh (no more "No conversation found" when a first run was blocked at the
+  trust dialog). Toggle in Settings → Agent resume (on by default). Opacity-safe: Loom builds the
+  launch command from its own spec and Claude's on-disk session store, never pane output (ADR-0001).
+- **Reopen history** — closing a pane or workspace records it (with its session id) in a persisted,
+  newest-first list; reopening a Claude pane resumes its conversation. Surfaced three ways:
+  **Ctrl+Shift+Z** (reopen last closed), command-palette entries, and a new **Reopen** top-bar
+  panel that also browses and resumes **any** past Claude session found under `~/.claude/projects`.
+- **Keyboard shortcuts** — **Ctrl+Shift+Y** opens the Reopen panel, **Ctrl+Shift+H** opens History
+  (both rebindable in Settings → Keyboard).
+
 ## [1.0.0] — 2026-06-29
 
 First stable release. Loom is reoriented from a *generic GUI terminal multiplexer* into an
