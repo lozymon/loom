@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectAgent } from "./agents";
+import { detectAgent, resumeClaudeCommand } from "./agents";
 
 describe("detectAgent", () => {
   it("returns null for a plain shell or no command", () => {
@@ -33,5 +33,66 @@ describe("detectAgent", () => {
     expect(detectAgent("claudette")).toBeNull();
     expect(detectAgent("qchat")).toBeNull();
     expect(detectAgent("./codexample")).toBeNull();
+  });
+});
+
+describe("resumeClaudeCommand", () => {
+  const newId = () => "fixed-uuid";
+  const on = { enabled: true, newId };
+
+  it("pins a fresh session id on a Claude pane's first run", () => {
+    expect(resumeClaudeCommand({ command: "claude" }, on)).toEqual({
+      command: "claude --session-id fixed-uuid",
+      sessionId: "fixed-uuid",
+    });
+  });
+
+  it("preserves the user's own flags when pinning", () => {
+    expect(resumeClaudeCommand({ command: "claude --model opus" }, on)).toEqual({
+      command: "claude --model opus --session-id fixed-uuid",
+      sessionId: "fixed-uuid",
+    });
+  });
+
+  it("reattaches with --resume once a session id is pinned and its transcript exists", () => {
+    expect(resumeClaudeCommand({ command: "claude", sessionId: "abc" }, { ...on, sessionExists: true })).toEqual({
+      command: "claude --resume abc",
+      sessionId: "abc",
+    });
+  });
+
+  it("re-pins the same id with --session-id when the pinned session has no transcript yet", () => {
+    // Pinned last run but never conversed in (e.g. trust dialog) → nothing to --resume.
+    expect(resumeClaudeCommand({ command: "claude", sessionId: "abc" }, { ...on, sessionExists: false })).toEqual({
+      command: "claude --session-id abc",
+      sessionId: "abc",
+    });
+  });
+
+  it("leaves non-Claude panes untouched", () => {
+    expect(resumeClaudeCommand({ command: "codex" }, on)).toEqual({ command: "codex", sessionId: undefined });
+    expect(resumeClaudeCommand({ command: "bash" }, on)).toEqual({ command: "bash", sessionId: undefined });
+  });
+
+  it("leaves a plain shell (no command) untouched", () => {
+    expect(resumeClaudeCommand({}, on)).toEqual({ command: undefined, sessionId: undefined });
+  });
+
+  it("does not double-manage when the user already set a session/resume flag", () => {
+    for (const command of ["claude --continue", "claude -c", "claude --resume xyz", "claude --session-id mine", "claude -r"]) {
+      expect(resumeClaudeCommand({ command }, on)).toEqual({ command, sessionId: undefined });
+    }
+  });
+
+  it("does nothing at all when resume is disabled", () => {
+    expect(resumeClaudeCommand({ command: "claude" }, { enabled: false, newId })).toEqual({
+      command: "claude",
+      sessionId: undefined,
+    });
+    // even an already-pinned pane is left as-is (launches resume only while the feature is on)
+    expect(resumeClaudeCommand({ command: "claude", sessionId: "abc" }, { enabled: false, newId })).toEqual({
+      command: "claude",
+      sessionId: "abc",
+    });
   });
 });

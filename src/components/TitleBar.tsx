@@ -19,11 +19,13 @@ export default function TitleBar(props: {
   onDocs: () => void;
   onShortcuts: () => void;
   onHistory: () => void;
+  onReopen: () => void;
   gitOn: () => boolean;
   docsOn: () => boolean;
   settingsOn: () => boolean;
   paletteOn: () => boolean;
   historyOn: () => boolean;
+  reopenOn: () => boolean;
 }) {
   const win = getCurrentWindow();
   const openPalette = () =>
@@ -85,6 +87,16 @@ export default function TitleBar(props: {
             onClick={() => props.onHistory()}
           >
             History
+          </button>
+        </Show>
+        <Show when={settings.navVisible.reopen}>
+          <button
+            class="tb-btn"
+            classList={{ on: props.reopenOn() }}
+            title="Reopen a closed pane/workspace, or resume any Claude session"
+            onClick={() => props.onReopen()}
+          >
+            Reopen
           </button>
         </Show>
         <button

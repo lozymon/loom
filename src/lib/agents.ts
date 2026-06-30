@@ -38,3 +38,42 @@ export function detectAgent(command?: string | null): AgentDef | null {
   if (!command) return null;
   return AGENTS.find((a) => a.match.test(command)) ?? null;
 }
+
+// A resume/continue/session flag the user wrote themselves — then conversation lifecycle is their
+// call and we leave the command untouched (no managed session id, no rewrite).
+const CLAUDE_SESSION_FLAG = /(^|\s)(--session-id|--resume|-r|--continue|-c|--fork-session)(\s|=|$)/;
+
+/**
+ * Rewrite a Claude Code pane's launch command so it resumes its own conversation across app
+ * restarts. Claude already persists every conversation under `~/.claude` keyed by session id;
+ * Loom just relaunches with a *stable* id — pinning one on the pane's first run via `--session-id`,
+ * then reattaching on every later run via `--resume`. Each pane gets its own id, so any number of
+ * Claude panes can share a folder and still resume their own thread (unlike bare `claude -c`).
+ *
+ * `sessionExists` says whether a transcript for the pinned id is actually on disk. A session can be
+ * pinned but never conversed in (blocked at the trust dialog, or closed before typing) — then there
+ * is nothing to resume, so we re-pin the *same* id with `--session-id` and start it, rather than
+ * `--resume` failing with "No conversation found". Once it's been used, the file exists → resume.
+ *
+ * This is opacity-safe (ADR-0001): Loom only ever constructs a launch command from its own spec and
+ * Claude's own on-disk session store — it never reads what the pane prints. Only Claude panes are
+ * touched, and only when the user hasn't already put a resume/continue/session flag in their command.
+ *
+ * Pure (the caller supplies the id factory + the disk check). Returns the effective command plus the
+ * session id to persist back onto the spec — both unchanged when nothing applies.
+ */
+export function resumeClaudeCommand(
+  spec: { command?: string; sessionId?: string },
+  opts: { enabled: boolean; newId: () => string; sessionExists?: boolean },
+): { command?: string; sessionId?: string } {
+  const command = spec.command;
+  if (!opts.enabled || !command) return { command, sessionId: spec.sessionId };
+  if (detectAgent(command)?.id !== "claude") return { command, sessionId: spec.sessionId };
+  if (CLAUDE_SESSION_FLAG.test(command)) return { command, sessionId: spec.sessionId };
+  if (spec.sessionId) {
+    const flag = opts.sessionExists ? `--resume ${spec.sessionId}` : `--session-id ${spec.sessionId}`;
+    return { command: `${command} ${flag}`, sessionId: spec.sessionId };
+  }
+  const id = opts.newId();
+  return { command: `${command} --session-id ${id}`, sessionId: id };
+}

@@ -16,6 +16,7 @@ export type ActionId =
   | "toggle-zoom"
   | "open-editor"
   | "new-workspace"
+  | "reopen-closed"
   | "prev-workspace"
   | "next-workspace"
   | "switch-workspace-1"
@@ -62,6 +63,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "toggle-zoom", label: "Toggle zoom", group: "Panes", defaultKey: "enter" },
   { id: "open-editor", label: "Open folder in editor", group: "Panes", defaultKey: "i" },
   { id: "new-workspace", label: "New workspace", group: "Workspaces", defaultKey: "t" },
+  { id: "reopen-closed", label: "Reopen last closed pane/workspace", group: "Workspaces", defaultKey: "z" },
   { id: "prev-workspace", label: "Previous workspace", group: "Workspaces", defaultKey: "pageup" },
   { id: "next-workspace", label: "Next workspace", group: "Workspaces", defaultKey: "pagedown" },
   { id: "switch-workspace-1", label: "Switch to workspace 1", group: "Workspaces", defaultKey: "1" },

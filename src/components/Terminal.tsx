@@ -26,6 +26,7 @@ import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detac
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
+import { claudeSessionExists } from "../lib/claudeSessions";
 import { openEditorAt } from "../lib/editor";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
@@ -34,7 +35,7 @@ import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forget
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
-import { detectAgent } from "../lib/agents";
+import { detectAgent, resumeClaudeCommand } from "../lib/agents";
 import { paneActiveTask } from "../stores/sessions";
 import type { PaneId, PtyHandle, LogErrorEvent } from "../ipc/protocol";
 import { LOG_ERROR_EVENT } from "../ipc/protocol";
@@ -45,6 +46,8 @@ import {
   splitPane,
   closePane,
   clearPaneCommand,
+  setPaneSessionId,
+  reopenLastClosed,
   toggleZoom,
   toggleOverview,
   switchWorkspaceRelative,
@@ -207,12 +210,32 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     const logPath = settings.sessionLogging
       ? (await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId)) ?? undefined
       : undefined;
+    // Claude resume: rewrite the launch command so a restart resumes this pane's own conversation
+    // (first run pins a `--session-id`, later runs `--resume`; see lib/agents.ts). We pin the id
+    // up front rather than reading it from output, so this stays opacity-safe (ADR-0001). A pinned
+    // id only resumes if its transcript is actually on disk — otherwise it never got a conversation
+    // (e.g. trust dialog), so we re-pin the same id and start fresh instead of a failing `--resume`.
+    let command = asShell ? undefined : spec()?.command;
+    if (!asShell) {
+      const s = spec();
+      if (s) {
+        const sessionExists = s.sessionId ? await claudeSessionExists(s.sessionId) : false;
+        const resolved = resumeClaudeCommand(s, {
+          enabled: settings.resumeAgentSessions,
+          newId: () => crypto.randomUUID(),
+          sessionExists,
+        });
+        command = resolved.command;
+        if (resolved.sessionId && resolved.sessionId !== s.sessionId)
+          setPaneSessionId(props.paneId, resolved.sessionId);
+      }
+    }
     try {
       handle = await spawnPty(
         {
           cols: term.cols,
           rows: term.rows,
-          command: asShell ? undefined : spec()?.command,
+          command,
           // Per-pane cwd wins (e.g. a `loom spawn --cwd …` pane), then the workspace folder.
           cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
           // Per-pane shell (e.g. a WSL distro chosen in the wizard) wins over the global default.
@@ -520,6 +543,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "toggle-zoom": () => toggleZoom(props.paneId),
       "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("loom:new-workspace")),
+      "reopen-closed": () => reopenLastClosed(),
       "command-palette": () => window.dispatchEvent(new CustomEvent("loom:command-palette")),
       "source-control": () => window.dispatchEvent(new CustomEvent("loom:source-control")),
       "docs": () => window.dispatchEvent(new CustomEvent("loom:docs")),

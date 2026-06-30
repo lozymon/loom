@@ -17,7 +17,7 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 /** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
  *  so this config stays reachable). */
-export type NavItemId = "overview" | "palette" | "git" | "docs" | "history";
+export type NavItemId = "overview" | "palette" | "git" | "docs" | "history" | "reopen";
 
 export interface Settings {
   // ---- Appearance (terminal text) ----
@@ -63,6 +63,10 @@ export interface Settings {
   // ---- Session logging ----
   /** Append each pane's raw output to a per-pane file under <config>/logs/ (opt-in). */
   sessionLogging: boolean;
+  // ---- Agent resume ----
+  /** Relaunch Claude Code panes with their own session id so a restart resumes the conversation
+   *  (first run pins `--session-id`, later runs `--resume`; see lib/agents.ts). On by default. */
+  resumeAgentSessions: boolean;
   // ---- Keyboard ----
   /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */
   keybindings: Keybindings;
@@ -103,8 +107,9 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: false,
   docsPreview: true,
   sessionLogging: false,
+  resumeAgentSessions: true,
   keybindings: { ...DEFAULT_KEYBINDINGS },
-  navVisible: { overview: true, palette: true, git: true, docs: true, history: true },
+  navVisible: { overview: true, palette: true, git: true, docs: true, history: true, reopen: true },
   railWidth: 212,
   railCollapsed: false,
   gitWidth: 440,

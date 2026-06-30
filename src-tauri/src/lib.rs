@@ -1,4 +1,5 @@
 mod capture;
+mod claude;
 pub mod cli;
 mod control;
 mod control_sock;
@@ -135,6 +136,8 @@ pub fn run() {
             docs::read_doc,
             logs::list_logs,
             logs::read_log_tail,
+            claude::list_claude_sessions,
+            claude::claude_session_exists,
             workspace::state_save,
             workspace::state_load,
             workspace::session_log_path,

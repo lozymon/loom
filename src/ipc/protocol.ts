@@ -29,6 +29,11 @@ export interface PaneSpec {
   /** Shell to launch for this pane, overriding the global Default shell. May carry args, e.g.
    *  `wsl.exe -d Ubuntu` or `cmd.exe`. Omitted = use the global default (Settings → Default shell). */
   shell?: string;
+  /** Managed Claude Code session id (a UUID) for conversation resume across app restarts. Pinned
+   *  on this pane's first Claude launch via `--session-id`; later launches reattach via `--resume`
+   *  so the conversation comes back (Claude persists it under ~/.claude — Loom never parses output;
+   *  see lib/agents.ts `resumeClaudeCommand`). Absent for non-Claude panes or when resume is off. */
+  sessionId?: string;
   title: string;
 }
 

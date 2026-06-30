@@ -30,6 +30,7 @@ const NAV_ITEMS: { id: NavItemId; label: string; hint: string }[] = [
   { id: "git", label: "Git", hint: "source control" },
   { id: "docs", label: "Docs", hint: "markdown reader" },
   { id: "history", label: "History", hint: "agent session search" },
+  { id: "reopen", label: "Reopen", hint: "closed panes & Claude sessions" },
 ];
 
 type TabId = "appearance" | "terminal" | "keys";
@@ -391,6 +392,19 @@ export default function Settings(props: { onClose: () => void }) {
               />
             </div>
             <p class="settings-hint muted">Applies to terminals you open from now on. Useful for reviewing what a fleet of agents did; files can grow large.</p>
+          </section>
+
+          {/* ---- Agent resume: relaunch Claude panes with a stable session id (see lib/agents.ts) ---- */}
+          <section class="settings-section">
+            <h3>Agent resume</h3>
+            <div class="settings-card">
+              <ToggleRow
+                label={<>Resume Claude Code sessions on restart <span class="muted">— each Claude pane comes back to its own conversation after you reopen Loom</span></>}
+                checked={settings.resumeAgentSessions}
+                onToggle={() => setSetting("resumeAgentSessions", !settings.resumeAgentSessions)}
+              />
+            </div>
+            <p class="settings-hint muted">Loom pins each Claude pane its own session id (Claude stores the conversation under ~/.claude) and reattaches with --resume on restart. Panes whose command already sets --resume/--continue/--session-id are left as you wrote them.</p>
           </section>
 
           {/* ---- Agent history (ADR-0009): bounded-window pruning of the session/task log ---- */}
