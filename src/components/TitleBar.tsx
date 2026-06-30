@@ -83,7 +83,7 @@ export default function TitleBar(props: {
           <button
             class="tb-btn"
             classList={{ on: props.historyOn() }}
-            title="Search agent history — past sessions & tasks"
+            title="Search agent history — past sessions & tasks (Ctrl+Shift+H)"
             onClick={() => props.onHistory()}
           >
             History
@@ -93,7 +93,7 @@ export default function TitleBar(props: {
           <button
             class="tb-btn"
             classList={{ on: props.reopenOn() }}
-            title="Reopen a closed pane/workspace, or resume any Claude session"
+            title="Reopen a closed pane/workspace, or resume any Claude session (Ctrl+Shift+Y)"
             onClick={() => props.onReopen()}
           >
             Reopen

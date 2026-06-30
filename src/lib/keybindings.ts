@@ -17,6 +17,8 @@ export type ActionId =
   | "open-editor"
   | "new-workspace"
   | "reopen-closed"
+  | "reopen"
+  | "history"
   | "prev-workspace"
   | "next-workspace"
   | "switch-workspace-1"
@@ -85,6 +87,8 @@ export const ACTIONS: ActionDef[] = [
   { id: "capture-region", label: "Snapshot region → focused pane", group: "Capture", defaultKey: "s" },
   { id: "source-control", label: "Open source control", group: "Git", defaultKey: "g" },
   { id: "docs", label: "Open docs reader", group: "General", defaultKey: "r" },
+  { id: "reopen", label: "Open reopen panel (closed panes & Claude sessions)", group: "General", defaultKey: "y" },
+  { id: "history", label: "Search agent history", group: "General", defaultKey: "h" },
   // Ctrl+Shift+= reports key "+", and Ctrl+Shift+- reports "_" (shift transforms the key); the
   // PRETTY_KEY map below renders "_" back as "-" so the Settings list reads "Ctrl+Shift+-".
   { id: "font-increase", label: "Increase font size", group: "Appearance", defaultKey: "+" },
