@@ -342,41 +342,58 @@ body,
   letter-spacing: -0.01em;
 }
 
+/* Icon action row — right-aligned, just before the window controls. */
 .tb-actions {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 2px;
 }
 
-.tb-btn {
+.tb-icon {
   display: inline-flex;
   align-items: center;
-  height: 30px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-dim);
-  font: 13px var(--font-ui, "IBM Plex Sans", system-ui, sans-serif);
   cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.12s ease;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
 }
 
-.tb-btn:hover {
-  color: #c9ccd1;
+.tb-icon svg {
+  display: block;
+  width: 17px;
+  height: 17px;
 }
 
-.tb-btn.on {
+.tb-icon:hover {
+  background: var(--tint-weak);
   color: var(--text-bright);
 }
 
-.tb-btn-icon {
-  font-size: 15px;
+.tb-icon.on {
+  background: var(--tint-weak);
+  color: var(--text-bright);
 }
 
 /* The flexible drag handle — most of the bar is grabbable to move the window. */
 .tb-spacer {
   flex: 1 1 auto;
+}
+
+/* Divider between the action icons and the window controls. */
+.tb-sep {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 20px;
+  margin: 0 10px;
+  background: var(--border);
 }
 
 .tb-window {
@@ -389,19 +406,22 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 42px;
+  height: 34px;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: var(--text-faint);
-  font:
-    13px ui-monospace,
-    monospace;
   cursor: pointer;
   transition:
     color 0.12s ease,
     background 0.12s ease;
+}
+
+.tb-wbtn svg {
+  display: block;
+  width: 18px;
+  height: 18px;
 }
 
 .tb-wbtn:hover {
