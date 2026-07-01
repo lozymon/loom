@@ -1821,6 +1821,8 @@ body,
   cursor: default;
 }
 
+/* Pane name in the UI sans (matches the title bar) — crisper than mono for an identity label;
+   the branch/status alongside stay monospace so a git ref / status word reads as "data". */
 .pane-chip .pane-name {
   flex: 0 1 auto;
   min-width: 0;
@@ -1828,9 +1830,19 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-ui, "IBM Plex Sans", system-ui, sans-serif);
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--text-bright);
+}
+
+/* A hairline divider splits the chip into [identity] │ [branch/status] segments (status-bar feel).
+   It lives on the trailing element's left edge; the name always precedes it, so no guard needed. */
+.pane-chip .pane-branch,
+.pane-chip .pane-statuslabel {
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--text-faint) 55%, transparent);
 }
 
 /* Git branch, shown after the name (mono 10.5, muted). Full cwd lives on the chip tooltip. */
