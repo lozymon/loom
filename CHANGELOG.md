@@ -4,6 +4,30 @@ All notable changes to Loom are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [1.2.0] — 2026-06-30
+
+Title-bar and pane-chrome refresh. The window frame and per-pane controls are reorganised for a
+cleaner, more legible look — inspired by VS Code's frame — and three previously mouse-only pane
+actions gain keyboard shortcuts.
+
+### Added
+- **Keyboard shortcuts for three pane actions** — Launch Claude in a pane (**Ctrl+Shift+L**), tear a
+  pane off into its own window (**Ctrl+Shift+N**), and view a pane's session log (**Ctrl+Shift+J**).
+  All rebindable in Settings → Keyboard and listed in the shortcuts cheat-sheet.
+
+### Changed
+- **Title bar** — the app-action menu (Overview, Palette, Git, Docs, History, Reopen, Settings,
+  Shortcuts) moves from left-side text labels to a right-aligned row of icons beside the window
+  controls, separated by a divider; minimise/maximise/close are enlarged with crisp SVG glyphs. All
+  icons follow the active theme.
+- **Per-pane hover controls** — cryptic unicode glyphs are replaced by a consistent set of line
+  icons, and the bar is decluttered: only the core actions stay inline (Open in editor, Split, Zoom,
+  Close) with the rest tucked into a `⋯` overflow menu whose rows carry text labels and keybinding
+  hints.
+- **Pane identity chip** — the pane name is set in the UI sans (matching the title bar) with a
+  hairline divider before the branch/status, and the chip and hover-control clusters are unified as
+  matching glass pills of equal height.
+
 ## [1.1.0] — 2026-06-29
 
 Preserve and restore agent work across restarts. Claude Code panes now keep their conversation,
