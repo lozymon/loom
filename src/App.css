@@ -1685,6 +1685,7 @@ body,
   top: 8px;
   left: 8px;
   gap: 6px;
+  height: auto;
   padding: 4px 9px;
 }
 .layout-root.overview .pane-chip .pane-name {
@@ -1718,14 +1719,16 @@ body,
    drag handle for swapping panes. */
 .pane-chip {
   position: absolute;
-  top: 13px;
+  top: 12px;
   left: 14px;
   z-index: 6;
   display: flex;
   align-items: center;
   gap: 7px;
+  box-sizing: border-box;
+  height: 30px;
   max-width: calc(100% - 28px);
-  padding: 6px 12px;
+  padding: 0 12px;
   border-radius: 999px;
   font:
     12px / 1 ui-monospace,
@@ -1880,14 +1883,16 @@ body,
 /* Hover controls (top-right): glass pill, revealed on pane hover/focus. */
 .pane-ctl {
   position: absolute;
-  top: 11px;
+  top: 12px;
   right: 12px;
   z-index: 6;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 4px;
+  border-radius: 999px;
   background: var(--chip);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
