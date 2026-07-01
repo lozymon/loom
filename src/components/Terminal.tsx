@@ -768,6 +768,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
             <button class="pane-ctl-restart" title="Restart" onClick={() => { term.clear(); clearStatus(props.paneId); void start(); }} innerHTML={I.restart} />
           }
         >
+          <Show when={settings.editorCommand.trim()}>
+            <button
+              title={`Open in editor (${formatBinding(settings.keybindings["open-editor"])})`}
+              onClick={() => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || "")}
+              innerHTML={I.editor}
+            />
+          </Show>
           <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")} innerHTML={I.splitRight} />
           <button
             title="Zoom (Ctrl+Shift+Enter)"
@@ -781,15 +788,6 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
                 <button class="pane-menu-item" onClick={() => runMenu(launchClaude)}>
                   <span class="pmi-ico" innerHTML={I.claude} />Launch Claude here
                 </button>
-                <Show when={settings.editorCommand.trim()}>
-                  <button
-                    class="pane-menu-item"
-                    onClick={() => runMenu(() => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""))}
-                  >
-                    <span class="pmi-ico" innerHTML={I.editor} />Open in {settings.editorCommand.trim()}
-                    <span class="pmi-key">{formatBinding(settings.keybindings["open-editor"])}</span>
-                  </button>
-                </Show>
                 <button class="pane-menu-item" onClick={() => runMenu(openSearch)}>
                   <span class="pmi-ico" innerHTML={I.find} />Find in scrollback
                   <span class="pmi-key">Ctrl+Shift+F</span>
