@@ -423,6 +423,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     setFinding(true);
     queueMicrotask(() => searchInput?.focus());
   }
+  // Resolve this pane's on-disk session log and hand it to the viewer (shared by the menu row
+  // and the `session-log` shortcut). No-op unless session logging is enabled.
+  async function openSessionLog() {
+    if (!settings.sessionLogging) return;
+    const path = await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId);
+    window.dispatchEvent(new CustomEvent("loom:view-session-log", { detail: { path: path ?? undefined } }));
+  }
   function closeSearch() {
     setFinding(false);
     setQuery("");
@@ -581,6 +588,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "close-pane": () => closePane(props.paneId),
       "toggle-zoom": () => toggleZoom(props.paneId),
       "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
+      "launch-claude": () => launchClaude(),
+      "detach-pane": () => void detachPane(),
+      "session-log": () => void openSessionLog(),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("loom:new-workspace")),
       "reopen-closed": () => reopenLastClosed(),
       "reopen": () => window.dispatchEvent(new CustomEvent("loom:reopen")),
@@ -787,30 +797,27 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
               <div class="pane-menu">
                 <button class="pane-menu-item" onClick={() => runMenu(launchClaude)}>
                   <span class="pmi-ico" innerHTML={I.claude} />Launch Claude here
+                  <span class="pmi-key">{formatBinding(settings.keybindings["launch-claude"])}</span>
                 </button>
                 <button class="pane-menu-item" onClick={() => runMenu(openSearch)}>
                   <span class="pmi-ico" innerHTML={I.find} />Find in scrollback
-                  <span class="pmi-key">Ctrl+Shift+F</span>
+                  <span class="pmi-key">{formatBinding(settings.keybindings["search"])}</span>
                 </button>
                 <button class="pane-menu-item" onClick={() => runMenu(() => splitPane(props.paneId, "col"))}>
                   <span class="pmi-ico" innerHTML={I.splitDown} />Split down
-                  <span class="pmi-key">Ctrl+Shift+E</span>
+                  <span class="pmi-key">{formatBinding(settings.keybindings["split-down"])}</span>
                 </button>
                 <button class="pane-menu-item" onClick={() => runMenu(() => void detachPane())}>
                   <span class="pmi-ico" innerHTML={I.tearOff} />Tear off into window
+                  <span class="pmi-key">{formatBinding(settings.keybindings["detach-pane"])}</span>
                 </button>
                 <Show when={settings.sessionLogging}>
-                  <button
-                    class="pane-menu-item"
-                    onClick={() => runMenu(async () => {
-                      const path = await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId);
-                      window.dispatchEvent(new CustomEvent("loom:view-session-log", { detail: { path: path ?? undefined } }));
-                    })}
-                  >
+                  <button class="pane-menu-item" onClick={() => runMenu(openSessionLog)}>
                     <span class="pmi-ico" innerHTML={I.log} />View session log
                     <Show when={act()?.logError}>
                       <span class="pmi-warn" title={`Session logging stopped: ${act()!.logError}\nRestart the pane to resume.`}>⚠</span>
                     </Show>
+                    <span class="pmi-key">{formatBinding(settings.keybindings["session-log"])}</span>
                   </button>
                 </Show>
               </div>

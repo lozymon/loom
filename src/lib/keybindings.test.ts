@@ -34,7 +34,7 @@ describe("actionForKey — shift-folding", () => {
   });
 
   it("returns null for an unbound key", () => {
-    expect(actionForKey(kb, "j")).toBeNull();
+    expect(actionForKey(kb, "q")).toBeNull();
   });
 });
 
