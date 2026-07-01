@@ -15,6 +15,9 @@ export type ActionId =
   | "close-pane"
   | "toggle-zoom"
   | "open-editor"
+  | "launch-claude"
+  | "detach-pane"
+  | "session-log"
   | "new-workspace"
   | "reopen-closed"
   | "reopen"
@@ -64,6 +67,9 @@ export const ACTIONS: ActionDef[] = [
   { id: "close-pane", label: "Close pane", group: "Panes", defaultKey: "w" },
   { id: "toggle-zoom", label: "Toggle zoom", group: "Panes", defaultKey: "enter" },
   { id: "open-editor", label: "Open folder in editor", group: "Panes", defaultKey: "i" },
+  { id: "launch-claude", label: "Launch Claude in pane", group: "Panes", defaultKey: "l" },
+  { id: "detach-pane", label: "Tear pane off into a window", group: "Panes", defaultKey: "n" },
+  { id: "session-log", label: "View pane session log", group: "Panes", defaultKey: "j" },
   { id: "new-workspace", label: "New workspace", group: "Workspaces", defaultKey: "t" },
   { id: "reopen-closed", label: "Reopen last closed pane/workspace", group: "Workspaces", defaultKey: "z" },
   { id: "prev-workspace", label: "Previous workspace", group: "Workspaces", defaultKey: "pageup" },

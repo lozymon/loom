@@ -56,6 +56,36 @@ import {
   type WorkspaceUI,
 } from "../stores/workspace";
 
+// Pane-control icons — consistent stroke-SVG line icons (currentColor) replacing the old
+// cryptic unicode glyphs. Trusted static markup → innerHTML is safe. The rarely-used actions
+// live in the `⋯` overflow menu (I.more), where each carries a text label too.
+const I: Record<string, string> = {
+  splitRight:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.3" y="3" width="11.4" height="10" rx="1.4"/><path d="M8 3v10"/></svg>',
+  splitDown:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.3" y="3" width="11.4" height="10" rx="1.4"/><path d="M2.3 8h11.4"/></svg>',
+  zoom:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3H13v3.5M13 3l-4.2 4.2"/><path d="M6.5 13H3V9.5M3 13l4.2-4.2"/></svg>',
+  restore:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 6.5H9V3M12.5 3 9 6.5"/><path d="M3.5 9.5H7V13M3.5 13 7 9.5"/></svg>',
+  more:
+    '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.8" cy="8" r="1.15"/><circle cx="8" cy="8" r="1.15"/><circle cx="12.2" cy="8" r="1.15"/></svg>',
+  close:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+  restart:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 8a4.6 4.6 0 1 1-1.4-3.3"/><path d="M12.9 2.4V5h-2.6"/></svg>',
+  claude:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M8 2.2l1.55 3.9 3.9 1.4-3.9 1.4L8 12.8 6.45 8.9 2.55 7.5l3.9-1.4z"/></svg>',
+  editor:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M10.8 2.6 13.4 5.2"/><path d="M12.1 1.3 4.4 9l-1.1 3.4 3.4-1.1L14.4 3.6z"/></svg>',
+  find:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 13.6 13.6"/></svg>',
+  tearOff:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3.4v9.6H13V8"/><path d="M9.6 2.5h4v4"/><path d="M13.6 2.5 8.4 7.7"/></svg>',
+  log:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4h10M3 8h10M3 12h6.5"/></svg>',
+};
+
 // Resolved once and cached: collapse a leading $HOME to "~" in the title-bar path. Resolves
 // async; until it lands paths show in full, and the next poll picks up the abbreviation.
 let homePrefix: string | null = null;
@@ -113,6 +143,15 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // Live match position from the SearchAddon: {index, count}. index is -1 when no active match.
   const [matches, setMatches] = createSignal<{ index: number; count: number }>({ index: -1, count: 0 });
   const [dragOver, setDragOver] = createSignal(false);
+  // The `⋯` overflow menu (rarely-used pane actions). Closes on outside click / after any action.
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const runMenu = (fn: () => void | Promise<void>) => { setMenuOpen(false); void fn(); };
+  createEffect(() => {
+    if (!menuOpen()) return;
+    const close = () => setMenuOpen(false);
+    document.addEventListener("pointerdown", close);
+    onCleanup(() => document.removeEventListener("pointerdown", close));
+  });
   // Live shell location for the title bar: cwd (via /proc, ADR-0001's carve-out) + git branch.
   const [cwd, setCwd] = createSignal<string | null>(null);
   const [branch, setBranch] = createSignal<string | null>(null);
@@ -384,6 +423,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     setFinding(true);
     queueMicrotask(() => searchInput?.focus());
   }
+  // Resolve this pane's on-disk session log and hand it to the viewer (shared by the menu row
+  // and the `session-log` shortcut). No-op unless session logging is enabled.
+  async function openSessionLog() {
+    if (!settings.sessionLogging) return;
+    const path = await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId);
+    window.dispatchEvent(new CustomEvent("loom:view-session-log", { detail: { path: path ?? undefined } }));
+  }
   function closeSearch() {
     setFinding(false);
     setQuery("");
@@ -542,6 +588,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "close-pane": () => closePane(props.paneId),
       "toggle-zoom": () => toggleZoom(props.paneId),
       "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
+      "launch-claude": () => launchClaude(),
+      "detach-pane": () => void detachPane(),
+      "session-log": () => void openSessionLog(),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("loom:new-workspace")),
       "reopen-closed": () => reopenLastClosed(),
       "reopen": () => window.dispatchEvent(new CustomEvent("loom:reopen")),
@@ -720,42 +769,62 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         )}
       </Show>
 
-      {/* Controls (top-right): revealed on pane hover only; a dead pane swaps in restart. */}
-      <div class="pane-ctl pctl">
+      {/* Controls (top-right): revealed on pane hover only; a dead pane swaps in restart.
+          Core actions (split/zoom/close) stay inline; the rest live in the `⋯` overflow menu. */}
+      <div class="pane-ctl pctl" classList={{ "menu-open": menuOpen() }}>
         <Show
           when={dead() === null}
           fallback={
-            <button class="pane-ctl-restart" title="Restart" onClick={() => { term.clear(); clearStatus(props.paneId); void start(); }}>↻</button>
+            <button class="pane-ctl-restart" title="Restart" onClick={() => { term.clear(); clearStatus(props.paneId); void start(); }} innerHTML={I.restart} />
           }
         >
-          <button title="Launch Claude here" onClick={launchClaude}>✦</button>
           <Show when={settings.editorCommand.trim()}>
             <button
-              title={`Open this folder in ${settings.editorCommand.trim()} (${formatBinding(settings.keybindings["open-editor"])})`}
+              title={`Open in editor (${formatBinding(settings.keybindings["open-editor"])})`}
               onClick={() => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || "")}
-            >✎</button>
+              innerHTML={I.editor}
+            />
           </Show>
-          <button title="Find (Ctrl+Shift+F)" onClick={openSearch}>⌕</button>
-          <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")}>▥</button>
-          <button title="Split down (Ctrl+Shift+E)" onClick={() => splitPane(props.paneId, "col")}>▤</button>
-          <button title="Zoom (Ctrl+Shift+Enter)" onClick={() => toggleZoom(props.paneId)}>
-            {props.ws.zoomed === props.paneId ? "▢" : "⤢"}
-          </button>
-          <button title="Tear off into its own window" onClick={() => void detachPane()}>◳</button>
-          <Show when={settings.sessionLogging}>
-            <Show when={act()?.logError}>
-              <span class="pane-log-error" title={`Session logging stopped: ${act()!.logError}\nRestart the pane to resume.`}>⚠</span>
+          <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")} innerHTML={I.splitRight} />
+          <button
+            title="Zoom (Ctrl+Shift+Enter)"
+            onClick={() => toggleZoom(props.paneId)}
+            innerHTML={props.ws.zoomed === props.paneId ? I.restore : I.zoom}
+          />
+          <div class="pane-ctl-more" onPointerDown={(e) => e.stopPropagation()}>
+            <button title="More actions" classList={{ on: menuOpen() }} onClick={() => setMenuOpen((v) => !v)} innerHTML={I.more} />
+            <Show when={menuOpen()}>
+              <div class="pane-menu">
+                <button class="pane-menu-item" onClick={() => runMenu(launchClaude)}>
+                  <span class="pmi-ico" innerHTML={I.claude} />Launch Claude here
+                  <span class="pmi-key">{formatBinding(settings.keybindings["launch-claude"])}</span>
+                </button>
+                <button class="pane-menu-item" onClick={() => runMenu(openSearch)}>
+                  <span class="pmi-ico" innerHTML={I.find} />Find in scrollback
+                  <span class="pmi-key">{formatBinding(settings.keybindings["search"])}</span>
+                </button>
+                <button class="pane-menu-item" onClick={() => runMenu(() => splitPane(props.paneId, "col"))}>
+                  <span class="pmi-ico" innerHTML={I.splitDown} />Split down
+                  <span class="pmi-key">{formatBinding(settings.keybindings["split-down"])}</span>
+                </button>
+                <button class="pane-menu-item" onClick={() => runMenu(() => void detachPane())}>
+                  <span class="pmi-ico" innerHTML={I.tearOff} />Tear off into window
+                  <span class="pmi-key">{formatBinding(settings.keybindings["detach-pane"])}</span>
+                </button>
+                <Show when={settings.sessionLogging}>
+                  <button class="pane-menu-item" onClick={() => runMenu(openSessionLog)}>
+                    <span class="pmi-ico" innerHTML={I.log} />View session log
+                    <Show when={act()?.logError}>
+                      <span class="pmi-warn" title={`Session logging stopped: ${act()!.logError}\nRestart the pane to resume.`}>⚠</span>
+                    </Show>
+                    <span class="pmi-key">{formatBinding(settings.keybindings["session-log"])}</span>
+                  </button>
+                </Show>
+              </div>
             </Show>
-            <button
-              title="View this pane's session log"
-              onClick={async () => {
-                const path = await sessionLogPath(props.ws.name, spec()?.title ?? "", props.paneId);
-                window.dispatchEvent(new CustomEvent("loom:view-session-log", { detail: { path: path ?? undefined } }));
-              }}
-            >≣</button>
-          </Show>
+          </div>
         </Show>
-        <button title="Close (Ctrl+Shift+W)" onClick={() => closePane(props.paneId)}>✕</button>
+        <button class="pane-ctl-close" title="Close (Ctrl+Shift+W)" onClick={() => closePane(props.paneId)} innerHTML={I.close} />
       </div>
 
       <div class="pane-term-wrap">
