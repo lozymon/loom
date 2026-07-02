@@ -44,17 +44,24 @@ loom-voce --model small.en
 Push-to-talk (the default): press **Enter** to start an utterance; the VAD ends it on ~0.7s of
 silence, whisper transcribes, and the text lands in the target pane.
 
-## Status: v0 skeleton
+## Status: v0 — whisper wired & verified
 
-The audio → VAD → `loom send` path is wired end-to-end. **The whisper binding is stubbed** — see the
-wiring guide in `src/stt.rs` (`WhisperStt::load` / `transcribe`): resolve/download a ggml model to
-`~/.cache/loom-voce/`, construct a `whisper_rs::WhisperContext`, and run `FullParams`. Until then
-`transcribe` returns an explanatory error, but the mic capture, VAD segmentation, and pane delivery
-all run.
+The full path runs end-to-end: mic → VAD → whisper.cpp → `loom send`. The whisper binding
+(`whisper-rs` 0.14) is live in `src/stt.rs`: `WhisperStt::load` resolves/downloads a ggml model to
+`~/.cache/loom-voce/` (via curl/wget) and builds a `WhisperContext`; `transcribe` runs `FullParams`
+greedy decoding and returns the text. Verified against whisper.cpp's `jfk.wav` sample:
 
-Also v0-simple and marked for upgrade:
+```
+$ cargo run --example transcribe_file -- testdata/jfk.wav tiny.en
+TRANSCRIPT: And so my fellow Americans ask not what your country can do for you ...
+```
+
+`cargo test` covers the pure logic (VAD gate + utterance segmentation).
+
+v0-simple and marked for upgrade:
 - VAD is an RMS energy gate (`src/stt.rs`) — swap in Silero (`voice_activity_detector`) for noise.
 - Capture shells out to `parecord`; `parecord` already resamples to 16kHz for us.
+- A fresh whisper state is created per utterance — reuse it for lower latency in `--continuous`.
 
 ## Roadmap
 
@@ -66,11 +73,17 @@ Also v0-simple and marked for upgrade:
 
 ## Build
 
-Prereqs (no sudo needed):
-- **Rust** 1.96 (already have it).
-- **cmake** for whisper.cpp — install userland with `pip install cmake` (or drop a static build in
-  `~/.local/bin`). A C compiler (`cc`/gcc) is already present.
-- **A recorder at runtime** — `parecord` (pulseaudio-utils) or `arecord` (alsa-utils). Already present.
+Prereqs (all satisfiable without sudo):
+- **Rust** 1.96.
+- **cmake** to build whisper.cpp. If `pip` is available: `pip install cmake`. Otherwise drop a
+  prebuilt static build on `PATH`, e.g.:
+  ```sh
+  curl -fL https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz \
+    | tar -xz -C ~/.local/opt
+  export PATH="$HOME/.local/opt/cmake-3.31.6-linux-x86_64/bin:$PATH"
+  ```
+- A **C/C++ compiler** (`cc`/`c++`) and **libclang** (bindgen) — usually already present on a dev box.
+- A **recorder at runtime** — `parecord` (pulseaudio-utils) or `arecord` (alsa-utils).
 - **`loom`** on `PATH` (or `$LOOM_BIN` set), with a Loom window running.
 
 ```sh

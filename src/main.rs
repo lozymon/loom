@@ -15,21 +15,22 @@
 //!   • --broadcast     → every live pane in the active workspace (`loom broadcast`)
 //!   • (default)       → the focused pane, discovered from `loom list` (the `*` marker)
 
-mod audio;
-mod loom;
-mod stt;
-
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::io::{self, BufRead, Write};
 use std::sync::mpsc;
 
-use crate::loom::Target;
-use crate::stt::{CaptureExt, Utterance};
+use loom_voce::audio;
+use loom_voce::loom::{self, Target};
+use loom_voce::stt::{self, CaptureExt, Utterance};
 
 /// Speak into a Loom pane. Runs alongside a Loom window; talks to it over `$LOOM_SOCK` via `loom`.
 #[derive(Parser, Debug)]
-#[command(name = "loom-voce", version, about = "Speech-to-text dictation into Loom panes")]
+#[command(
+    name = "loom-voce",
+    version,
+    about = "Speech-to-text dictation into Loom panes"
+)]
 struct Cli {
     /// Dictate into a specific pane by name. Default: the focused pane (from `loom list`).
     #[arg(long)]

@@ -13,6 +13,7 @@ path = "src/main.rs"
 # CLI
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+whisper-rs = "0.14"
 
 # Audio capture is done by shelling out to the system recorder (parecord/arecord) — no build-time
 # ALSA `-dev` headers, no sudo. See src/audio.rs for why we avoid cpal here.

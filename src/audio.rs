@@ -39,22 +39,17 @@ pub fn start_capture(tx: Sender<Vec<f32>>) -> Result<Capture> {
         .context("recorder produced no stdout pipe")?;
 
     std::thread::spawn(move || {
-        // Read fixed s16le blocks and hand each off as an f32 frame.
+        // Read fixed s16le blocks and hand each off as an f32 frame. A read error is EOF/shutdown
+        // (recorder ended) → stop the loop cleanly.
         let mut raw = vec![0u8; FRAME_SAMPLES * 2];
-        loop {
-            match stdout.read_exact(&mut raw) {
-                Ok(()) => {
-                    let frame: Vec<f32> = raw
-                        .chunks_exact(2)
-                        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
-                        .collect();
-                    // Drop on a closed channel (consumer gone) and stop the thread.
-                    if tx.send(frame).is_err() {
-                        break;
-                    }
-                }
-                // EOF or short read at shutdown → recorder ended; stop cleanly.
-                Err(_) => break,
+        while stdout.read_exact(&mut raw).is_ok() {
+            let frame: Vec<f32> = raw
+                .chunks_exact(2)
+                .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+                .collect();
+            // Drop on a closed channel (consumer gone) and stop the thread.
+            if tx.send(frame).is_err() {
+                break;
             }
         }
     });
@@ -86,8 +81,6 @@ fn spawn_recorder() -> Result<Child> {
 /// Is `bin` on `PATH`? (Avoids a hard dep just to probe for a CLI.)
 fn which(bin: &str) -> bool {
     std::env::var_os("PATH")
-        .map(|paths| {
-            std::env::split_paths(&paths).any(|dir| dir.join(bin).is_file())
-        })
+        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(bin).is_file()))
         .unwrap_or(false)
 }

@@ -7,9 +7,15 @@
 //!   • continuous uses `Segmenter::push` — feed every frame; it yields a completed `Utterance`
 //!     each time speech is followed by enough silence.
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
+
+use whisper_rs::{
+    install_logging_hooks, FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters,
+};
 
 use crate::audio::TARGET_RATE;
 
@@ -154,47 +160,217 @@ impl Default for Vad {
 // Whisper engine
 // ------------------------------------------------------------------------------------------------
 
-/// The whisper.cpp engine wrapper. Holds the loaded model and transcribes one utterance at a time.
+/// whisper.cpp rejects clips shorter than ~1s, so we pad short utterances with trailing silence.
+const MIN_SAMPLES: usize = TARGET_RATE as usize;
+
+/// The whisper.cpp engine: a loaded model context plus decode settings. Transcribes one utterance
+/// at a time (a fresh state per call — state reuse is a later optimization).
 pub struct WhisperStt {
-    // TODO(whisper-rs): hold `whisper_rs::WhisperContext` here once the model path is resolved.
-    // Left abstract in the skeleton so `cargo check` passes before you wire the real binding.
-    model_label: String,
+    ctx: WhisperContext,
+    /// Forced decode language, or `None` to let a multilingual model auto-detect.
+    language: Option<&'static str>,
+    threads: i32,
 }
 
 impl WhisperStt {
-    /// Load (downloading on first use) the named ggml model and mmap it.
-    ///
-    /// Wiring guide (whisper-rs 0.12):
-    ///   1. Resolve a model path: `~/.cache/loom-voce/ggml-<model>.bin`, downloading from
-    ///      https://huggingface.co/ggerganov/whisper.cpp if absent.
-    ///   2. `let ctx = WhisperContext::new_with_params(&path, WhisperContextParameters::default())?;`
-    ///   3. Store `ctx` in this struct.
+    /// Load the named ggml model (downloading to the cache on first use) and mmap it.
+    /// `model` is a short name like `base.en`, `small.en`, `medium` — resolved to
+    /// `ggml-<model>.bin` under the loom-voce cache.
     pub fn load(model: &str) -> Result<Self> {
-        // Placeholder so the skeleton compiles and runs the audio/VAD path end-to-end.
-        // Replace with the real WhisperContext load (see the doc comment above).
+        // Route whisper.cpp/ggml's own logging through the `log` facade; with no logger installed
+        // this silences its stderr chatter (which would otherwise clutter the dictation prompt).
+        install_logging_hooks();
+
+        let path = ensure_model(model)?;
+        let ctx = WhisperContext::new_with_params(
+            &path.to_string_lossy(),
+            WhisperContextParameters::default(),
+        )
+        .with_context(|| format!("failed to load whisper model at {}", path.display()))?;
+
+        // English-only models (`*.en`) must be decoded as English; multilingual ones auto-detect.
+        let language = if model.ends_with(".en") {
+            Some("en")
+        } else {
+            None
+        };
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get() as i32)
+            .unwrap_or(4)
+            .min(8);
+
         Ok(Self {
-            model_label: model.to_string(),
+            ctx,
+            language,
+            threads,
         })
     }
 
     /// Transcribe one utterance to text.
-    ///
-    /// Wiring guide (whisper-rs 0.12):
-    ///   let mut state = self.ctx.create_state()?;
-    ///   let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    ///   params.set_language(Some("en"));
-    ///   params.set_print_special(false);
-    ///   params.set_print_progress(false);
-    ///   state.full(params, samples)?;
-    ///   let n = state.full_n_segments()?;
-    ///   let text = (0..n).map(|i| state.full_get_segment_text(i)).collect::<Result<String,_>>()?;
     pub fn transcribe(&mut self, samples: &[f32]) -> Result<String> {
-        let _ = samples;
-        // Skeleton stub: real transcription lands when WhisperContext is wired in `load`.
-        Err(anyhow::anyhow!(
-            "whisper transcription not yet wired (model '{}') — see src/stt.rs wiring guide",
-            self.model_label
-        ))
-        .context("stub engine")
+        let mut state = self
+            .ctx
+            .create_state()
+            .context("failed to create whisper state")?;
+
+        // Pad up to whisper's minimum clip length so short taps still decode.
+        let mut audio;
+        let input: &[f32] = if samples.len() < MIN_SAMPLES {
+            audio = Vec::with_capacity(MIN_SAMPLES);
+            audio.extend_from_slice(samples);
+            audio.resize(MIN_SAMPLES, 0.0);
+            &audio
+        } else {
+            samples
+        };
+
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        params.set_language(self.language);
+        params.set_n_threads(self.threads);
+        params.set_translate(false);
+        // Keep the output text clean and quiet — no special tokens, no progress spew.
+        params.set_print_special(false);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_timestamps(false);
+        params.set_suppress_blank(true);
+
+        state
+            .full(params, input)
+            .context("whisper transcription failed")?;
+
+        let n = state
+            .full_n_segments()
+            .context("failed to count whisper segments")?;
+        let mut text = String::new();
+        for i in 0..n {
+            let seg = state
+                .full_get_segment_text(i)
+                .with_context(|| format!("failed to read whisper segment {i}"))?;
+            text.push_str(&seg);
+        }
+        Ok(text)
+    }
+}
+
+/// Resolve (downloading on first use) the ggml model file for `model`, returning its path.
+/// Models are cached at `$XDG_CACHE_HOME/loom-voce/` (or `~/.cache/loom-voce/`) and pulled from
+/// the canonical ggerganov/whisper.cpp Hugging Face repo.
+fn ensure_model(model: &str) -> Result<PathBuf> {
+    let dir = cache_dir()?.join("loom-voce");
+    let path = dir.join(format!("ggml-{model}.bin"));
+    if path.metadata().map(|m| m.len() > 0).unwrap_or(false) {
+        return Ok(path);
+    }
+
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("cannot create cache dir {}", dir.display()))?;
+    let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{model}.bin");
+    eprintln!(
+        "loom-voce: downloading model '{model}' → {}",
+        path.display()
+    );
+    download(&url, &path).with_context(|| format!("failed to download model '{model}'"))?;
+    Ok(path)
+}
+
+/// Download `url` to `dest` via curl (fallback wget), atomically through a `.part` file so an
+/// interrupted download never leaves a truncated model that looks valid.
+fn download(url: &str, dest: &PathBuf) -> Result<()> {
+    let part = dest.with_extension("part");
+    let ok = if which("curl") {
+        Command::new("curl")
+            .args(["-fL", "--progress-bar", "-o"])
+            .arg(&part)
+            .arg(url)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    } else if which("wget") {
+        Command::new("wget")
+            .args(["-q", "--show-progress", "-O"])
+            .arg(&part)
+            .arg(url)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    } else {
+        bail!("need curl or wget to download the model");
+    };
+    if !ok {
+        let _ = std::fs::remove_file(&part);
+        bail!("downloader failed for {url}");
+    }
+    std::fs::rename(&part, dest).context("failed to finalize downloaded model")?;
+    Ok(())
+}
+
+/// `$XDG_CACHE_HOME`, else `$HOME/.cache`.
+fn cache_dir() -> Result<PathBuf> {
+    if let Ok(x) = std::env::var("XDG_CACHE_HOME") {
+        if !x.is_empty() {
+            return Ok(PathBuf::from(x));
+        }
+    }
+    let home = std::env::var("HOME").context("neither XDG_CACHE_HOME nor HOME is set")?;
+    Ok(PathBuf::from(home).join(".cache"))
+}
+
+/// Is `bin` on `PATH`?
+fn which(bin: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(bin).is_file()))
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame(amplitude: f32) -> Vec<f32> {
+        // One ~30ms frame at a constant magnitude (RMS == amplitude).
+        vec![amplitude; 480]
+    }
+
+    #[test]
+    fn vad_gates_on_energy() {
+        let mut vad = Vad::new();
+        assert!(!vad.is_speech(&frame(0.0)), "silence must not be speech");
+        assert!(!vad.is_speech(&[]), "empty frame must not be speech");
+        assert!(vad.is_speech(&frame(0.5)), "loud frame must be speech");
+    }
+
+    #[test]
+    fn segmenter_emits_after_trailing_silence() {
+        let mut seg = Segmenter::new();
+        // Speech must not emit on its own.
+        assert!(seg.push(frame(0.5)).is_none());
+        // Feed silence until the tail threshold trips; it must emit exactly one utterance that
+        // includes the leading speech frame.
+        let mut emitted = None;
+        for _ in 0..40 {
+            if let Some(utt) = seg.push(frame(0.0)) {
+                emitted = Some(utt);
+                break;
+            }
+        }
+        let utt = emitted.expect("an utterance should complete after the silence tail");
+        assert!(
+            utt.len() >= 480,
+            "utterance should contain the speech frame"
+        );
+        // After emitting, the segmenter resets and won't re-emit on continued silence.
+        assert!(seg.push(frame(0.0)).is_none());
+    }
+
+    #[test]
+    fn segmenter_ignores_leading_silence() {
+        let mut seg = Segmenter::new();
+        for _ in 0..40 {
+            assert!(
+                seg.push(frame(0.0)).is_none(),
+                "silence before any speech must never emit"
+            );
+        }
     }
 }
