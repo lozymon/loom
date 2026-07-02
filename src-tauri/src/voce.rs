@@ -22,9 +22,20 @@ fn voce_name() -> &'static str {
     }
 }
 
-/// Locate `loom-voce`: prefer a sibling of the running `loom` binary (how it ships — same dir as
-/// `loom`), falling back to the bare name so a dev with it on `PATH` still works.
+/// Locate `loom-voce`, in order: an explicit `$LOOM_VOCE_BIN` override; a sibling of the running
+/// `loom` binary (how it ships — same dir as `loom`); then the bare name on `PATH`.
+///
+/// The override matters in dev: loom-voce lives in this repo's `loom-voce/` crate but builds to its
+/// own target dir (it's not a workspace member — kept out of Loom's default/CI build so the
+/// whisper.cpp/cmake toolchain never touches it), so it isn't beside the dev `loom` binary. Point
+/// `$LOOM_VOCE_BIN` at `loom-voce/target/release/loom-voce`, or just put it on `PATH`.
 fn voce_bin() -> PathBuf {
+    if let Some(p) = std::env::var_os("LOOM_VOCE_BIN") {
+        let p = PathBuf::from(p);
+        if p.is_file() {
+            return p;
+        }
+    }
     if let Some(dir) = crate::control::loom_bin().and_then(|p| p.parent().map(PathBuf::from)) {
         let cand = dir.join(voce_name());
         if cand.is_file() {
@@ -60,7 +71,7 @@ pub fn voce_dictate(app: AppHandle, pane: String, model: Option<String>) -> Resu
 
     let mut child = cmd.spawn().map_err(|e| {
         format!(
-            "failed to launch {}: {e} (is loom-voce installed next to loom or on PATH?)",
+            "failed to launch {}: {e} (set $LOOM_VOCE_BIN, or install loom-voce next to loom / on PATH)",
             bin.display()
         )
     })?;

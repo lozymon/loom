@@ -1,20 +1,20 @@
 # loom-voce
 
-Speak into a [Loom](../loom) terminal pane.
+Speak into a Loom terminal pane.
 
-`loom-voce` is a standalone voice-dictation tool for the Loom control room. It captures your mic,
-transcribes speech **locally** with whisper.cpp, and types the transcript into a Loom pane by
-shelling out to the `loom` CLI — `loom send <pane> <text>` (or `loom broadcast`). It never touches
-Loom's internals; it's just another client of Loom's inter-pane control bus (ADR-0007), the same way
-an agent running in one pane drives the others.
+`loom-voce` captures your mic, transcribes speech **locally** with whisper.cpp, and types the
+transcript into a Loom pane by shelling out to the `loom` CLI — `loom send <pane> <text>` (or
+`loom broadcast`). It never touches Loom's internals; it's just another client of Loom's inter-pane
+control bus (ADR-0007), the same way an agent running in one pane drives the others.
 
-## Why a separate tool
+## A co-located, independent crate
 
-Loom's stack is deliberately lean (`std + serde_json` for its CLI/MCP faces). Speech-to-text drags
-in audio capture + a whisper model — heavy, its own release cadence, and squarely "product logic",
-which Loom keeps out of Rust. The clean seam already exists: the `$LOOM_SOCK` control bus. So
-loom-voce lives beside `loom`/`termcore`/`termhaus` and plugs into that bus instead of bloating the
-Loom binary.
+loom-voce lives inside the Loom repo (`loom-voce/`) but is a **standalone Cargo crate — not a
+workspace member**, so it's kept out of Loom's default and CI builds: the heavy whisper.cpp + cmake
+toolchain never touches `src-tauri`. It builds to its **own** `loom-voce/target/`, and couples to
+Loom only through the runtime `$LOOM_SOCK` control bus and the `loom send` CLI contract — no build
+dependency in either direction, and no product logic pulled into Loom's Rust. One repo (atomic
+cross-cutting changes, no version skew); two independent builds.
 
 ## Design
 
@@ -93,7 +93,22 @@ Prereqs (all satisfiable without sudo):
 - A **recorder at runtime** — `parecord` (pulseaudio-utils) or `arecord` (alsa-utils).
 - **`loom`** on `PATH` (or `$LOOM_BIN` set), with a Loom window running.
 
+Build from this crate's directory (it's not part of Loom's workspace, so build it explicitly):
+
 ```sh
+cd loom-voce
 cargo build --release
 ./target/release/loom-voce
 ```
+
+### Wiring into Loom's dictation hotkey (Ctrl+Shift+M)
+
+Loom's hotkey spawns `loom-voce --once`, resolving the binary in this order: `$LOOM_VOCE_BIN` →
+a sibling of the `loom` binary → `loom-voce` on `PATH`. In dev, loom-voce builds to its own
+`target/`, so point Loom at it:
+
+```sh
+export LOOM_VOCE_BIN="$PWD/target/release/loom-voce"   # from loom-voce/, before launching Loom
+```
+
+When shipped, install `loom-voce` next to the `loom` binary and no env var is needed.

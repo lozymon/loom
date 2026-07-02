@@ -20,6 +20,7 @@ Loom — a Linux-first desktop "control room" of real terminals. You run many PT
 - `npm run build` — Vite production build of the frontend (`tsc`-checked via the build; run `npx tsc --noEmit` for a standalone typecheck).
 - `npm test` — the Vitest unit suite (pure-logic libs: layout, grid, matching, agents, markdown, ansi, keybindings, gitClient).
 - Rust lives in `src-tauri/`: `cargo check`, `cargo clippy`, and `cargo fmt --check` (CI enforces rustfmt). The crate builds a **single `loom` binary** with three faces, selected by the first arg in `main.rs`: the GUI (bare `loom`, `loom .`, or `loom <dir>`), the inter-pane control CLI (`loom list`/`send`/… , ADR-0007), and the MCP server (`loom mcp`). The CLI/MCP faces are std + serde_json only (`cli.rs`/`mcp.rs`) and share the socket client in `src-tauri/src/control_sock.rs`.
+- **`loom-voce/`** — the voice-dictation helper (speech→text→`loom send`), a **co-located but standalone Cargo crate, deliberately NOT a workspace member** so its heavy whisper.cpp + cmake build never touches `src-tauri`/CI. Build it explicitly (`cd loom-voce && cargo build`); it couples to Loom only at runtime via the `$LOOM_SOCK` control bus and the `loom send` CLI. The dictation hotkey (Ctrl+Shift+M) spawns it via `src-tauri/src/voce.rs` (`voce_dictate`), resolving the binary by `$LOOM_VOCE_BIN` → sibling of `loom` → `PATH`.
 
 ## Architecture — the non-obvious decisions
 
