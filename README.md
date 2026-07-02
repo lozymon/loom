@@ -44,6 +44,9 @@ loom-voce --model small.en
 Push-to-talk (the default): press **Enter** to start an utterance; the VAD ends it on ~0.7s of
 silence, whisper transcribes, and the text lands in the target pane.
 
+`--once` captures a single utterance (no Enter gate), delivers it, and exits — this is what Loom's
+**dictation hotkey (Ctrl+Shift+M)** spawns per keypress: tap the hotkey, speak, and it auto-sends.
+
 ## Status: v0 — whisper wired & verified
 
 The full path runs end-to-end: mic → VAD → whisper.cpp → `loom send`. The whisper binding
@@ -65,11 +68,15 @@ v0-simple and marked for upgrade:
 
 ## Roadmap
 
-- Wire the real whisper.cpp binding.
-- **Loom-side hotkey**: a push-to-talk keybinding inside Loom (`lib/keybindings.ts`) that spawns
-  `loom-voce --pane <focused>` and shows a 🎙 "listening" indicator. This is where *true*
-  hold-to-talk lands — the webview has OS key-up events a terminal doesn't.
+- ✅ Wire the real whisper.cpp binding (`whisper-rs` 0.14; verified on jfk.wav).
+- ✅ **Loom-side hotkey** — Ctrl+Shift+M in Loom spawns `loom-voce --once --pane <focused>` and
+  shows a pulsing 🎙 "listening" chip (Loom `src/lib/voceClient.ts` + `src-tauri/src/voce.rs`).
+  loom-voce must be installed next to the `loom` binary (or on `PATH`).
+- Persistent daemon mode so the model loads once instead of per keypress (latency).
+- *True* hold-to-talk: record on key-down, stop on key-up (the webview has key-up events a
+  terminal doesn't) — the current hotkey is tap-to-talk (VAD ends the utterance on silence).
 - Optional `--backend deepgram|openai` streaming backend for lower latency.
+- Reuse the whisper state across utterances in `--continuous` (currently one state per utterance).
 
 ## Build
 
