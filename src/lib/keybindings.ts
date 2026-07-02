@@ -16,6 +16,7 @@ export type ActionId =
   | "toggle-zoom"
   | "open-editor"
   | "launch-claude"
+  | "dictate"
   | "detach-pane"
   | "session-log"
   | "new-workspace"
@@ -68,6 +69,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "toggle-zoom", label: "Toggle zoom", group: "Panes", defaultKey: "enter" },
   { id: "open-editor", label: "Open folder in editor", group: "Panes", defaultKey: "i" },
   { id: "launch-claude", label: "Launch Claude in pane", group: "Panes", defaultKey: "l" },
+  { id: "dictate", label: "Dictate into pane (voice)", group: "Panes", defaultKey: "m" },
   { id: "detach-pane", label: "Tear pane off into a window", group: "Panes", defaultKey: "n" },
   { id: "session-log", label: "View pane session log", group: "Panes", defaultKey: "j" },
   { id: "new-workspace", label: "New workspace", group: "Workspaces", defaultKey: "t" },

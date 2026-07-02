@@ -12,6 +12,7 @@ pub mod mcp;
 mod pty;
 mod sessionlog;
 mod tray;
+mod voce;
 mod workspace;
 
 use std::sync::Arc;
@@ -125,6 +126,7 @@ pub fn run() {
             wsl_distros,
             control::pane_cmd_reply,
             editor::open_editor,
+            voce::voce_dictate,
             capture::capture_region,
             git::git_status,
             git::git_branch,

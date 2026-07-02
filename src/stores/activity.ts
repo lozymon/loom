@@ -32,9 +32,13 @@ export interface PaneActivity {
   // the pane's log control so a silently-truncated log can't keep looking like it's recording.
   // Cleared only by a respawn (which re-opens the file) — not by looking at the pane.
   logError: string;
+  // True while a `loom-voce` voice-dictation helper is capturing for this pane (raised when the
+  // dictation hotkey spawns it, cleared on the helper's exit via the Rust `voce://done` event).
+  // Pure UI state — drives the 🎙 chip indicator; nothing is read from pane output (ADR-0001).
+  listening: boolean;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "" };
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "", listening: false };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -100,6 +104,17 @@ export function setLogError(id: PaneId, error: string) {
 /** Clear a pane's session-log error (on respawn — the log file is re-opened). */
 export function clearLogError(id: PaneId) {
   if (activity[id]?.logError) setActivity(id, "logError", "");
+}
+
+/** Raise the "listening" flag while voice dictation captures for a pane (dictation hotkey). */
+export function setListening(id: PaneId) {
+  ensure(id);
+  if (!activity[id].listening) setActivity(id, "listening", true);
+}
+
+/** Clear the "listening" flag (loom-voce exited — the `voce://done` event, or a spawn failure). */
+export function clearListening(id: PaneId) {
+  if (activity[id]?.listening) setActivity(id, "listening", false);
 }
 
 /** The user looked at the pane — clear its sticky unseen/bell/attention signals. */
