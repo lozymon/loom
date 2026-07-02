@@ -44,6 +44,11 @@ struct Cli {
     #[arg(long)]
     continuous: bool,
 
+    /// Capture exactly one utterance (no <Enter> gate), deliver it, and exit. This is the mode the
+    /// Loom-side push-to-talk hotkey spawns: tap the hotkey, speak, and it auto-ends on silence.
+    #[arg(long, conflicts_with = "continuous")]
+    once: bool,
+
     /// Deliver the transcript without pressing Enter (compose, submit manually).
     #[arg(long)]
     no_enter: bool,
@@ -71,11 +76,37 @@ fn main() -> Result<()> {
     let (frames_tx, frames_rx) = mpsc::channel::<Vec<f32>>();
     let _capture = audio::start_capture(frames_tx).context("failed to open microphone")?;
 
-    if cli.continuous {
+    if cli.once {
+        run_once(&mut engine, frames_rx, &target, !cli.no_enter)
+    } else if cli.continuous {
         run_continuous(&mut engine, frames_rx, &target, !cli.no_enter)
     } else {
         run_push_to_talk(&mut engine, frames_rx, &target, !cli.no_enter)
     }
+}
+
+/// One-shot: capture a single VAD-gated utterance immediately (no <Enter> gate), transcribe,
+/// deliver, and return. Spawned per keypress by Loom's dictation hotkey.
+fn run_once(
+    engine: &mut stt::WhisperStt,
+    frames_rx: mpsc::Receiver<Vec<f32>>,
+    target: &Target,
+    enter: bool,
+) -> Result<()> {
+    eprintln!("listening…");
+    let utt = Utterance::capture(&frames_rx);
+    if utt.is_empty() {
+        eprintln!("(heard nothing)");
+        return Ok(());
+    }
+    let text = engine.transcribe(&utt)?;
+    let text = text.trim();
+    if text.is_empty() {
+        eprintln!("(heard nothing)");
+        return Ok(());
+    }
+    eprintln!("“{text}”");
+    loom::deliver(target, text, enter)
 }
 
 /// Push-to-talk: wait for <Enter>, capture one VAD-gated utterance, transcribe, deliver, repeat.
