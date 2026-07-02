@@ -19,10 +19,11 @@ Loom binary.
 ## Design
 
 ```
- mic ──cpal──▶ 16kHz mono f32 ──VAD──▶ utterance ──whisper.cpp──▶ text ──▶ `loom send <pane>`
+ mic ──parecord──▶ 16kHz mono s16le ──VAD──▶ utterance ──whisper.cpp──▶ text ──▶ `loom send <pane>`
 ```
 
-- **audio.rs** — cpal capture, downmix to mono, resample to 16kHz.
+- **audio.rs** — shells out to the system recorder (`parecord`, falling back to `arecord`) and reads
+  raw 16kHz mono PCM from its stdout. No cpal / no ALSA `-dev` headers — a no-sudo-friendly choice.
 - **stt.rs** — VAD segmentation (utterance boundaries) + the whisper.cpp engine wrapper.
 - **loom.rs** — target resolution (`--pane`, `--broadcast`, or the focused pane from `loom list`)
   and delivery via the `loom` CLI. The transcript is piped through **stdin**, not argv, so arbitrary
@@ -53,7 +54,7 @@ all run.
 
 Also v0-simple and marked for upgrade:
 - VAD is an RMS energy gate (`src/stt.rs`) — swap in Silero (`voice_activity_detector`) for noise.
-- Resampler is linear decimation (`src/audio.rs`) — swap in `rubato` for fidelity.
+- Capture shells out to `parecord`; `parecord` already resamples to 16kHz for us.
 
 ## Roadmap
 
@@ -65,8 +66,12 @@ Also v0-simple and marked for upgrade:
 
 ## Build
 
-Needs Rust (workspace uses 1.96) and a C toolchain for whisper.cpp (cmake + clang; no sudo — it
-builds in-tree). `loom` must be on `PATH` (or `$LOOM_BIN` set) with a Loom window running.
+Prereqs (no sudo needed):
+- **Rust** 1.96 (already have it).
+- **cmake** for whisper.cpp — install userland with `pip install cmake` (or drop a static build in
+  `~/.local/bin`). A C compiler (`cc`/gcc) is already present.
+- **A recorder at runtime** — `parecord` (pulseaudio-utils) or `arecord` (alsa-utils). Already present.
+- **`loom`** on `PATH` (or `$LOOM_BIN` set), with a Loom window running.
 
 ```sh
 cargo build --release

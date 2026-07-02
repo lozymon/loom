@@ -1,82 +1,93 @@
-//! Microphone capture via cpal. Opens the default input device and streams frames to the STT loop
-//! as 16kHz mono `f32` chunks (whisper.cpp's native format). We downmix to mono and naively
-//! resample to 16kHz here so the rest of the pipeline is sample-rate-agnostic.
+//! Microphone capture by shelling out to the system recorder (`parecord`/`arecord`), reading raw
+//! 16kHz mono s16le PCM from its stdout, and streaming it to the STT loop as f32 frames.
 //!
-//! NOTE: this is the v0 skeleton — the resampler is a simple linear decimation, good enough for
-//! speech. Swap in `rubato` if you need higher fidelity.
+//! Why not a Rust audio crate (cpal)? On a no-sudo Linux box, cpal needs the ALSA `-dev` headers
+//! (`libasound2-dev`) to build. `parecord` (PulseAudio) / `arecord` (ALSA) ship on every desktop,
+//! resample to 16kHz for us, and need no build-time system headers — a far better fit for Loom's
+//! Linux-first, no-sudo world. If you later want in-process capture, drop cpal back in behind this
+//! same `start_capture` seam.
 
-use anyhow::{Context, Result};
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use anyhow::{bail, Context, Result};
+use std::io::Read;
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::Sender;
 
 /// whisper.cpp expects 16kHz mono.
 pub const TARGET_RATE: u32 = 16_000;
 
-/// Handle that keeps the cpal stream alive; drop it to stop capture.
+/// ~30ms frames: 480 samples at 16kHz. Small enough for responsive VAD.
+const FRAME_SAMPLES: usize = 480;
+
+/// Handle that keeps the recorder subprocess alive; drop it to stop capture (child is killed).
 pub struct Capture {
-    _stream: cpal::Stream,
+    child: Child,
 }
 
-/// Open the default input device and start streaming 16kHz mono f32 frames to `tx`.
+impl Drop for Capture {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Spawn the system recorder and stream 16kHz mono f32 frames to `tx` from a reader thread.
 pub fn start_capture(tx: Sender<Vec<f32>>) -> Result<Capture> {
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .context("no default input device (is a mic connected?)")?;
-    let config = device
-        .default_input_config()
-        .context("no default input config")?;
-    let src_rate = config.sample_rate().0;
-    let channels = config.channels() as usize;
+    let mut child = spawn_recorder().context("could not start an audio recorder")?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .context("recorder produced no stdout pipe")?;
 
-    let err_fn = |e| eprintln!("loom-voce: audio stream error: {e}");
+    std::thread::spawn(move || {
+        // Read fixed s16le blocks and hand each off as an f32 frame.
+        let mut raw = vec![0u8; FRAME_SAMPLES * 2];
+        loop {
+            match stdout.read_exact(&mut raw) {
+                Ok(()) => {
+                    let frame: Vec<f32> = raw
+                        .chunks_exact(2)
+                        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+                        .collect();
+                    // Drop on a closed channel (consumer gone) and stop the thread.
+                    if tx.send(frame).is_err() {
+                        break;
+                    }
+                }
+                // EOF or short read at shutdown → recorder ended; stop cleanly.
+                Err(_) => break,
+            }
+        }
+    });
 
-    // We only wire the f32 sample format here; extend with a match on config.sample_format()
-    // for i16/u16 devices if your hardware needs it.
-    let stream = device
-        .build_input_stream(
-            &config.into(),
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let mono = downmix_mono(data, channels);
-                let frame = resample_to_16k(&mono, src_rate);
-                // Drop on a full/closed channel rather than block the audio callback.
-                let _ = tx.send(frame);
-            },
-            err_fn,
-            None,
-        )
-        .context("failed to build input stream")?;
-    stream.play().context("failed to start input stream")?;
-    Ok(Capture { _stream: stream })
+    Ok(Capture { child })
 }
 
-/// Average interleaved channels down to mono.
-fn downmix_mono(interleaved: &[f32], channels: usize) -> Vec<f32> {
-    if channels <= 1 {
-        return interleaved.to_vec();
+/// Prefer PulseAudio's `parecord`, fall back to ALSA's `arecord`; both emit raw s16le mono @16kHz.
+fn spawn_recorder() -> Result<Child> {
+    if which("parecord") {
+        return Command::new("parecord")
+            .args(["--raw", "--rate=16000", "--channels=1", "--format=s16le"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("failed to spawn parecord");
     }
-    interleaved
-        .chunks(channels)
-        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
-        .collect()
+    if which("arecord") {
+        return Command::new("arecord")
+            .args(["-q", "-t", "raw", "-f", "S16_LE", "-r", "16000", "-c", "1"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("failed to spawn arecord");
+    }
+    bail!("no recorder found — install pulseaudio-utils (parecord) or alsa-utils (arecord)")
 }
 
-/// Naive linear-interpolation resample from `src_rate` to 16kHz. Fine for speech; replace with
-/// `rubato` for production fidelity.
-fn resample_to_16k(mono: &[f32], src_rate: u32) -> Vec<f32> {
-    if src_rate == TARGET_RATE || mono.is_empty() {
-        return mono.to_vec();
-    }
-    let ratio = TARGET_RATE as f32 / src_rate as f32;
-    let out_len = (mono.len() as f32 * ratio).round() as usize;
-    let mut out = Vec::with_capacity(out_len);
-    for i in 0..out_len {
-        let src_pos = i as f32 / ratio;
-        let idx = src_pos.floor() as usize;
-        let frac = src_pos - idx as f32;
-        let a = mono.get(idx).copied().unwrap_or(0.0);
-        let b = mono.get(idx + 1).copied().unwrap_or(a);
-        out.push(a + (b - a) * frac);
-    }
-    out
+/// Is `bin` on `PATH`? (Avoids a hard dep just to probe for a CLI.)
+fn which(bin: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| {
+            std::env::split_paths(&paths).any(|dir| dir.join(bin).is_file())
+        })
+        .unwrap_or(false)
 }
