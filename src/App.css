@@ -1880,6 +1880,24 @@ body,
   color: var(--state-dead);
 }
 
+/* Voice-dictation "listening" indicator — a 🎙 glyph that softly pulses while loom-voce captures
+   for this pane (raised on the dictation hotkey, cleared on the helper's exit). */
+.pane-chip .pane-listening {
+  flex: 0 0 auto;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--text-faint) 55%, transparent);
+  font-size: 11px;
+  line-height: 1;
+  animation: pane-listening-pulse 1.15s ease-in-out infinite;
+}
+@keyframes pane-listening-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pane-chip .pane-listening { animation: none; opacity: 0.9; }
+}
+
 /* Hover controls (top-right): glass pill, revealed on pane hover/focus. */
 .pane-ctl {
   position: absolute;

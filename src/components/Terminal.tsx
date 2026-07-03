@@ -28,6 +28,7 @@ import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
 import { claudeSessionExists } from "../lib/claudeSessions";
 import { openEditorAt } from "../lib/editor";
+import { dictateIntoPane } from "../lib/voceClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
@@ -589,6 +590,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "toggle-zoom": () => toggleZoom(props.paneId),
       "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
       "launch-claude": () => launchClaude(),
+      "dictate": () => void dictateIntoPane(props.paneId, spec()?.title ?? ""),
       "detach-pane": () => void detachPane(),
       "session-log": () => void openSessionLog(),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("loom:new-workspace")),
@@ -743,6 +745,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           {(s) => (
             <span class="pane-statuslabel" data-state={paneState()} title={`agent status: ${s()}`}>{s()}</span>
           )}
+        </Show>
+        <Show when={act()?.listening}>
+          <span class="pane-listening" title="Listening… (voice dictation)">🎙</span>
         </Show>
       </div>
 

@@ -10,7 +10,9 @@
     "serve": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:voce": "cargo build --release --manifest-path loom-voce/Cargo.toml",
+    "build:all": "npm run build:voce && npm run tauri build"
   },
   "license": "MIT",
   "dependencies": {

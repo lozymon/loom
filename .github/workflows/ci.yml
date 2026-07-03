@@ -8,7 +8,9 @@ name: CI
 #
 #   Every push/PR (fast feedback — these gate merges):
 #   • frontend      — typecheck + unit tests (node only; no apt/Rust, so it's quick)
-#   • rust-lint     — rustfmt + clippy + unit tests
+#   • rust-lint     — rustfmt + clippy + unit tests (the `loom` crate in src-tauri)
+#   • voce          — rustfmt + clippy + unit tests for the loom-voce crate (separate crate, needs
+#                     cmake for its whisper.cpp build; kept out of rust-lint so that stays webkit-only)
 #   • windows-check — cross-compile `cargo check` for the Windows target from Linux (the keystone:
 #                     catches `#[cfg(windows)]` code that doesn't compile, no Windows runner needed)
 #
@@ -105,6 +107,44 @@ jobs:
         working-directory: src-tauri
         run: cargo test --lib
 
+  voce:
+    name: loom-voce (fmt + clippy + test)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # loom-voce is its own crate (not in the src-tauri workspace); its whisper.cpp binding needs
+      # cmake to compile whisper.cpp and libclang for bindgen. No WebKit — it doesn't link the GUI.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libclang-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: loom-voce
+          shared-key: voce
+
+      - name: Rustfmt
+        working-directory: loom-voce
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        working-directory: loom-voce
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Pure-logic unit tests (VAD gate + utterance segmentation) — no audio device or model needed.
+      - name: Unit tests
+        working-directory: loom-voce
+        run: cargo test
+
   build:
     name: Build (.deb bundle)
     runs-on: ubuntu-22.04
@@ -114,6 +154,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # libwebkit2gtk for the Tauri app; cmake + libclang for the loom-voce helper's whisper.cpp
+      # build (whisper-rs-sys: cmake to compile whisper.cpp, libclang for bindgen).
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -121,7 +163,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             build-essential curl wget file \
             libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev
+            libayatana-appindicator3-dev librsvg2-dev \
+            cmake libclang-dev
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -135,16 +178,32 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            loom-voce
           shared-key: build
 
       - name: Install npm dependencies
         run: npm ci
 
+      # Build the voice helper first — the .deb bundles it beside `loom` at /usr/bin/loom-voce
+      # (bundle.linux.deb.files points at loom-voce/target/release/loom-voce), so it must exist
+      # before `tauri build`. This is `build:voce` (kept a separate crate, so it's an extra step).
+      - name: Build loom-voce helper
+        run: npm run build:voce
+
       # Full release build + .deb bundle (also runs the Vite build via
       # beforeBuildCommand). Skips AppImage to avoid its build-time downloads.
       - name: Build (.deb bundle)
         run: npm run tauri build -- --bundles deb
+
+      # Fail loudly if the helper didn't land in the package (e.g. a deb.files path regression).
+      - name: Verify loom-voce is bundled
+        run: |
+          deb=$(ls src-tauri/target/release/bundle/deb/*.deb)
+          dpkg -c "$deb" | grep -q './usr/bin/loom-voce' \
+            && echo "loom-voce bundled at /usr/bin/loom-voce ✓" \
+            || { echo "loom-voce MISSING from $deb"; dpkg -c "$deb" | grep -i loom; exit 1; }
 
       # Make the Linux build downloadable from the Actions run, mirroring the
       # Windows job — install on any Debian/Ubuntu box without a local toolchain.

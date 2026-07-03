@@ -33,6 +33,7 @@ import { initSettings, settings } from "./stores/settings";
 import { applyGlobalHotkey } from "./lib/globalHotkey";
 import { redock } from "./lib/detach";
 import { openEditorForActivePane } from "./lib/editor";
+import { dictateIntoActivePane, initVoceExitListener } from "./lib/voceClient";
 import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import { setSessionSink } from "./stores/sessions";
@@ -153,6 +154,9 @@ export default function App() {
   window.addEventListener("loom:reopen", openReopen);
   onCleanup(() => window.removeEventListener("loom:reopen", openReopen));
 
+  // Clear a pane's "listening" chip when its voice-dictation helper (loom-voce) exits.
+  onCleanup(initVoceExitListener());
+
   // Global fallback for the app-level Ctrl+Shift shortcuts. Terminal.tsx intercepts these via
   // xterm's key handler, but that only fires while a *terminal* owns focus — so when focus is on
   // the rail, a dialog, a button, or nothing, the shortcuts would otherwise be dead. This window
@@ -172,6 +176,7 @@ export default function App() {
     "prev-workspace": () => switchWorkspaceRelative(-1),
     "next-workspace": () => switchWorkspaceRelative(1),
     "open-editor": () => void openEditorForActivePane(),
+    "dictate": () => void dictateIntoActivePane(),
   };
   // Ctrl+Shift+1…9 jump straight to workspace N (works rail/dialog/nothing-focused too).
   SWITCH_WORKSPACE_ACTIONS.forEach((id, i) => {
