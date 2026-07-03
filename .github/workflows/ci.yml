@@ -201,7 +201,8 @@ jobs:
       - name: Verify loom-voce is bundled
         run: |
           deb=$(ls src-tauri/target/release/bundle/deb/*.deb)
-          dpkg -c "$deb" | grep -q './usr/bin/loom-voce' \
+          # dpkg -c prints the path as "usr/bin/loom-voce" (no leading ./), so match on the suffix.
+          dpkg -c "$deb" | grep -qE 'usr/bin/loom-voce$' \
             && echo "loom-voce bundled at /usr/bin/loom-voce ✓" \
             || { echo "loom-voce MISSING from $deb"; dpkg -c "$deb" | grep -i loom; exit 1; }
 
