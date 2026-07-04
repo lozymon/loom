@@ -22,6 +22,7 @@ import SessionLogViewer from "./components/SessionLogViewer";
 import HistorySearch from "./components/HistorySearch";
 import ReopenPanel from "./components/ReopenPanel";
 import CommandPalette from "./components/CommandPalette";
+import ListeningOverlay from "./components/ListeningOverlay";
 import {
   appState, init, startPersistence, flushPersistence,
   setOverview, toggleOverview, switchWorkspaceRelative, switchWorkspaceIndex,
@@ -318,6 +319,8 @@ export default function App() {
           onReopen={() => setReopenOpen(true)}
         />
       </Show>
+      {/* Voice-dictation "you're talking" popup — floats over everything while a pane is listening. */}
+      <ListeningOverlay />
     </div>
   );
 }

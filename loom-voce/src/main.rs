@@ -18,7 +18,9 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::io::{self, BufRead, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 
 use loom_voce::audio;
 use loom_voce::loom::{self, Target};
@@ -49,6 +51,17 @@ struct Cli {
     #[arg(long, conflicts_with = "continuous")]
     once: bool,
 
+    /// Print per-frame mic level (RMS) to stdout as `@LVL <value>` lines, for a host UI to drive a
+    /// live level meter. Loom passes this from the dictation hotkey; harmless (off) for CLI use.
+    #[arg(long)]
+    emit_levels: bool,
+
+    /// Hold mode (with `--once`): don't auto-stop on silence — keep recording through pauses until a
+    /// line arrives on stdin (or stdin closes), then transcribe and deliver. Loom drives this from
+    /// the dictation hotkey so a monologue ends on <Enter>, not at the first pause.
+    #[arg(long, requires = "once")]
+    hold: bool,
+
     /// Deliver the transcript without pressing Enter (compose, submit manually).
     #[arg(long)]
     no_enter: bool,
@@ -60,6 +73,9 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // When asked, stream per-frame mic levels to stdout so a host UI can draw a live meter.
+    stt::set_emit_levels(cli.emit_levels);
 
     // Resolve the target pane up front so we fail fast if Loom isn't reachable.
     let target = if cli.broadcast {
@@ -76,8 +92,27 @@ fn main() -> Result<()> {
     let (frames_tx, frames_rx) = mpsc::channel::<Vec<f32>>();
     let _capture = audio::start_capture(frames_tx).context("failed to open microphone")?;
 
+    // Hold mode ends capture on a "finish" signal from stdin (a line, or EOF when the host closes
+    // the pipe) rather than on silence. A watcher thread flips the flag; capture_hold polls it.
+    let stop = Arc::new(AtomicBool::new(false));
+    if cli.hold {
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let mut line = String::new();
+            let _ = io::stdin().read_line(&mut line);
+            stop.store(true, Ordering::Relaxed);
+        });
+    }
+
     if cli.once {
-        run_once(&mut engine, frames_rx, &target, !cli.no_enter)
+        run_once(
+            &mut engine,
+            frames_rx,
+            &target,
+            !cli.no_enter,
+            cli.hold,
+            &stop,
+        )
     } else if cli.continuous {
         run_continuous(&mut engine, frames_rx, &target, !cli.no_enter)
     } else {
@@ -85,16 +120,23 @@ fn main() -> Result<()> {
     }
 }
 
-/// One-shot: capture a single VAD-gated utterance immediately (no <Enter> gate), transcribe,
-/// deliver, and return. Spawned per keypress by Loom's dictation hotkey.
+/// One-shot: capture a single utterance immediately (no <Enter> gate), transcribe, deliver, and
+/// return. Spawned per keypress by Loom's dictation hotkey. In `hold` mode capture runs until the
+/// `stop` flag is set (the stdin "finish" watcher) instead of ending on a trailing silence.
 fn run_once(
     engine: &mut stt::WhisperStt,
     frames_rx: mpsc::Receiver<Vec<f32>>,
     target: &Target,
     enter: bool,
+    hold: bool,
+    stop: &AtomicBool,
 ) -> Result<()> {
     eprintln!("listening…");
-    let utt = Utterance::capture(&frames_rx);
+    let utt = if hold {
+        Utterance::capture_hold(&frames_rx, stop)
+    } else {
+        Utterance::capture(&frames_rx)
+    };
     if utt.is_empty() {
         eprintln!("(heard nothing)");
         return Ok(());

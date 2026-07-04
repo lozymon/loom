@@ -60,16 +60,38 @@ pub fn start_capture(tx: Sender<Vec<f32>>) -> Result<Capture> {
 /// Prefer PulseAudio's `parecord`, fall back to ALSA's `arecord`; both emit raw s16le mono @16kHz.
 fn spawn_recorder() -> Result<Child> {
     if which("parecord") {
+        // `--latency-msec=30` is essential, not a tweak: PulseAudio's default record buffer is ~2s,
+        // so without it the first frame doesn't arrive for ~2s — long enough that a one-shot capture
+        // gives up ("heard nothing") before the mic ever produces a sample. 30ms makes it near-instant.
         return Command::new("parecord")
-            .args(["--raw", "--rate=16000", "--channels=1", "--format=s16le"])
+            .args([
+                "--raw",
+                "--rate=16000",
+                "--channels=1",
+                "--format=s16le",
+                "--latency-msec=30",
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
             .context("failed to spawn parecord");
     }
     if which("arecord") {
+        // `--buffer-time`/`--period-time` (µs) keep ALSA's startup latency low for the same reason.
         return Command::new("arecord")
-            .args(["-q", "-t", "raw", "-f", "S16_LE", "-r", "16000", "-c", "1"])
+            .args([
+                "-q",
+                "-t",
+                "raw",
+                "-f",
+                "S16_LE",
+                "-r",
+                "16000",
+                "-c",
+                "1",
+                "--buffer-time=100000",
+                "--period-time=30000",
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()

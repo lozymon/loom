@@ -1898,6 +1898,107 @@ body,
   .pane-chip .pane-listening { animation: none; opacity: 0.9; }
 }
 
+/* Voice-dictation "you're talking" popup — a floating card shown while a pane is capturing (the
+   dictation hotkey). Centre-bottom so it never covers the pane you're dictating into. */
+.voce-overlay {
+  position: fixed;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: none;
+  animation: voce-rise 0.16s ease-out;
+}
+@keyframes voce-rise {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.voce-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px 14px 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-elevated, #1b1d23) 92%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--chip-border, rgba(255,255,255,0.12));
+}
+/* Pulsing mic with two expanding rings. */
+.voce-mic {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+}
+.voce-glyph { font-size: 22px; line-height: 1; }
+.voce-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #6ea8fe);
+  opacity: 0;
+  animation: voce-ping 1.8s ease-out infinite;
+}
+.voce-ring-2 { animation-delay: 0.9s; }
+@keyframes voce-ping {
+  0%   { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.voce-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #e8eaed);
+}
+.voce-sub {
+  font-size: 12px;
+  color: var(--text-muted, #9aa0a6);
+  margin-top: 2px;
+}
+.voce-sub strong { color: var(--text, #e8eaed); font-weight: 600; }
+.voce-hint {
+  margin-left: 10px;
+  color: var(--text-faint, #6b7280);
+  white-space: nowrap;
+}
+.voce-hint kbd {
+  font: inherit;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-faint, #6b7280) 22%, transparent);
+  box-shadow: inset 0 0 0 1px var(--chip-border, rgba(255,255,255,0.12));
+}
+/* While transcribing (post-Enter), the mic level is no longer live — fade the meter to read as a
+   spinner-ish "working" state rather than a frozen waveform. */
+.voce-overlay.finishing .voce-bars { opacity: 0.35; }
+.voce-overlay.finishing .voce-glyph { opacity: 0.6; }
+/* Live level bars — a real waveform scrolling right-to-left, each bar's height set from a streamed
+   mic level (voce://level). The short height transition smooths the ~33Hz frame updates. */
+.voce-bars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 96px;
+  height: 28px;
+  margin-left: 4px;
+}
+.voce-bars span {
+  flex: 1 1 0;
+  min-height: 2px;
+  height: 4%;
+  border-radius: 2px;
+  background: var(--accent, #6ea8fe);
+  transition: height 0.08s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .voce-overlay { animation: none; }
+  .voce-ring { animation: none; opacity: 0.35; }
+  .voce-bars span { transition: none; }
+}
+
 /* Hover controls (top-right): glass pill, revealed on pane hover/focus. */
 .pane-ctl {
   position: absolute;
