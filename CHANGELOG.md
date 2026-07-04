@@ -30,6 +30,25 @@ the post-release voice-monologue and pane-identity features, and hardened tests 
   loop was extracted from the flusher into a pure, testable function with no behaviour change; the
   crate's `cargo test` count went 7 → 14.
 
+## [1.3.0] — 2026-07-02
+
+Voice dictation. A new speech-to-text helper lets you talk a prompt into a pane instead of typing it.
+
+### Added
+- **Voice dictation** (**Ctrl+Shift+M**) — a new `loom-voce` helper captures a single utterance,
+  transcribes it on-device with whisper.cpp, and types the text into the focused pane over the
+  control bus (`loom send`) — Loom never reads pane output (ADR-0001). Resolves the helper via
+  `$LOOM_VOCE_BIN` → a sibling of `loom` → `PATH`. **Linux-only**: audio is captured through
+  `parecord`/`arecord` (PulseAudio/ALSA).
+- **`loom-commands` skill** — a reference skill for driving Loom panes from inside a pane (the
+  `loom` inter-pane control CLI and the equivalent `loom mcp` tools).
+
+### Build
+- **`loom-voce` packaging** — the helper is a co-located but standalone Cargo crate (kept out of the
+  `src-tauri` workspace so its whisper.cpp/cmake toolchain never touches the main build/CI).
+  `npm run build:all` builds it and bundles it into the `.deb` beside `loom` at `/usr/bin/loom-voce`,
+  so sibling-resolution needs no env var; the release CI job builds, bundles, and lint/tests it.
+
 ## [1.2.0] — 2026-06-30
 
 Title-bar and pane-chrome refresh. The window frame and per-pane controls are reorganised for a
