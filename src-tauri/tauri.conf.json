@@ -35,6 +35,11 @@
         "files": {
           "/usr/bin/loom-voce": "../loom-voce/target/release/loom-voce"
         }
+      },
+      "appimage": {
+        "files": {
+          "/usr/bin/loom-voce": "../loom-voce/target/release/loom-voce"
+        }
       }
     },
     "icon": [
