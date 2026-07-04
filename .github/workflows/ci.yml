@@ -15,12 +15,12 @@ name: CI
 #                     catches `#[cfg(windows)]` code that doesn't compile, no Windows runner needed)
 #
 #   Release tags (`v*`) and manual `workflow_dispatch` only (heavyweight — produce installers):
-#   • build         — full release build + .deb bundle (uploaded as a downloadable artifact)
+#   • build         — full release build + .deb and .AppImage bundles (uploaded as artifacts)
 #   • windows-build — full NSIS bundle on a real windows-latest runner (the priciest runner)
 #
 #   Release tags (`v*`) only:
-#   • release       — create the GitHub Release and attach the .deb + Windows installer as
-#                     permanent, public assets (workflow artifacts expire and don't show on Releases)
+#   • release       — create the GitHub Release and attach the .deb + .AppImage + Windows installer
+#                     as permanent, public assets (workflow artifacts expire and don't show on Releases)
 #
 # The full bundles are gated because they're expensive and don't add merge-gating signal
 # the lint/check tier doesn't already give: rust-lint compiles the whole tree (clippy
@@ -146,7 +146,7 @@ jobs:
         run: cargo test
 
   build:
-    name: Build (.deb bundle)
+    name: Build (.deb + AppImage bundles)
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     # Heavyweight: only on release tags or manual dispatch (see header).
@@ -164,7 +164,8 @@ jobs:
             build-essential curl wget file \
             libxdo-dev libssl-dev \
             libayatana-appindicator3-dev librsvg2-dev \
-            cmake libclang-dev
+            cmake libclang-dev \
+            libfuse2
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -192,10 +193,11 @@ jobs:
       - name: Build loom-voce helper
         run: npm run build:voce
 
-      # Full release build + .deb bundle (also runs the Vite build via
-      # beforeBuildCommand). Skips AppImage to avoid its build-time downloads.
-      - name: Build (.deb bundle)
-        run: npm run tauri build -- --bundles deb
+      # Full release build + .deb and AppImage bundles (also runs the Vite build via
+      # beforeBuildCommand). The AppImage bundler downloads linuxdeploy/appimagetool at build
+      # time — that cost is why bundles are gated to the release/dispatch tier, not on every PR.
+      - name: Build (.deb + AppImage bundles)
+        run: npm run tauri build -- --bundles deb,appimage
 
       # Fail loudly if the helper didn't land in the package (e.g. a deb.files path regression).
       - name: Verify loom-voce is bundled
@@ -206,13 +208,32 @@ jobs:
             && echo "loom-voce bundled at /usr/bin/loom-voce ✓" \
             || { echo "loom-voce MISSING from $deb"; dpkg -c "$deb" | grep -i loom; exit 1; }
 
-      # Make the Linux build downloadable from the Actions run, mirroring the
-      # Windows job — install on any Debian/Ubuntu box without a local toolchain.
+      # Same guard for the AppImage (bundle.linux.appimage.files). --appimage-extract unpacks the
+      # squashfs without FUSE/mounting, so it works headless on the runner; check the helper is inside.
+      - name: Verify loom-voce is in the AppImage
+        run: |
+          app=$(ls src-tauri/target/release/bundle/appimage/*.AppImage)
+          chmod +x "$app"
+          "$app" --appimage-extract >/dev/null
+          test -f squashfs-root/usr/bin/loom-voce \
+            && echo "loom-voce bundled in the AppImage ✓" \
+            || { echo "loom-voce MISSING from $app"; find squashfs-root -iname '*loom*'; exit 1; }
+          rm -rf squashfs-root
+
+      # Make the Linux builds downloadable from the Actions run, mirroring the
+      # Windows job — install on any box without a local toolchain.
       - name: Upload Linux .deb
         uses: actions/upload-artifact@v7
         with:
           name: loom-linux-deb
           path: src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v7
+        with:
+          name: loom-linux-appimage
+          path: src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
 
   windows-check:
@@ -308,7 +329,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     # Only on a real version tag (v*), and only after both bundles built. The job
-    # pulls the .deb and Windows installer that build/windows-build uploaded as
+    # pulls the .deb + AppImage and the Windows installer that build/windows-build uploaded as
     # workflow artifacts and attaches them to the Release as permanent, public assets
     # (workflow artifacts otherwise expire and aren't visible on the Releases page).
     needs: [build, windows-build]
@@ -320,6 +341,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: loom-linux-deb
+          path: dist
+
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@v8
+        with:
+          name: loom-linux-appimage
           path: dist
 
       - name: Download Windows installer
