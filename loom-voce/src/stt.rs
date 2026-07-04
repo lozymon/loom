@@ -8,10 +8,12 @@
 //!     each time speech is followed by enough silence.
 
 use anyhow::{bail, Context, Result};
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::mpsc::Receiver;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::{Duration, Instant};
 
 use whisper_rs::{
     install_logging_hooks, FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters,
@@ -26,6 +28,34 @@ pub type Utterance = Vec<f32>;
 const SILENCE_TAIL: Duration = Duration::from_millis(700);
 /// Give up on a push-to-talk utterance that never sees any speech.
 const NO_SPEECH_TIMEOUT: Duration = Duration::from_secs(6);
+/// Safety cap on a hold-mode (`--hold`) utterance so a forgotten session can't record forever.
+const MAX_HOLD: Duration = Duration::from_secs(300);
+
+/// When set, `emit_level` prints each frame's mic level to stdout for a host UI meter (see `--emit-levels`).
+static EMIT_LEVELS: AtomicBool = AtomicBool::new(false);
+
+/// Enable/disable per-frame mic-level output on stdout. Called once from `main` per the CLI flag.
+pub fn set_emit_levels(on: bool) {
+    EMIT_LEVELS.store(on, Ordering::Relaxed);
+}
+
+/// RMS amplitude of a frame (0.0 = silence). The same energy measure the VAD gates on.
+fn rms(frame: &[f32]) -> f32 {
+    if frame.is_empty() {
+        return 0.0;
+    }
+    (frame.iter().map(|s| s * s).sum::<f32>() / frame.len() as f32).sqrt()
+}
+
+/// If level output is enabled, print `@LVL <rms>` to stdout (flushed — stdout is a pipe to the host,
+/// so it's block-buffered and a meter needs each line promptly). A machine line; human logs use stderr.
+fn emit_level(level: f32) {
+    if EMIT_LEVELS.load(Ordering::Relaxed) {
+        let mut out = std::io::stdout().lock();
+        let _ = writeln!(out, "@LVL {level:.4}");
+        let _ = out.flush();
+    }
+}
 
 // ------------------------------------------------------------------------------------------------
 // Utterance capture (push-to-talk)
@@ -35,6 +65,7 @@ const NO_SPEECH_TIMEOUT: Duration = Duration::from_secs(6);
 /// `SILENCE_TAIL` of quiet, or until `NO_SPEECH_TIMEOUT` elapses with no speech at all.
 pub trait CaptureExt {
     fn capture(frames: &Receiver<Vec<f32>>) -> Utterance;
+    fn capture_hold(frames: &Receiver<Vec<f32>>, stop: &AtomicBool) -> Utterance;
 }
 
 impl CaptureExt for Utterance {
@@ -43,26 +74,60 @@ impl CaptureExt for Utterance {
         let mut buf: Vec<f32> = Vec::new();
         let mut seen_speech = false;
         let mut silence = Duration::ZERO;
-        let mut waited = Duration::ZERO;
+        let started = Instant::now();
 
-        while let Ok(frame) = frames.recv_timeout(Duration::from_millis(200)) {
-            let dur = frame_duration(frame.len());
-            let voiced = vad.is_speech(&frame);
-            buf.extend_from_slice(&frame);
+        loop {
+            match frames.recv_timeout(Duration::from_millis(200)) {
+                Ok(frame) => {
+                    let dur = frame_duration(frame.len());
+                    emit_level(rms(&frame));
+                    let voiced = vad.is_speech(&frame);
+                    buf.extend_from_slice(&frame);
 
-            if voiced {
-                seen_speech = true;
-                silence = Duration::ZERO;
-            } else if seen_speech {
-                silence += dur;
-                if silence >= SILENCE_TAIL {
-                    break;
+                    if voiced {
+                        seen_speech = true;
+                        silence = Duration::ZERO;
+                    } else if seen_speech {
+                        silence += dur;
+                        if silence >= SILENCE_TAIL {
+                            break;
+                        }
+                    }
                 }
-            } else {
-                waited += dur;
-                if waited >= NO_SPEECH_TIMEOUT {
-                    return Vec::new();
+                // A recv timeout is NOT end-of-utterance: it just means no frame arrived this tick
+                // (the recorder is still warming up, or the mic briefly stalled). Keep waiting — only
+                // the no-speech deadline below gives up. (The old `while let Ok` broke the loop on the
+                // very first gap, so any recorder startup latency returned an empty "heard nothing".)
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+
+            // Give up only if no speech has been heard at all within the onset window.
+            if !seen_speech && started.elapsed() >= NO_SPEECH_TIMEOUT {
+                return Vec::new();
+            }
+        }
+        buf
+    }
+
+    /// Hold mode: record everything (pauses included) until `stop` is set — the host's "finish"
+    /// signal — or the `MAX_HOLD` safety cap. No VAD gating, so a monologue with pauses stays one
+    /// utterance. Still streams levels for the meter. May return leading/trailing silence; whisper
+    /// copes. Empty only if the mic never delivered a frame.
+    fn capture_hold(frames: &Receiver<Vec<f32>>, stop: &AtomicBool) -> Utterance {
+        let mut buf: Vec<f32> = Vec::new();
+        let started = Instant::now();
+        while !stop.load(Ordering::Relaxed) {
+            match frames.recv_timeout(Duration::from_millis(100)) {
+                Ok(frame) => {
+                    emit_level(rms(&frame));
+                    buf.extend_from_slice(&frame);
                 }
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+            if started.elapsed() >= MAX_HOLD {
+                break;
             }
         }
         buf
@@ -95,6 +160,7 @@ impl Segmenter {
     /// Feed one frame; returns `Some(utterance)` when a phrase completes.
     pub fn push(&mut self, frame: Vec<f32>) -> Option<Utterance> {
         let dur = frame_duration(frame.len());
+        emit_level(rms(&frame));
         let voiced = self.vad.is_speech(&frame);
 
         if voiced {

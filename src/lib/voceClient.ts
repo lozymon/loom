@@ -4,18 +4,29 @@
 // raise it before the spawn, clear it on exit (or on a spawn failure). loom-voce delivers the
 // transcript over the control bus (`loom send <pane>`) — Loom never reads pane output (ADR-0001).
 
+import { createSignal } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { PaneId } from "../ipc/protocol";
 import { activeWorkspace, resolvePaneByName } from "../stores/workspace";
-import { setListening, clearListening } from "../stores/activity";
+import { activity, setListening, clearListening } from "../stores/activity";
 
 const VOCE_DONE_EVENT = "voce://done";
+const VOCE_LEVEL_EVENT = "voce://level";
+
+/** Latest mic level (RMS, ~0.0–0.3 for speech) per capturing pane name, streamed from loom-voce
+ *  while it listens. Read reactively by the dictation overlay to drive its live waveform; entries
+ *  are cleared when the pane's helper exits. */
+const [voiceLevels, setVoiceLevels] = createSignal<Record<string, number>>({});
+export { voiceLevels };
 
 /** Start voice dictation into a pane addressed by its id (for the indicator) and routing name
  *  (its auto-name / `loom send` handle). No-op without a name. */
 export async function dictateIntoPane(paneId: PaneId, name: string): Promise<void> {
   if (!name.trim()) return;
+  // Ignore a repeat hotkey while this pane is already capturing — a monologue is finished with
+  // <Enter> (voce_finish) or cancelled with Esc, not by starting a second overlapping helper.
+  if (activity[paneId]?.listening) return;
   setListening(paneId);
   try {
     // model: null → loom-voce uses its default (base.en). A per-app model setting can pass it here.
@@ -23,6 +34,30 @@ export async function dictateIntoPane(paneId: PaneId, name: string): Promise<voi
   } catch (e) {
     clearListening(paneId);
     window.alert(`Couldn't start voice dictation:\n${e}`);
+  }
+}
+
+/** Finish the monologue capturing for a pane addressed by its routing name (<Enter> in the listening
+ *  overlay): loom-voce stops recording, transcribes, and types the text into the pane. The pane's
+ *  "listening" indicator clears via the normal `voce://done` path. No-op without a name. */
+export async function finishDictation(name: string): Promise<void> {
+  if (!name.trim()) return;
+  try {
+    await invoke("voce_finish", { pane: name });
+  } catch {
+    // Nothing was capturing (already exited) — the overlay will clear on its own.
+  }
+}
+
+/** Abort the voice dictation capturing for a pane addressed by its routing name (Esc in the
+ *  listening overlay). Kills the loom-voce helper, which discards the utterance; the pane's
+ *  "listening" indicator clears via the normal `voce://done` path. No-op without a name. */
+export async function cancelDictation(name: string): Promise<void> {
+  if (!name.trim()) return;
+  try {
+    await invoke("voce_cancel", { pane: name });
+  } catch {
+    // Nothing was capturing (already exited) — the overlay will clear on its own.
   }
 }
 
@@ -35,12 +70,26 @@ export async function dictateIntoActivePane(): Promise<void> {
   await dictateIntoPane(id, ws?.panes[id]?.title ?? "");
 }
 
-/** Wire the helper-exit event once (App onMount): clear the pane's "listening" indicator when its
- *  loom-voce exits. Returns an unlisten thunk for onCleanup. */
+/** Wire the voice-dictation events once (App onMount): stream mic levels into `voiceLevels` for the
+ *  overlay waveform, and clear a pane's "listening" indicator (and its level) when its loom-voce
+ *  exits. Returns a single unlisten thunk for onCleanup. */
 export function initVoceExitListener(): () => void {
-  const un = listen<string>(VOCE_DONE_EVENT, (e) => {
+  const done = listen<string>(VOCE_DONE_EVENT, (e) => {
     const r = resolvePaneByName(e.payload);
     if ("paneId" in r) clearListening(r.paneId);
+    // Drop the pane's level so a re-dictation starts from a clean (flat) waveform.
+    setVoiceLevels((m) => {
+      if (!(e.payload in m)) return m;
+      const next = { ...m };
+      delete next[e.payload];
+      return next;
+    });
   });
-  return () => void un.then((f) => f());
+  const level = listen<{ pane: string; level: number }>(VOCE_LEVEL_EVENT, (e) => {
+    setVoiceLevels((m) => ({ ...m, [e.payload.pane]: e.payload.level }));
+  });
+  return () => {
+    void done.then((f) => f());
+    void level.then((f) => f());
+  };
 }

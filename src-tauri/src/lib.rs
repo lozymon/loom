@@ -127,6 +127,8 @@ pub fn run() {
             control::pane_cmd_reply,
             editor::open_editor,
             voce::voce_dictate,
+            voce::voce_finish,
+            voce::voce_cancel,
             capture::capture_region,
             git::git_status,
             git::git_branch,
