@@ -4,10 +4,10 @@ All notable changes to Loom are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
-## [Unreleased]
+## [1.4.0] — 2026-07-04
 
 Work landed on top of the 1.3.0 release: a packaging fix so voice dictation works on the AppImage,
-the post-release voice-monologue and pane-identity features, and hardened tests around the PTY core.
+the voice-monologue and pane-identity features, and hardened tests around the PTY core.
 
 ### Added
 - **Voice monologue dictation** — the dictation hotkey (**Ctrl+Shift+M**) starts a hold-mode capture
