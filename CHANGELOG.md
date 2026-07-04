@@ -4,6 +4,32 @@ All notable changes to Loom are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [Unreleased]
+
+Work landed on top of the 1.3.0 release: a packaging fix so voice dictation works on the AppImage,
+the post-release voice-monologue and pane-identity features, and hardened tests around the PTY core.
+
+### Added
+- **Voice monologue dictation** — the dictation hotkey (**Ctrl+Shift+M**) starts a hold-mode capture
+  that records through pauses (no silence auto-stop), with a live mic waveform and explicit
+  finish/cancel keys, so a full multi-sentence prompt can be dictated into a pane. (Linux only — the
+  helper captures via PulseAudio/ALSA; see Fixed.)
+- **Pane pool-name watermark** — each pane shows its pool name (e.g. Wade/Cleo) as a subtle corner
+  watermark.
+
+### Fixed
+- **Voice dictation on the AppImage** — the AppImage now bundles the `loom-voce` helper beside `loom`
+  (it shipped only in the `.deb`), so **Ctrl+Shift+M** resolves the helper on AppImage installs
+  instead of silently failing to find it. Voice dictation remains **Linux-only**: `loom-voce`
+  captures audio via `parecord`/`arecord` (PulseAudio/ALSA), so the Windows NSIS installer ships no
+  helper and the hotkey there reports it couldn't start — now documented in CLAUDE.md.
+
+### Internal
+- **PTY core test coverage** — unit tests for the output-coalescing cap (the flood-protection
+  back-pressure path, ADR-0003/0006) and the inter-pane control-bus reply registry. The coalescing
+  loop was extracted from the flusher into a pure, testable function with no behaviour change; the
+  crate's `cargo test` count went 7 → 14.
+
 ## [1.2.0] — 2026-06-30
 
 Title-bar and pane-chrome refresh. The window frame and per-pane controls are reorganised for a
