@@ -751,6 +751,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         </Show>
       </div>
 
+      {/* Pool-name (Wade/Cleo) as a faint, agent-tinted watermark in the bottom-right corner. */}
+      <Show when={spec()?.title}>
+        {(name) => <span class="pane-name-watermark" aria-hidden="true">{name()}</span>}
+      </Show>
+
       {/* Uppercase state label (top-right) — the primary fleet signal; shown only in overview,
           where the hit overlay intercepts the hover controls. */}
       <span class="pane-state-label" data-state={paneState()}>

@@ -1999,6 +1999,25 @@ body,
   .voce-bars span { transition: none; }
 }
 
+/* Pool-name (Wade/Cleo) as a faint watermark in the bottom-right corner — small, low-opacity,
+   tinted with the pane's agent color. Sits over the terminal but light enough to read through;
+   a touch stronger when focused. */
+.pane-name-watermark {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  z-index: 4;
+  font: 700 13px var(--font-ui, "IBM Plex Sans", system-ui, sans-serif);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--agent-color, var(--text-bright));
+  opacity: 0.14;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.12s ease;
+}
+.pane.focused .pane-name-watermark { opacity: 0.22; }
+
 /* Hover controls (top-right): glass pill, revealed on pane hover/focus. */
 .pane-ctl {
   position: absolute;
