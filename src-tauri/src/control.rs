@@ -141,3 +141,41 @@ pub fn pane_cmd_reply(pending: State<Arc<PendingReplies>>, req_id: u32, response
         let _ = tx.send(response);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::PendingReplies;
+
+    #[test]
+    fn register_ids_start_at_one_and_increment() {
+        // ids are echoed back through JS, where 0 is falsy — so the first id must be 1, not 0.
+        let pending = PendingReplies::new();
+        let (id1, _rx1) = pending.register();
+        let (id2, _rx2) = pending.register();
+        assert_eq!(id1, 1, "first request id must be 1 (0 is falsy in JS)");
+        assert_eq!(id2, 2, "ids increment per request");
+    }
+
+    #[test]
+    fn take_hands_the_reply_across_then_clears_the_slot() {
+        let pending = PendingReplies::new();
+        let (id, rx) = pending.register();
+        // `pane_cmd_reply` looks the parked sender up by id and hands the frontend's answer across.
+        let tx = pending
+            .take(id)
+            .expect("a registered id is takeable exactly once");
+        tx.send("response".to_string()).unwrap();
+        assert_eq!(rx.recv().unwrap(), "response");
+        // A second take (e.g. a duplicate/late reply, or reply-after-timeout) finds nothing — no panic.
+        assert!(
+            pending.take(id).is_none(),
+            "the slot is gone after the first take"
+        );
+    }
+
+    #[test]
+    fn take_of_unknown_id_is_none() {
+        let pending = PendingReplies::new();
+        assert!(pending.take(999).is_none());
+    }
+}

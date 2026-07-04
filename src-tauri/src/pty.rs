@@ -33,6 +33,23 @@ const FRAME_MAX: usize = 64 * 1024;
 /// (`yes`, a big `cat`) is back-pressured by the OS — no unbounded queue, bounded RAM.
 const CHANNEL_DEPTH: usize = 16;
 
+/// Greedily coalesce queued reader chunks into `acc` up to the per-frame byte cap: pull the next
+/// chunk via `next` (the flusher passes the reader→flusher channel's non-blocking `try_recv`) until
+/// the frame reaches `frame_max` or the queue drains. `acc` already holds the blocking-`recv`'d first
+/// chunk of the frame. Leaving surplus in the channel once the cap is hit is deliberate — a full
+/// channel is exactly what back-pressures the reader (and thus the child). A single chunk larger than
+/// `frame_max` is emitted whole (the loop just doesn't pull *more*), which caps frame growth without
+/// splitting a chunk. Extracted from the flusher so this size-cap / drain-until-empty behaviour —
+/// the heart of the flood protection (ADR-0003/0006) — is unit-testable without a live PTY.
+fn coalesce_into(acc: &mut Vec<u8>, frame_max: usize, mut next: impl FnMut() -> Option<Vec<u8>>) {
+    while acc.len() < frame_max {
+        match next() {
+            Some(chunk) => acc.extend_from_slice(&chunk),
+            None => break,
+        }
+    }
+}
+
 /// Emitted to the webview when a pane's session-log *write* fails mid-stream (disk full, file
 /// removed, mount dropped). The open-failure path is handled inline in `spawn` (logging just
 /// never starts); this covers the case where logging was running and then broke — without it the
@@ -468,14 +485,9 @@ pub fn spawn(
         while let Ok(first) = rx.recv() {
             acc.extend_from_slice(&first);
             let frame_start = Instant::now();
-            // Greedily coalesce whatever is already queued, up to the per-frame cap.
-            // Leaving the rest in `rx` is deliberate: a full channel blocks the reader.
-            while acc.len() < FRAME_MAX {
-                match rx.try_recv() {
-                    Ok(chunk) => acc.extend_from_slice(&chunk),
-                    Err(_) => break,
-                }
-            }
+            // Greedily coalesce whatever is already queued, up to the per-frame cap. Leaving the
+            // rest in `rx` is deliberate: a full channel blocks the reader (see coalesce_into).
+            coalesce_into(&mut acc, FRAME_MAX, || rx.try_recv().ok());
             // Tee to the session log. A write failure here used to be dropped (`let _ =`), leaving
             // a silently-truncated log the user still believes is complete. Instead surface it once
             // (console + a webview event so the pane's recording indicator clears) and stop logging
@@ -712,5 +724,65 @@ mod tests {
     fn check_command_empty_is_available() {
         // An empty command is a plain shell — always launchable.
         assert!(check_command("", None));
+    }
+}
+
+// The coalescing cap is the load-bearing flood protection (ADR-0003/0006) and is platform-neutral,
+// so these run on every target, not just unix.
+#[cfg(test)]
+mod coalesce_tests {
+    use super::coalesce_into;
+    use std::collections::VecDeque;
+
+    /// Turn a list of chunks into a `next` closure that pops them front-to-back, then yields None —
+    /// standing in for the reader→flusher channel's `try_recv().ok()`. Returns the queue too so a
+    /// test can assert what was *left* un-pulled (the surplus that back-pressures the reader).
+    fn queued(chunks: &[&[u8]]) -> VecDeque<Vec<u8>> {
+        chunks.iter().map(|c| c.to_vec()).collect()
+    }
+
+    #[test]
+    fn drains_whole_queue_when_under_cap() {
+        let mut q = queued(&[b"cd", b"ef"]);
+        let mut acc = b"ab".to_vec();
+        coalesce_into(&mut acc, 1024, || q.pop_front());
+        assert_eq!(acc, b"abcdef");
+        assert!(q.is_empty(), "everything under the cap is pulled");
+    }
+
+    #[test]
+    fn stops_at_cap_and_leaves_surplus_for_backpressure() {
+        // frame_max=4: first chunk "ab" (len 2 < 4) → pull "cd" (len 4, not < 4) → stop, so "ef"
+        // stays queued. A full channel is what back-pressures the reader, so the surplus MUST remain.
+        let mut q = queued(&[b"cd", b"ef"]);
+        let mut acc = b"ab".to_vec();
+        coalesce_into(&mut acc, 4, || q.pop_front());
+        assert_eq!(acc, b"abcd");
+        assert_eq!(
+            q.pop_front().as_deref(),
+            Some(&b"ef"[..]),
+            "surplus left un-pulled"
+        );
+    }
+
+    #[test]
+    fn single_oversized_chunk_is_not_split() {
+        // acc already exceeds the cap (a big read): the loop pulls nothing and never splits it.
+        let mut q = queued(&[b"more"]);
+        let mut acc = b"already-too-big".to_vec();
+        coalesce_into(&mut acc, 4, || q.pop_front());
+        assert_eq!(acc, b"already-too-big");
+        assert_eq!(
+            q.len(),
+            1,
+            "nothing pulled once the frame is already at/over the cap"
+        );
+    }
+
+    #[test]
+    fn empty_queue_leaves_first_chunk_untouched() {
+        let mut acc = b"ab".to_vec();
+        coalesce_into(&mut acc, 1024, || None);
+        assert_eq!(acc, b"ab");
     }
 }
