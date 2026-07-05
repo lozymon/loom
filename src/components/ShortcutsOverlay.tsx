@@ -4,7 +4,7 @@
 // is a quick glance, opened from the title bar's ? button, the palette, or the keybinding.
 
 import { For, onCleanup, onMount } from "solid-js";
-import { ACTIONS, formatBinding, type ActionDef } from "../lib/keybindings";
+import { ACTIONS, formatBinding, MOD_NAMESPACE, type ActionDef } from "../lib/keybindings";
 import { settings } from "../stores/settings";
 
 // Group actions by their section, preserving first-seen order (same derivation as Settings).
@@ -46,7 +46,7 @@ export default function ShortcutsOverlay(props: { onClose: () => void }) {
           </For>
         </div>
         <footer class="shortcuts-foot">
-          App shortcuts use the <kbd class="shortcuts-key">Ctrl+Shift</kbd> namespace · rebind them in Settings
+          App shortcuts use the <kbd class="shortcuts-key">{MOD_NAMESPACE}</kbd> namespace · rebind them in Settings
         </footer>
       </div>
     </div>

@@ -145,6 +145,39 @@ export function actionForKey(bindings: Keybindings, key: string): ActionId | nul
   return null;
 }
 
+// The app-shortcut namespace is `Ctrl+Shift` (ADR-0005) — except on macOS, where the primary
+// modifier is `Cmd` (⌘), the native app-shortcut key. Using Cmd there (rather than Ctrl) is not
+// just convention: Cmd is never sent to the PTY, so `Cmd+Shift` can't collide with a terminal
+// control char the way Ctrl can. Platform is detected once; `navigator` may be absent under the
+// node test env, so guard it (falls back to non-mac, which is what CI asserts).
+export const IS_MAC =
+  typeof navigator !== "undefined" &&
+  /mac/i.test(
+    // `userAgentData.platform` is the modern field; fall back to the deprecated `platform` / UA.
+    (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform ||
+      navigator.platform ||
+      navigator.userAgent ||
+      "",
+  );
+
+/** The modifier prefix for rendering a binding: "Cmd+Shift+" on macOS, else "Ctrl+Shift+". */
+export const MOD_LABEL = IS_MAC ? "Cmd+Shift+" : "Ctrl+Shift+";
+
+/** The namespace name without a trailing key, e.g. "Ctrl+Shift" ("Cmd+Shift" on macOS). For prose. */
+export const MOD_NAMESPACE = IS_MAC ? "Cmd+Shift" : "Ctrl+Shift";
+
+/**
+ * Is the app-shortcut chord held? — the primary modifier (Cmd on macOS, Ctrl elsewhere) plus
+ * Shift, and *not* the other modifiers. This is the one place the `Ctrl`/`Cmd` platform split
+ * lives; every dispatch site calls it instead of checking `e.ctrlKey`/`e.shiftKey` inline, so a
+ * shortcut fires with Cmd on macOS and Ctrl everywhere else. On non-mac we also require `!metaKey`
+ * so the Super/Win key doesn't smuggle a combo through; on mac we require `!ctrlKey` symmetrically.
+ */
+export function appChord(e: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "shiftKey" | "altKey">): boolean {
+  if (!e.shiftKey || e.altKey) return false;
+  return IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+}
+
 const PRETTY_KEY: Record<string, string> = {
   arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→",
   enter: "Enter", pageup: "PgUp", pagedown: "PgDn",
@@ -154,11 +187,11 @@ const PRETTY_KEY: Record<string, string> = {
   "<": ",", // Ctrl+Shift+, may arrive as "<"; show it as printed.
 };
 
-/** Render a stored final key as a full combo, e.g. "d" → "Ctrl+Shift+D". */
+/** Render a stored final key as a full combo, e.g. "d" → "Ctrl+Shift+D" (or "Cmd+Shift+D" on macOS). */
 export function formatBinding(key: string): string {
   const k = key.toLowerCase();
   const pretty = PRETTY_KEY[k] ?? (k.length === 1 ? k.toUpperCase() : k.charAt(0).toUpperCase() + k.slice(1));
-  return `Ctrl+Shift+${pretty}`;
+  return `${MOD_LABEL}${pretty}`;
 }
 
 const MODIFIER_KEYS = new Set(["control", "shift", "alt", "meta", "altgraph"]);

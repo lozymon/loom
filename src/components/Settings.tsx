@@ -19,7 +19,7 @@ import {
   type CursorStyle,
   type NavItemId,
 } from "../stores/settings";
-import { ACTIONS, formatBinding, isModifierKey, type ActionId } from "../lib/keybindings";
+import { ACTIONS, appChord, formatBinding, isModifierKey, MOD_NAMESPACE, type ActionId } from "../lib/keybindings";
 
 const CURSORS: CursorStyle[] = ["block", "bar", "underline"];
 
@@ -93,7 +93,7 @@ export default function Settings(props: { onClose: () => void }) {
     e.stopPropagation();
     if (e.key === "Escape") { setCapturing(null); return; }
     if (isModifierKey(e.key)) return; // wait for a real key
-    if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return; // must stay in the namespace
+    if (!appChord(e)) return; // must stay in the namespace (Ctrl+Shift, or Cmd+Shift on macOS)
     setKeybinding(action, e.key);
     setCapturing(null);
   };
@@ -446,8 +446,8 @@ export default function Settings(props: { onClose: () => void }) {
           {/* ---- Key bindings ---- */}
           <div class="settings-keys-intro">
             <p class="settings-hint muted">
-              Every app shortcut lives in the Ctrl+Shift namespace so plain keys still reach the
-              terminal. Click a shortcut, then press the new Ctrl+Shift combination (Esc cancels).
+              Every app shortcut lives in the {MOD_NAMESPACE} namespace so plain keys still reach the
+              terminal. Click a shortcut, then press the new {MOD_NAMESPACE} combination (Esc cancels).
             </p>
             <button class="settings-btn" onClick={() => { setCapturing(null); resetKeybindings(); }}>
               Reset shortcuts
