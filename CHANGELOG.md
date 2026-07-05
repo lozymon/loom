@@ -6,6 +6,12 @@ versioning.
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-07-05
+
+Two themes: **fleet coordination** (agents working together over the control bus) and the start of
+**cross-platform support** — macOS joins Linux and Windows as a buildable target. Everything stays
+opacity-safe (ADR-0001), and the Linux build stays byte-identical and no-sudo-buildable.
+
 Fleet coordination. The inter-pane control bus (ADR-0007) grows from fire-and-forget messaging into
 a set of primitives a fleet of agents uses to work *together* — share state, avoid file collisions,
 and call each other — on both the `loom` CLI and the `loom mcp` server, plus a Fleet panel to see it
@@ -35,6 +41,21 @@ all. Everything is agent-pushed and opacity-safe: Loom still never parses pane o
 - **Per-workspace "needs you" count** — each workspace row in the rail shows an amber pill with how
   many of its panes are raising attention (invisible when zero), turning the previous yes/no dot
   into a count so you can see at a glance which group wants you.
+
+### Added — cross-platform
+- **macOS is now a buildable target** — CI lints *and* builds a `.dmg` (arm64) on `macos-latest`,
+  alongside the existing Linux `.deb`/AppImage and Windows NSIS installer. *(The dmg is unsigned for
+  now — macOS Gatekeeper needs a right-click → Open until notarization lands.)*
+- **Cross-platform process floor** — the live cwd, foreground-command, and busy signals that drive
+  the Source Control panel and the agent badge now run on one `sysinfo`-based code path across Linux,
+  macOS, and Windows (previously Linux-only `/proc` reads). macOS gains the full floor; Windows gains
+  live cwd. Still process metadata only — never pane output (ADR-0001).
+- **`Cmd+Shift` shortcuts on macOS** — the app-shortcut namespace (ADR-0005) renders and fires as
+  `Cmd+Shift` on macOS (the native modifier, never sent to the PTY) and `Ctrl+Shift` everywhere else.
+- **Voice dictation on macOS** — `loom-voce` gains a `cpal` capture backend (CoreAudio on macOS,
+  WASAPI on Windows) with in-process resampling to 16kHz, and now ships inside the macOS `.app`.
+  Linux keeps its header-free `parecord`/`arecord` path unchanged. *(Windows helper bundling and
+  real-microphone verification are still pending.)*
 
 ## [1.4.0] — 2026-07-04
 
