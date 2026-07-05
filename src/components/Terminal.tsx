@@ -21,7 +21,7 @@ import { homeDir } from "@tauri-apps/api/path";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 
-import { spawnPty, writePty, resizePty, killPty, cwdPty, busyPty, foregroundPty, retargetPty } from "../lib/ptyClient";
+import { spawnPty, writePty, resizePty, killPty, cwdPty, metaPty, retargetPty } from "../lib/ptyClient";
 import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detach";
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
@@ -387,22 +387,23 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   async function refreshLoc() {
     if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); lastGitCwd = null; return; }
     pollTick++;
-    // Busy state (running a command vs. at the prompt) — a cheap foreground-pgrp read. A
-    // busy→idle transition in a pane you're not watching means a command just finished and the
-    // shell is back at its prompt → raise the sticky attention border (cleared when you look).
-    // It's the foreground-pgrp fact, never pane output (opacity-safe; ADR-0001).
-    try {
-      const wasBusy = act()?.busy === true;
-      const nowBusy = await busyPty(handle);
-      if (wasBusy && nowBusy === false && !looking() && noteAttention(props.paneId)) {
-        void notifyAttention(displayName() || `Pane ${props.paneId}`, props.ws.name);
-      }
-      setBusy(props.paneId, nowBusy);
-    } catch { /* leave last value */ }
+    // One batched read — busy-state + foreground command + cwd — instead of three IPC round-trips
+    // (see metaPty / pty::meta). A whole-call failure leaves every last value untouched, matching
+    // the old per-field catches. All three are foreground-pgrp/proc facts, never pane output
+    // (opacity-safe; ADR-0001).
+    let m;
+    try { m = await metaPty(handle); } catch { return; }
+    // Busy state (running a command vs. at the prompt). A busy→idle transition in a pane you're not
+    // watching means a command just finished and the shell is back at its prompt → raise the sticky
+    // attention border (cleared when you look).
+    const wasBusy = act()?.busy === true;
+    if (wasBusy && m.busy === false && !looking() && noteAttention(props.paneId)) {
+      void notifyAttention(displayName() || `Pane ${props.paneId}`, props.ws.name);
+    }
+    setBusy(props.paneId, m.busy);
     // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.
-    try { setForeground(await foregroundPty(handle)); } catch { /* leave last value */ }
-    let dir: string | null = null;
-    try { dir = await cwdPty(handle); } catch { return; }
+    setForeground(m.foreground);
+    const dir = m.cwd;
     setCwd(dir);
     if (!dir) { setBranch(null); lastGitCwd = null; return; }
     // Only spawn `git` when the cwd changed, or every GIT_REFRESH_EVERY ticks as a slow refresh to

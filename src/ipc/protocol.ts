@@ -66,6 +66,8 @@ export const Cmd = {
   retarget: "pty_retarget",
   busy: "pty_busy",
   foreground: "pty_foreground",
+  /** Batched title-bar poll: busy + foreground + cwd in one round-trip (see PaneMeta). */
+  meta: "pty_meta",
   /** Advisory check that a command's program is installed/on PATH (wizard pre-flight). */
   checkCommand: "pty_check_command",
   /** List installed WSL distros for the new-workspace shell picker (empty off Windows). */
@@ -150,6 +152,18 @@ export type ControlResponse =
  * (on its own or via `pty_kill`). `-1` means the exit status was unavailable.
  */
 export type ExitCode = number;
+
+/**
+ * Batched title-bar metadata returned by {@link Cmd.meta} — the Terminal poll's busy-state,
+ * foreground command, and cwd in one read (mirrors Rust's `PaneMeta`). Each field is
+ * independently `null` when unknown, matching the standalone `pty_busy`/`pty_foreground`/`pty_cwd`
+ * commands it replaces for that poll. Process metadata, never pane output (ADR-0001 carve-out).
+ */
+export interface PaneMeta {
+  busy: boolean | null;
+  foreground: string | null;
+  cwd: string | null;
+}
 
 // ---- Agent-awareness domain model (ADR-0008) -----------------------------------------
 // Agents become first-class entities fed by agent-pushed signals (hooks / the MCP server) and

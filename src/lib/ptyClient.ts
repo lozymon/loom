@@ -6,7 +6,7 @@
 // frontend PaneId. A pane component spawns, then keeps its handle to write/resize/kill.
 
 import { invoke, Channel } from "@tauri-apps/api/core";
-import { Cmd, type PtyHandle, type ExitCode } from "../ipc/protocol";
+import { Cmd, type PtyHandle, type ExitCode, type PaneMeta } from "../ipc/protocol";
 
 export type PtyOutput = (bytes: Uint8Array) => void;
 export type PtyExit = (code: ExitCode) => void;
@@ -115,4 +115,14 @@ export function busyPty(handle: PtyHandle): Promise<boolean | null> {
  */
 export function foregroundPty(handle: PtyHandle): Promise<string | null> {
   return invoke<string | null>(Cmd.foreground, { id: handle });
+}
+
+/**
+ * Batched title-bar poll: busy-state + foreground command + cwd in one IPC round-trip (vs the
+ * three separate {@link busyPty}/{@link foregroundPty}/{@link cwdPty} calls it replaces in the
+ * Terminal poll). One panes-lock and one foreground-pgrp syscall per tick in Rust. Same metadata,
+ * not pane output (ADR-0001 carve-out); each field is independently null when unknown.
+ */
+export function metaPty(handle: PtyHandle): Promise<PaneMeta> {
+  return invoke<PaneMeta>(Cmd.meta, { id: handle });
 }

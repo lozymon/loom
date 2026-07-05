@@ -86,6 +86,14 @@ async fn pty_foreground(mgr: State<'_, PtyManager>, id: u32) -> Result<Option<St
     pty::foreground(&mgr, id)
 }
 
+/// Batched title-bar poll: busy + foreground + cwd in one round-trip (see pty::meta). Replaces the
+/// per-tick `pty_busy`/`pty_foreground`/`pty_cwd` trio for the Terminal poll; those stay for other
+/// callers. `async` for the same off-UI-thread reason as its siblings above.
+#[tauri::command]
+async fn pty_meta(mgr: State<'_, PtyManager>, id: u32) -> Result<pty::PaneMeta, String> {
+    pty::meta(&mgr, id)
+}
+
 /// Advisory: would this command's program resolve in a launched pane? Used by the wizard to
 /// warn before spawning an agent that isn't installed. Never blocks a launch (see pty docs).
 #[tauri::command]
@@ -122,6 +130,7 @@ pub fn run() {
             pty_retarget,
             pty_busy,
             pty_foreground,
+            pty_meta,
             pty_check_command,
             wsl_distros,
             control::pane_cmd_reply,

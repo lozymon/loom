@@ -608,6 +608,25 @@ pub fn busy(_mgr: &PtyManager, _id: u32) -> Result<Option<bool>, String> {
     Ok(None)
 }
 
+/// The argv of `/proc/<pid>/cmdline` as a space-joined string, or `None` when the file is
+/// unreadable (process gone) or empty. cmdline is NUL-separated argv; we drop empties (the
+/// trailing NUL) and join with spaces. Shared by `foreground` and the batched `meta` so the
+/// two can't drift on how a command line is rendered.
+#[cfg(unix)]
+fn read_cmdline(pid: i32) -> Option<String> {
+    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    let cmd: String = String::from_utf8_lossy(&raw)
+        .split('\0')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if cmd.is_empty() {
+        None
+    } else {
+        Some(cmd)
+    }
+}
+
 /// The command line of the pane's foreground process group leader — what's actually running
 /// in the terminal right now (e.g. `claude`), regardless of how it was launched (wizard spec,
 /// the ✦ button, or typed by hand). Lets the frontend badge a pane by its live agent.
@@ -633,27 +652,70 @@ pub fn foreground(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
     if leader == pid as i32 {
         return Ok(None);
     }
-    let raw = match std::fs::read(format!("/proc/{leader}/cmdline")) {
-        Ok(b) => b,
-        Err(_) => return Ok(None),
-    };
-    // cmdline is NUL-separated argv; join with spaces and trim the trailing NUL.
-    let cmd: String = String::from_utf8_lossy(&raw)
-        .split('\0')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-    if cmd.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(cmd))
-    }
+    Ok(read_cmdline(leader))
 }
 
 /// Non-Unix stub: no `/proc`, so foreground detection is unavailable (see M7).
 #[cfg(not(unix))]
 pub fn foreground(_mgr: &PtyManager, _id: u32) -> Result<Option<String>, String> {
     Ok(None)
+}
+
+/// Batched title-bar metadata: busy-state + foreground command + cwd in one call. `Terminal.tsx`
+/// polls this per visible pane every ~2s; folding the three reads into one command cuts IPC
+/// round-trips 3→1 and takes the panes lock — and the foreground-pgrp syscall — once per tick
+/// instead of three times (`busy` and `foreground` each independently queried the pgrp leader).
+/// Each field carries the exact semantics of its standalone counterpart (`busy`/`foreground`/`cwd`)
+/// and is independently `None` when unknown, so a partial read still updates what it can. Same
+/// opacity stance: process metadata, never pane output (ADR-0001 carve-out).
+#[derive(Serialize)]
+pub struct PaneMeta {
+    pub busy: Option<bool>,
+    pub foreground: Option<String>,
+    pub cwd: Option<String>,
+}
+
+#[cfg(unix)]
+pub fn meta(mgr: &PtyManager, id: u32) -> Result<PaneMeta, String> {
+    let none = || PaneMeta {
+        busy: None,
+        foreground: None,
+        cwd: None,
+    };
+    let panes = mgr.panes.lock().unwrap();
+    let Some(pane) = panes.get(&id) else {
+        return Ok(none());
+    };
+    let Some(pid) = pane.pid else {
+        return Ok(none());
+    };
+    // One foreground-pgrp read drives both busy and foreground (they used to query it separately).
+    let leader = pane.master.process_group_leader();
+    let busy = leader.map(|l| l != pid as i32);
+    // At the prompt the shell is its own leader → nothing running; otherwise read the leader's argv.
+    let foreground = match leader {
+        Some(l) if l != pid as i32 => read_cmdline(l),
+        _ => None,
+    };
+    // cwd is the shell's own pid, independent of what's in the foreground.
+    let cwd = std::fs::read_link(format!("/proc/{pid}/cwd"))
+        .ok()
+        .map(|p| p.to_string_lossy().into_owned());
+    Ok(PaneMeta {
+        busy,
+        foreground,
+        cwd,
+    })
+}
+
+/// Non-Unix stub: none of the `/proc`/pgrp reads exist, so every field is unknown (see M7).
+#[cfg(not(unix))]
+pub fn meta(_mgr: &PtyManager, _id: u32) -> Result<PaneMeta, String> {
+    Ok(PaneMeta {
+        busy: None,
+        foreground: None,
+        cwd: None,
+    })
 }
 
 /// Forward keystrokes (UTF-8) from the webview into the pane's PTY.
