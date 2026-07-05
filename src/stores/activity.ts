@@ -149,3 +149,14 @@ export function anyNeedsAttention(ids: Iterable<PaneId>): boolean {
   }
   return false;
 }
+
+/** How many panes in `ids` are raising the strict "needs you" flag. Drives the rail's amber
+ *  count pill — the group tells you *how many* want you, not just that one does. 0 = quiet. */
+export function countNeedsAttention(ids: Iterable<PaneId>): number {
+  let n = 0;
+  for (const id of ids) {
+    const a = activity[id];
+    if (a && a.attention) n++;
+  }
+  return n;
+}

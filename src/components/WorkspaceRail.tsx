@@ -5,7 +5,7 @@
 
 import { createSignal, For, Show } from "solid-js";
 import { appState, paneCount, switchWorkspace, closeWorkspace, renameWorkspace, duplicateWorkspace } from "../stores/workspace";
-import { anyAttention, anyNeedsAttention } from "../stores/activity";
+import { anyAttention, anyNeedsAttention, countNeedsAttention } from "../stores/activity";
 import { settings, setSetting } from "../stores/settings";
 
 const RAIL_MIN = 120;
@@ -68,6 +68,10 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
             const paneIds = () => Object.keys(ws.panes).map(Number);
             const hasActivity = () => isHidden() && anyAttention(paneIds());
             const needsAttention = () => isHidden() && anyNeedsAttention(paneIds());
+            // How many panes in this group are asking for you — drives the amber count pill.
+            // Counted for active *and* hidden workspaces: on the active one it drains as you
+            // focus each flagged pane (seePane clears attention). 0 → the pill isn't drawn.
+            const needsCount = () => countNeedsAttention(paneIds());
             const dotState = () =>
               needsAttention() ? "needs" : hasActivity() ? "working" : "idle";
             return (
@@ -105,6 +109,14 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
                     }}
                     onBlur={(e) => { renameWorkspace(ws.id, e.currentTarget.value); setEditingId(null); }}
                   />
+                </Show>
+                <Show when={needsCount() > 0}>
+                  <span
+                    class="rail-attn-pill"
+                    title={`${needsCount()} pane${needsCount() === 1 ? "" : "s"} need${needsCount() === 1 ? "s" : ""} your attention`}
+                  >
+                    {needsCount()}
+                  </span>
                 </Show>
                 <span class="rail-badge">{paneCount(ws)}</span>
                 <span class="wsact">

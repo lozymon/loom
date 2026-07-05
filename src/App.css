@@ -589,6 +589,19 @@ body,
 .rail.collapsed .rail-initial {
   display: inline-flex;
 }
+/* Collapsed: the count rides the avatar's top-right corner as a notification badge. */
+.rail.collapsed .rail-item {
+  position: relative;
+}
+.rail.collapsed .rail-attn-pill {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  min-width: 14px;
+  padding: 0 4px;
+  line-height: 14px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
 .rail-initial {
   display: none;
   flex: 0 0 auto;
@@ -692,6 +705,20 @@ body,
   border: 1px solid var(--accent);
   border-radius: 7px;
   padding: 2px 6px;
+}
+
+/* "Needs you" count — amber pill before the terminal-count badge, drawn only when >0. Quiet at
+   rest: the row shows nothing extra until a pane in the group raises attention. */
+.rail-attn-pill {
+  flex: 0 0 auto;
+  min-width: 15px;
+  padding: 0 5px;
+  border-radius: 8px;
+  font: 600 10px var(--font-mono);
+  line-height: 15px;
+  text-align: center;
+  color: var(--bg);
+  background: var(--state-needs);
 }
 
 /* Live terminal count — mono, accent on the active row. */
