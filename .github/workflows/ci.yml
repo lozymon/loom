@@ -11,6 +11,8 @@ name: CI
 #   • rust-lint     — rustfmt + clippy + unit tests (the `loom` crate in src-tauri)
 #   • voce          — rustfmt + clippy + unit tests for the loom-voce crate (separate crate, needs
 #                     cmake for its whisper.cpp build; kept out of rust-lint so that stays webkit-only)
+#   • voce-macos    — clippy on macos-latest; the ONLY job that compiles loom-voce's cpal audio
+#                     backend (the ubuntu voce job compiles the Linux parecord/arecord arm instead)
 #   • windows-check — cross-compile `cargo check` for the Windows target from Linux (the keystone:
 #                     catches `#[cfg(windows)]` code that doesn't compile, no Windows runner needed)
 #   • macos-lint    — fmt + clippy + unit tests on a real macos-latest runner (the ONLY macOS
@@ -147,6 +149,32 @@ jobs:
       - name: Unit tests
         working-directory: loom-voce
         run: cargo test
+
+  voce-macos:
+    name: loom-voce macOS (clippy — compiles the cpal audio backend)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: loom-voce
+          shared-key: voce-macos
+
+      # The ONLY job that compiles audio.rs's cpal backend (`cfg(not(target_os = "linux"))`) — the
+      # ubuntu `voce` job compiles the parecord/arecord Linux arm instead, so without this the cpal
+      # path could rot undetected. macOS runners ship cmake (whisper.cpp build) + clang/libclang
+      # (bindgen), so no extra install step is needed.
+      - name: Clippy (compiles the cpal backend)
+        working-directory: loom-voce
+        run: cargo clippy --all-targets -- -D warnings
 
   macos-lint:
     name: macOS lint + test (fmt + clippy + unit)
