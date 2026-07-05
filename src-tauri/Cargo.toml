@@ -37,6 +37,11 @@ base64 = "0.22"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-notification = "2"
+# Cross-platform process introspection (live cwd + argv for the pane title bar / Source Control
+# scoping). Replaces the old Linux-only `/proc` reads with one path that resolves on Linux, macOS,
+# and Windows. `default-features = false` + `system` keeps it to just the process/system component
+# (no disk/network/components pulled in). Only queried on an explicit poll, never on the flood path.
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 # Windows-only: the inter-pane control bus (M7.5) uses named pipes via raw Win32 FFI in
 # `control_transport.rs`. Target-gated, so the Linux build pulls nothing new and stays
