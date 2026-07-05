@@ -45,9 +45,10 @@ signing. Everything else collapses to one path.
   first real run** (PR #23, 2m38s) — the macOS arm is now actually exercised, not just assumed.
 - [x] **P0.2 — Added the gated `macos-build` job** (dmg bundle) on release tags / `workflow_dispatch`,
   mirroring `windows-build`; uploads the `loom-macos-dmg` artifact and wired into the `release` job's
-  `needs` + asset download. **Notes:** the dmg is **unsigned** for now (Gatekeeper warns until
-  notarization — Phase 5); `loom-voce` is **not** bundled (voice stays Linux-only until cpal, Phase
-  2), matching the Windows build; single-arch **arm64** (the macos-latest runner).
+  `needs` + asset download. **Verified: the dmg built green** on a real `macos-latest` runner
+  (dispatch run) — macOS now produces an installable app, not just a lint pass. **Notes:** the dmg is
+  **unsigned** for now (Gatekeeper warns until notarization — Phase 5); `loom-voce` is **not** bundled
+  (voice stays Linux-only until cpal, Phase 2), matching the Windows build; single-arch **arm64**.
 - [x] **P0.3 — Added `tauri.macos.conf.json` overlay** (`"targets": ["dmg"]` + `minimumSystemVersion`);
   the base config already carried `identifier` (`com.loom.app`), `category`, and `icon.icns`, so no
   base change was needed. Linux `["deb","appimage"]` untouched (same pattern as the Windows overlay).
