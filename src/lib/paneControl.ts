@@ -17,7 +17,10 @@ import {
   revealPaneByName,
   spawnPane,
   workspaceByName,
+  workspaceByPaneName,
+  type WorkspaceUI,
 } from "../stores/workspace";
+import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
 import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
 import {
   sessionStart,
@@ -125,6 +128,41 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       return { ok: true, data: { name: req.target, text, cleared: text === "" } };
     }
 
+    // ---- Shared blackboard (§2b) — per-workspace key/value board. Scope resolves to the caller
+    // pane's workspace (or an explicit --workspace); `action` is echoed so the CLI knows how to
+    // print. Opacity-safe: values are agent-pushed, never read from pane output. ----
+    case "note.set": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      const key = (req.key ?? "").trim();
+      if (!key) return { ok: false, error: "note set needs a key" };
+      noteSet(scope.ws.id, key, req.value ?? "", req.pane ?? "?");
+      return { ok: true, data: { action: "set", key, workspace: scope.ws.name } };
+    }
+
+    case "note.get": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      const key = (req.key ?? "").trim();
+      const e = noteGet(scope.ws.id, key);
+      if (!e) return { ok: false, error: `no note "${key}" on the "${scope.ws.name}" board` };
+      return { ok: true, data: { action: "get", key, value: e.value, by: e.by, at: e.at } };
+    }
+
+    case "note.list": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      return { ok: true, data: { action: "list", workspace: scope.ws.name, entries: noteList(scope.ws.id) } };
+    }
+
+    case "note.del": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      const key = (req.key ?? "").trim();
+      if (!noteDel(scope.ws.id, key)) return { ok: false, error: `no note "${key}" to delete` };
+      return { ok: true, data: { action: "del", key, workspace: scope.ws.name } };
+    }
+
     // ---- Agent lifecycle (ADR-0008) — feed the entity store, and bridge to the coarse floor
     // (attention/status) so existing UI keeps reflecting state until the fleet board lands. ----
     case "session.start": {
@@ -188,6 +226,22 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
     default:
       return { ok: false, error: `unknown op "${(req as { op?: string }).op}"` };
   }
+}
+
+/** Resolve which workspace's blackboard a `loom note` op targets (§2b): an explicit `workspace`
+ *  name wins, else the caller pane's workspace, else the active one. Returns an error response the
+ *  case can hand straight back. */
+function noteScope(req: { pane?: string; workspace?: string }): { ws: WorkspaceUI } | { ok: false; error: string } {
+  if (req.workspace) {
+    const ws = workspaceByName(req.workspace);
+    return ws ? { ws } : { ok: false, error: `no workspace named "${req.workspace}"` };
+  }
+  if (req.pane) {
+    const ws = workspaceByPaneName(req.pane);
+    if (ws) return { ws };
+  }
+  const ws = activeWorkspace();
+  return ws ? { ws } : { ok: false, error: "no active workspace" };
 }
 
 /** The Agent *kind* for a pane: the op's explicit hint (the hook knows it's Claude), else detected

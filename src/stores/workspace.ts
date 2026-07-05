@@ -13,6 +13,7 @@ import { allocName, buildBalancedTree } from "../lib/grid";
 import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
 import { countLive } from "../lib/paneRegistry";
+import { forgetBoard } from "./blackboard";
 import { settings } from "./settings";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
@@ -377,6 +378,24 @@ export function workspaceByName(name: string): WorkspaceUI | undefined {
   return app.workspaces.find((w) => w.name === name);
 }
 
+/** The workspace containing a pane with this display name — scopes the blackboard to the caller's
+ *  board (`loom note`, §2b). Prefers the active workspace, then a unique match; undefined if none
+ *  or ambiguous across workspaces. */
+export function workspaceByPaneName(name: string): WorkspaceUI | undefined {
+  const active = activeWorkspace();
+  if (active) for (const id of leafIds(active.tree)) if (active.panes[id]?.title === name) return active;
+  let hit: WorkspaceUI | undefined;
+  for (const w of app.workspaces) {
+    for (const id of leafIds(w.tree)) {
+      if (w.panes[id]?.title === name) {
+        if (hit && hit.id !== w.id) return undefined; // ambiguous across workspaces
+        hit = w;
+      }
+    }
+  }
+  return hit;
+}
+
 /** Switch to a pane's workspace and focus it (used by `loom focus` and the command palette). */
 export function revealPane(paneId: PaneId) {
   const i = wsIdxByPane(paneId);
@@ -525,6 +544,7 @@ export function closeWorkspace(id: string) {
   const closing = app.workspaces[i];
   recordClosed({ kind: "workspace", title: closing.name, cwd: closing.cwd, tree: snapshotValue(closing.tree), panes: snapshotValue(closing.panes) });
   const remaining = app.workspaces.filter((w) => w.id !== id);
+  forgetBoard(id); // drop the closed workspace's blackboard (§2b) — it's scoped to this ws
   batch(() => {
     setApp("workspaces", remaining);
     if (app.activeId === id) setApp("activeId", remaining[Math.min(i, remaining.length - 1)].id);

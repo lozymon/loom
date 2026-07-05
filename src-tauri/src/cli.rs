@@ -47,6 +47,7 @@ pub fn is_command(cmd: &str) -> bool {
             | "focus"
             | "attention"
             | "status"
+            | "note"
             | "hooks"
             | "hook"
     )
@@ -297,8 +298,81 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(json!({ "op": "status", "target": target, "text": text }))
         }
 
+        "note" => {
+            // loom note set <key> <value...>   — post to the workspace blackboard (§2b)
+            // loom note get <key>              — read one entry
+            // loom note list                   — dump the whole board
+            // loom note del <key>              — remove one entry
+            // Scoped to the caller pane's workspace ($LOOM_PANE), or --workspace <name>.
+            if args.len() < 2 {
+                return Err("note needs a subcommand: set | get | list | del".to_string());
+            }
+            let action = args[1].clone();
+            // Pull an optional --workspace/-w out of the tail; a leading "--" ends flag parsing so
+            // a value that starts with a dash still works (loom note set k -- --flagish).
+            let mut workspace: Option<String> = None;
+            let mut rest: Vec<String> = Vec::new();
+            let mut i = 2;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--workspace" | "-w" => {
+                        i += 1;
+                        workspace = Some(
+                            args.get(i)
+                                .ok_or("--workspace needs a name")?
+                                .clone(),
+                        );
+                    }
+                    "--" => {
+                        rest.extend_from_slice(&args[i + 1..]);
+                        break;
+                    }
+                    _ => rest.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            let mut obj = match action.as_str() {
+                "set" => {
+                    if rest.is_empty() {
+                        return Err("note set needs a key: loom note set <key> <value>".to_string());
+                    }
+                    let key = rest.remove(0);
+                    let value = rest.join(" ");
+                    json!({ "op": "note.set", "key": key, "value": value })
+                }
+                "get" => {
+                    let key = rest
+                        .into_iter()
+                        .next()
+                        .ok_or("note get needs a key: loom note get <key>")?;
+                    json!({ "op": "note.get", "key": key })
+                }
+                "list" | "ls" => json!({ "op": "note.list" }),
+                "del" | "rm" => {
+                    let key = rest
+                        .into_iter()
+                        .next()
+                        .ok_or("note del needs a key: loom note del <key>")?;
+                    json!({ "op": "note.del", "key": key })
+                }
+                other => {
+                    return Err(format!(
+                        "unknown note subcommand '{other}' (set | get | list | del)"
+                    ))
+                }
+            };
+            // The caller pane (from $LOOM_PANE) scopes to its workspace and is recorded as writer.
+            if let Ok(pane) = env::var("LOOM_PANE") {
+                obj["pane"] = json!(pane);
+            }
+            if let Some(w) = workspace {
+                obj["workspace"] = json!(w);
+            }
+            Ok(obj)
+        }
+
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note)"
         )),
     }
 }
@@ -391,7 +465,51 @@ fn handle_response(op: &str, resp: &Value) {
                 println!("status of '{name}' → {text}");
             }
         }
+        "note" => {
+            let action = data
+                .and_then(|d| d.get("action"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let key = || {
+                data.and_then(|d| d.get("key"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("?")
+            };
+            match action {
+                "set" => println!("noted '{}'", key()),
+                "del" => println!("deleted '{}'", key()),
+                "get" => {
+                    let value = data
+                        .and_then(|d| d.get("value"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    println!("{value}");
+                }
+                "list" => print_notes(data),
+                _ => {}
+            }
+        }
         _ => {}
+    }
+}
+
+/// Pretty-print a `note list` board: `key   value  (by)`, one per line, aligned.
+fn print_notes(data: Option<&Value>) {
+    let Some(arr) = data
+        .and_then(|d| d.get("entries"))
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    if arr.is_empty() {
+        println!("(board empty)");
+        return;
+    }
+    for e in arr {
+        let key = e.get("key").and_then(Value::as_str).unwrap_or("?");
+        let value = e.get("value").and_then(Value::as_str).unwrap_or("");
+        let by = e.get("by").and_then(Value::as_str).unwrap_or("");
+        println!("{key:<20} {value}  ({by})");
     }
 }
 
@@ -660,6 +778,7 @@ fn usage() {
         \x20 loom focus <pane>\n\
         \x20 loom attention [pane] [--clear]\n\
         \x20 loom status [pane] <text...> | [pane] --clear\n\
+        \x20 loom note set <key> <value...> | get <key> | list | del <key>  [--workspace W]\n\
         \x20 loom hooks [--print] | --install [--user|--project]"
     );
 }

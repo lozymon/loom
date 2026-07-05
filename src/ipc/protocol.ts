@@ -121,6 +121,16 @@ export type ControlRequest =
   // overview tile. Same opacity-safe category as `attention`: the agent *pushes* the label; we
   // never read it from output. Turns overview mode into a fleet dashboard (building/blocked/idle).
   | { op: "status"; target: string; text?: string }
+  // ---- Shared blackboard (docs/AGENTIC-ENHANCEMENTS.md §2b) ----
+  // A workspace-scoped key/value board agents post plan state to and poll ("plan.api → Cleo",
+  // discovered gotchas, who-owns-what). Pull-based coordination, opacity-safe: the value is agent-
+  // pushed, never read from output. Scoped to the caller pane's workspace (`pane`), or an explicit
+  // `workspace`; `pane` is also recorded as the writer on set. Ephemeral (runtime coordination
+  // state, not persisted — same category as the activity store).
+  | { op: "note.set"; key: string; value: string; pane?: string; workspace?: string }
+  | { op: "note.get"; key: string; pane?: string; workspace?: string }
+  | { op: "note.list"; pane?: string; workspace?: string }
+  | { op: "note.del"; key: string; pane?: string; workspace?: string }
   // ---- Agent lifecycle (ADR-0008) ----
   // The rich form of attention/status: an agent reports its own Session/Task lifecycle, pushed
   // (via `loom hooks` / the MCP server), never parsed from output. `target` is the calling pane.
