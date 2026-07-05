@@ -322,7 +322,7 @@ export default function Settings(props: { onClose: () => void }) {
               </label>
             </div>
             <p class="settings-hint muted">
-              The <b>✎</b> button in each pane's controls (or <code>Ctrl+Shift+I</code>, rebindable
+              The <b>✎</b> button in each pane's controls (or <code>{formatBinding(settings.keybindings["open-editor"])}</code>, rebindable
               under Key bindings) runs this on the pane's working folder. The folder is appended as
               the last argument, or substituted for <code>{"{dir}"}</code> if you include it (e.g.
               <code>code -n {"{dir}"}</code>). Leave empty to hide the button.

@@ -802,9 +802,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
               innerHTML={I.editor}
             />
           </Show>
-          <button title="Split right (Ctrl+Shift+D)" onClick={() => splitPane(props.paneId, "row")} innerHTML={I.splitRight} />
+          <button title={`Split right (${formatBinding(settings.keybindings["split-right"])})`} onClick={() => splitPane(props.paneId, "row")} innerHTML={I.splitRight} />
           <button
-            title="Zoom (Ctrl+Shift+Enter)"
+            title={`Zoom (${formatBinding(settings.keybindings["toggle-zoom"])})`}
             onClick={() => toggleZoom(props.paneId)}
             innerHTML={props.ws.zoomed === props.paneId ? I.restore : I.zoom}
           />
@@ -841,7 +841,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
             </Show>
           </div>
         </Show>
-        <button class="pane-ctl-close" title="Close (Ctrl+Shift+W)" onClick={() => closePane(props.paneId)} innerHTML={I.close} />
+        <button class="pane-ctl-close" title={`Close (${formatBinding(settings.keybindings["close-pane"])})`} onClick={() => closePane(props.paneId)} innerHTML={I.close} />
       </div>
 
       <div class="pane-term-wrap">

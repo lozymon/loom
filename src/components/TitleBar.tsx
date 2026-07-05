@@ -9,6 +9,7 @@
 // need a button here.) Each action is icon-only; the tooltip (title) carries the label.
 
 import { Show } from 'solid-js';
+import { MOD_NAMESPACE } from '../lib/keybindings';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { appState, toggleOverview, setOverview } from '../stores/workspace';
 import { settings } from '../stores/settings';
@@ -75,7 +76,7 @@ export default function TitleBar(props: {
           <button
             class="tb-icon"
             classList={{ on: appState.overview }}
-            title="Overview / fleet glance (Ctrl+Shift+O)"
+            title={`Overview / fleet glance (${MOD_NAMESPACE}+O)`}
             onClick={() => toggleOverview()}
             innerHTML={ICONS.overview}
           />
@@ -84,7 +85,7 @@ export default function TitleBar(props: {
           <button
             class="tb-icon"
             classList={{ on: props.paletteOn() }}
-            title="Command palette (Ctrl+Shift+P)"
+            title={`Command palette (${MOD_NAMESPACE}+P)`}
             onClick={openPalette}
             innerHTML={ICONS.palette}
           />
@@ -93,7 +94,7 @@ export default function TitleBar(props: {
           <button
             class="tb-icon"
             classList={{ on: props.gitOn() }}
-            title="Source control (Ctrl+Shift+G)"
+            title={`Source control (${MOD_NAMESPACE}+G)`}
             onClick={() => props.onGit()}
             innerHTML={ICONS.git}
           />
@@ -102,7 +103,7 @@ export default function TitleBar(props: {
           <button
             class="tb-icon"
             classList={{ on: props.docsOn() }}
-            title="Docs reader — mark a passage → send to a pane (Ctrl+Shift+R)"
+            title={`Docs reader — mark a passage → send to a pane (${MOD_NAMESPACE}+R)`}
             onClick={() => props.onDocs()}
             innerHTML={ICONS.docs}
           />
@@ -111,7 +112,7 @@ export default function TitleBar(props: {
           <button
             class="tb-icon"
             classList={{ on: props.fleetOn() }}
-            title="Fleet panel — the workspace's blackboard & file claims (Ctrl+Shift+K)"
+            title={`Fleet panel — the workspace's blackboard & file claims (${MOD_NAMESPACE}+K)`}
             onClick={() => props.onFleet()}
             innerHTML={ICONS.fleet}
           />
@@ -120,7 +121,7 @@ export default function TitleBar(props: {
           <button
             class="tb-icon"
             classList={{ on: props.historyOn() }}
-            title="Search agent history — past sessions & tasks (Ctrl+Shift+H)"
+            title={`Search agent history — past sessions & tasks (${MOD_NAMESPACE}+H)`}
             onClick={() => props.onHistory()}
             innerHTML={ICONS.history}
           />
@@ -129,7 +130,7 @@ export default function TitleBar(props: {
           <button
             class="tb-icon"
             classList={{ on: props.reopenOn() }}
-            title="Reopen a closed pane/workspace, or resume any Claude session (Ctrl+Shift+Y)"
+            title={`Reopen a closed pane/workspace, or resume any Claude session (${MOD_NAMESPACE}+Y)`}
             onClick={() => props.onReopen()}
             innerHTML={ICONS.reopen}
           />
@@ -143,7 +144,7 @@ export default function TitleBar(props: {
         />
         <button
           class="tb-icon"
-          title="Keyboard shortcuts (Ctrl+Shift+?)"
+          title={`Keyboard shortcuts (${MOD_NAMESPACE}+?)`}
           onClick={() => props.onShortcuts()}
           innerHTML={ICONS.shortcuts}
         />
