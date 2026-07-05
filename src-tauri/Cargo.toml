@@ -34,7 +34,7 @@ base64 = "0.22"
 # Durable Session/Task history (ADR-0009). `bundled` compiles SQLite from source → no system
 # libsqlite dependency, so packaging stays self-contained. Only structured lifecycle rows land
 # here (never PTY bytes), so it never touches the flood path.
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-notification = "2"
 
