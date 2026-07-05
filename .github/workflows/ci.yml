@@ -19,10 +19,11 @@ name: CI
 #   Release tags (`v*`) and manual `workflow_dispatch` only (heavyweight — produce installers):
 #   • build         — full release build + .deb and .AppImage bundles (uploaded as artifacts)
 #   • windows-build — full NSIS bundle on a real windows-latest runner (the priciest runner)
+#   • macos-build   — full .dmg bundle on a macos-latest runner (unsigned until notarization)
 #
 #   Release tags (`v*`) only:
 #   • release       — create the GitHub Release and attach the .deb + .AppImage + Windows installer
-#                     as permanent, public assets (workflow artifacts expire and don't show on Releases)
+#                     + macOS dmg as permanent, public assets (workflow artifacts expire off Releases)
 #
 # The full bundles are gated because they're expensive and don't add merge-gating signal
 # the lint/check tier doesn't already give: rust-lint compiles the whole tree (clippy
@@ -373,15 +374,57 @@ jobs:
             src-tauri/target/release/loom.exe
           if-no-files-found: error
 
+  macos-build:
+    name: macOS build (dmg bundle)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    # Heavyweight: only on release tags or manual dispatch (see header).
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: macos-build
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Full release build + .dmg (picks up tauri.macos.conf.json automatically). macOS uses the
+      # system WKWebView — no apt/system deps. The loom-voce helper is NOT bundled: voice capture is
+      # Linux-only until the cpal backend lands (Phase 2), same as the Windows build. The dmg is
+      # UNSIGNED for now — Gatekeeper warns until notarization (Phase 5). Artifact is downloadable
+      # from the Actions run (arm64, matching the macos-latest runner).
+      - name: Build (dmg bundle)
+        run: npm run tauri build -- --bundles dmg
+
+      - name: Upload macOS dmg
+        uses: actions/upload-artifact@v7
+        with:
+          name: loom-macos-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-22.04
     timeout-minutes: 10
-    # Only on a real version tag (v*), and only after both bundles built. The job
-    # pulls the .deb + AppImage and the Windows installer that build/windows-build uploaded as
-    # workflow artifacts and attaches them to the Release as permanent, public assets
-    # (workflow artifacts otherwise expire and aren't visible on the Releases page).
-    needs: [build, windows-build]
+    # Only on a real version tag (v*), and only after all three platform bundles built. The job
+    # pulls the .deb + AppImage, the Windows installer, and the macOS dmg that build/windows-build/
+    # macos-build uploaded as workflow artifacts and attaches them to the Release as permanent,
+    # public assets (workflow artifacts otherwise expire and aren't visible on the Releases page).
+    needs: [build, windows-build, macos-build]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write # create the release + upload assets (overrides the read-only default)
@@ -402,6 +445,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: loom-windows-nsis
+          path: dist
+
+      - name: Download macOS dmg
+        uses: actions/download-artifact@v8
+        with:
+          name: loom-macos-dmg
           path: dist
 
       - name: Publish release
