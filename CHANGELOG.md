@@ -4,6 +4,38 @@ All notable changes to Loom are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows semantic
 versioning.
 
+## [Unreleased]
+
+Fleet coordination. The inter-pane control bus (ADR-0007) grows from fire-and-forget messaging into
+a set of primitives a fleet of agents uses to work *together* — share state, avoid file collisions,
+and call each other — on both the `loom` CLI and the `loom mcp` server, plus a Fleet panel to see it
+all. Everything is agent-pushed and opacity-safe: Loom still never parses pane output (ADR-0001).
+
+### Added
+- **Shared blackboard** (`loom note set/get/list/del`; `board_*` MCP tools) — a per-workspace
+  key/value board agents post plan state to and poll ("who owns what", a discovered gotcha), so a
+  fleet can coordinate without clobbering each other's work. Scoped to the caller pane's workspace;
+  each entry records its writer.
+- **File claims** (`loom claim` / `release` / `claims`; `claim_file` / `release_file` /
+  `list_claims` MCP tools) — cooperative advisory locks so two agents don't edit the same file.
+  `claim` is an atomic test-and-set that exits non-zero when the path is already held, so
+  `loom claim <path> || work_on_something_else` scripts cleanly. A pane's claims **auto-release**
+  when its process exits or the pane is closed, so a crashed agent can't leave a stale lock.
+- **Ask/reply RPC** (`loom ask <pane> <question>` / `loom reply <id> <answer>`; `ask_pane` /
+  `reply_ask` MCP tools) — request/response over the bus: an agent asks another pane a question and
+  **blocks until that pane's agent answers**, turning a pane into a callable worker
+  (`answer=$(loom ask Cleo "which auth lib?")`). Correlation ids are carried in the prompt Loom
+  types into the callee; a long-poll mailbox keeps it within the bus's parked-connection cap.
+- **MCP parity for coordination** — the blackboard, claims, and ask/reply are all first-class
+  `loom mcp` tools (nine new), so model-native agents reach them as tools instead of shelling out.
+- **Fleet panel** (**Ctrl+Shift+K**, the title-bar ◈ button, or the command palette) — a docked
+  side panel showing the active workspace's blackboard and file claims with live counts. Purely
+  reactive: a note or claim from any pane updates it live, and it re-scopes when you switch
+  workspaces.
+- **Per-workspace "needs you" count** — each workspace row in the rail shows an amber pill with how
+  many of its panes are raising attention (invisible when zero), turning the previous yes/no dot
+  into a count so you can see at a glance which group wants you.
+
 ## [1.4.0] — 2026-07-04
 
 Work landed on top of the 1.3.0 release: a packaging fix so voice dictation works on the AppImage,
