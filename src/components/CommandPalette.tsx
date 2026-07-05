@@ -49,6 +49,7 @@ export default function CommandPalette(props: {
   onSettings: () => void;
   onGit: () => void;
   onDocs: () => void;
+  onFleet: () => void;
   onShortcuts: () => void;
   onLogs: () => void;
   onHistory: () => void;
@@ -69,6 +70,7 @@ export default function CommandPalette(props: {
       { label: "Open settings", icon: "⚙", kind: "action", hint: "Preferences", run: props.onSettings },
       { label: "Open source control", icon: "⎇", kind: "action", key: kb("source-control"), run: props.onGit },
       { label: "Open docs reader", icon: "▦", kind: "action", key: kb("docs"), run: props.onDocs },
+      { label: "Open fleet panel (blackboard & claims)", icon: "◈", kind: "action", key: kb("fleet"), run: props.onFleet },
       { label: "Keyboard shortcuts cheat-sheet", icon: "⌨", kind: "action", key: kb("shortcuts"), run: props.onShortcuts },
       { label: "View session logs", icon: "≣", kind: "action", hint: "Recorded pane output", run: props.onLogs },
       { label: "Search agent history", icon: "⏱", kind: "action", key: kb("history"), run: props.onHistory },

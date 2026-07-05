@@ -17,6 +17,7 @@ import FleetApprovals from "./components/FleetApprovals";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
+import FleetPanel from "./components/FleetPanel";
 import ShortcutsOverlay from "./components/ShortcutsOverlay";
 import SessionLogViewer from "./components/SessionLogViewer";
 import HistorySearch from "./components/HistorySearch";
@@ -49,6 +50,7 @@ export default function App() {
   // open in that one. See showPanel/togglePanel below and stores/workspace.ts.
   const gitOpen = () => activePanel() === "git";
   const docsOpen = () => activePanel() === "docs";
+  const fleetOpen = () => activePanel() === "fleet";
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const [logsOpen, setLogsOpen] = createSignal(false);
   const [logPreselect, setLogPreselect] = createSignal<string | null>(null);
@@ -107,8 +109,7 @@ export default function App() {
     setActivePanel(which); // per-workspace: only the active workspace's slot changes
   };
   const togglePanel = (which: DockedPanelKind) => {
-    const isOpen = which === "git" ? gitOpen() : docsOpen();
-    showPanel(isOpen ? null : which);
+    showPanel(activePanel() === which ? null : which);
   };
 
   // Ctrl+Shift+G from a focused pane toggles the Source Control (git diff) panel.
@@ -120,6 +121,11 @@ export default function App() {
   const openDocs = () => togglePanel("docs");
   window.addEventListener("loom:docs", openDocs);
   onCleanup(() => window.removeEventListener("loom:docs", openDocs));
+
+  // Toggles the Fleet panel — the active workspace's coordination state (blackboard + file claims).
+  const openFleet = () => togglePanel("fleet");
+  window.addEventListener("loom:fleet", openFleet);
+  onCleanup(() => window.removeEventListener("loom:fleet", openFleet));
 
   // Ctrl+Shift+? opens the keyboard cheat-sheet (toggle so a second press closes it).
   const openShortcuts = () => setShortcutsOpen((v) => !v);
@@ -171,6 +177,7 @@ export default function App() {
     "settings": () => openSettings(),
     "source-control": () => togglePanel("git"),
     "docs": () => togglePanel("docs"),
+    "fleet": () => togglePanel("fleet"),
     "command-palette": () => setPaletteOpen((v) => !v),
     "overview": () => toggleOverview(),
     "shortcuts": () => setShortcutsOpen((v) => !v),
@@ -250,11 +257,13 @@ export default function App() {
         onSettings={() => openSettings()}
         onGit={() => togglePanel("git")}
         onDocs={() => togglePanel("docs")}
+        onFleet={() => togglePanel("fleet")}
         onShortcuts={() => setShortcutsOpen(true)}
         onHistory={() => setHistoryOpen((v) => !v)}
         onReopen={() => setReopenOpen((v) => !v)}
         gitOn={gitOpen}
         docsOn={docsOpen}
+        fleetOn={fleetOpen}
         settingsOn={settingsOpen}
         paletteOn={paletteOpen}
         historyOn={historyOpen}
@@ -287,6 +296,9 @@ export default function App() {
       <Show when={docsOpen() && activeWorkspace()} keyed>
         {(_ws) => <DocsPanel onClose={() => showPanel(null)} />}
       </Show>
+      <Show when={fleetOpen() && activeWorkspace()} keyed>
+        {(_ws) => <FleetPanel onClose={() => showPanel(null)} />}
+      </Show>
       </div>
       <Show when={wizardOpen()}>
         <NewWorkspaceWizard onClose={() => setWizardOpen(false)} />
@@ -313,6 +325,7 @@ export default function App() {
           onSettings={() => openSettings()}
           onGit={() => showPanel("git")}
           onDocs={() => showPanel("docs")}
+          onFleet={() => showPanel("fleet")}
           onShortcuts={() => setShortcutsOpen(true)}
           onLogs={() => { setLogPreselect(null); setLogsOpen(true); }}
           onHistory={() => setHistoryOpen(true)}

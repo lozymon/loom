@@ -132,6 +132,15 @@ pure, unit-tested `build_request(name, args, pane)` in `mcp.rs` (the caller pane
 loop as the CLI and returns the answer as a structured tool result. Verified end-to-end over
 JSON-RPC (tools/list, cross-pane board read, claim enforcement, blocking `ask_pane` → `reply_ask`).
 
+### 2e. Fleet panel — make the coordination state visible ✅ shipped
+The blackboard and file claims are cross-pane state a fleet builds up invisibly; you could only see
+it by running `loom note list` / `loom claims` in a pane. **✅ Built as:** `FleetPanel.tsx`, a docked
+right-side panel (Ctrl+Shift+K, the title-bar ◈ button, or the command palette) that shows the
+active workspace's **Blackboard** (key → value + writer) and **File claims** (path → holder) with
+live counts. Purely reactive off the `blackboard`/`claims` stores — a note or claim from any pane
+updates it live, no polling — and re-scopes when you switch workspaces. Mirrors the Source Control /
+Docs panel shell. *Follow-up:* open asks aren't shown yet (the ask registry isn't a reactive store).
+
 ## 3. Repeatability — capture a working setup and replay it
 
 ### 3a. Workspace templates with roles 🟡

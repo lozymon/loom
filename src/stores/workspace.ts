@@ -18,7 +18,7 @@ import { forgetClaims, releaseClaimsBy } from "./claims";
 import { settings } from "./settings";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
-export type DockedPanelKind = "git" | "docs";
+export type DockedPanelKind = "git" | "docs" | "fleet";
 
 /**
  * Per-workspace state for the docked side panel. Lets each workspace carry its own Source
