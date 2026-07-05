@@ -392,6 +392,12 @@ jobs:
       - name: Build loom-voce helper
         env:
           LIBCLANG_PATH: C:\Program Files\LLVM\bin
+          # Statically link the MSVC runtime so loom-voce.exe has no MSVCP140.dll / VCRUNTIME140.dll
+          # dependency on a clean machine. Set here (not in a .cargo/config.toml) because cargo
+          # discovers config from the CWD, and build:voce runs from the repo root via --manifest-path,
+          # so a loom-voce/.cargo/config.toml is never read. RUSTFLAGS also propagates crt-static to
+          # whisper.cpp's cmake build (CARGO_CFG_TARGET_FEATURE → CMAKE_MSVC_RUNTIME_LIBRARY).
+          RUSTFLAGS: -C target-feature=+crt-static
         run: npm run build:voce
 
       - name: Stage loom-voce as a tauri sidecar
