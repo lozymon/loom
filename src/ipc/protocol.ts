@@ -131,6 +131,14 @@ export type ControlRequest =
   | { op: "note.get"; key: string; pane?: string; workspace?: string }
   | { op: "note.list"; pane?: string; workspace?: string }
   | { op: "note.del"; key: string; pane?: string; workspace?: string }
+  // ---- File claims (docs/AGENTIC-ENHANCEMENTS.md §2c) ----
+  // Cooperative, advisory locks so a fleet doesn't stomp the same file. A sibling of the blackboard:
+  // per-workspace, agent-pushed, opacity-safe. `claim` is an atomic test-and-set — it fails if
+  // another pane already holds `path`; `pane` (the caller, from $LOOM_PANE) is the holder identity,
+  // so claim/release require it. `release` only drops your own claim unless `force`. `claims` lists.
+  | { op: "claim"; path: string; pane?: string; workspace?: string }
+  | { op: "release"; path: string; pane?: string; workspace?: string; force?: boolean }
+  | { op: "claims"; pane?: string; workspace?: string }
   // ---- Agent lifecycle (ADR-0008) ----
   // The rich form of attention/status: an agent reports its own Session/Task lifecycle, pushed
   // (via `loom hooks` / the MCP server), never parsed from output. `target` is the calling pane.

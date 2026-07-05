@@ -69,20 +69,28 @@ panel could render the board). **Scope:** the board is per-workspace (matches Lo
 a `--workspace` flag overrides, and the caller's workspace is the default. Global-but-namespaced is
 a future extension.
 
-### 2c. File-level claims / locking 🟡
+### 2c. File-level claims / locking 🟡 ✅ shipped
 **Scenario:** the scariest fleet failure — `loom broadcast "fix the failing tests"` to four panes,
 two of them independently start editing `src/auth.ts`, and they stomp each other. A lightweight
 cooperative lock prevents it:
 
 ```
-loom claim src/auth.ts          # -> "claimed" or "held by Cleo since 12:04"
-loom release src/auth.ts
+loom claim src/auth.ts          # -> "claimed", or fails "held by Cleo" (exit 1)
+loom release src/auth.ts        # holder-only; --force to clear a stale lock
 loom claims                     # the whole allocation
 ```
 
 It's **advisory** — agents opt in by calling `claim`; Loom doesn't intercept filesystem writes — but
-for cooperating agents that's enough. Nearly free once 2b exists: a claim is a blackboard entry in a
-reserved namespace (`claim:src/auth.ts → $LOOM_PANE`) plus an atomic test-and-set.
+for cooperating agents that's enough. The `claim` is an atomic test-and-set: it fails (exit 1) if
+another pane holds the path, so `loom claim x || work_on_something_else` scripts cleanly.
+
+**✅ Built as:** `stores/claims.ts` — a *sibling* of the blackboard (same per-workspace, ephemeral,
+opacity-safe shape) rather than a literal `claim:` namespace inside it, so `note list` stays
+notes-only and a user's note key can't collide with a lock. `claimFile` is the test-and-set,
+`releaseFile` is holder-scoped (`--force` overrides); `claim`/`release`/`claims` ops in
+`protocol.ts`/`paneControl.ts` (a `claimContext()` requires the caller pane as holder identity);
+the `loom claim|release|claims` CLI in `cli.rs`; claims dropped on workspace close. *Follow-up:*
+auto-release a pane's claims when it dies (today a coordinator clears a stale lock with `--force`).
 
 ### 2a. Request/response with correlation 🟡
 **Scenario:** Faye needs an answer from Cleo. Today `loom send` types the question in but Faye never

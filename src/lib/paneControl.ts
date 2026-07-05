@@ -21,6 +21,7 @@ import {
   type WorkspaceUI,
 } from "../stores/workspace";
 import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
+import { claimFile, releaseFile, listClaims } from "../stores/claims";
 import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
 import {
   sessionStart,
@@ -163,6 +164,39 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       return { ok: true, data: { action: "del", key, workspace: scope.ws.name } };
     }
 
+    // ---- File claims (§2c) — advisory locks, a sibling of the blackboard. claim/release need a
+    // holder identity (the caller pane); a lost claim is an ok:false so `loom claim x || …` scripts
+    // cleanly. Opacity-safe: cooperative metadata, nothing read from pane output. ----
+    case "claim": {
+      const ctx = claimContext(req);
+      if ("error" in ctx) return ctx;
+      const path = (req.path ?? "").trim();
+      if (!path) return { ok: false, error: "claim needs a path" };
+      const r = claimFile(ctx.ws.id, path, ctx.by);
+      if (!r.ok) return { ok: false, error: `"${path}" is held by ${r.by}` };
+      return { ok: true, data: { action: "claim", path, by: ctx.by, fresh: r.fresh } };
+    }
+
+    case "release": {
+      const ctx = claimContext(req);
+      if ("error" in ctx) return ctx;
+      const path = (req.path ?? "").trim();
+      if (!path) return { ok: false, error: "release needs a path" };
+      const r = releaseFile(ctx.ws.id, path, ctx.by, req.force === true);
+      if (!r.ok) {
+        return r.reason === "unheld"
+          ? { ok: false, error: `no claim on "${path}"` }
+          : { ok: false, error: `"${path}" is held by ${r.by} — use --force to override` };
+      }
+      return { ok: true, data: { action: "release", path } };
+    }
+
+    case "claims": {
+      const scope = noteScope(req); // list needs only the workspace, no holder
+      if ("error" in scope) return scope;
+      return { ok: true, data: { action: "claims", workspace: scope.ws.name, entries: listClaims(scope.ws.id) } };
+    }
+
     // ---- Agent lifecycle (ADR-0008) — feed the entity store, and bridge to the coarse floor
     // (attention/status) so existing UI keeps reflecting state until the fleet board lands. ----
     case "session.start": {
@@ -242,6 +276,24 @@ function noteScope(req: { pane?: string; workspace?: string }): { ws: WorkspaceU
   }
   const ws = activeWorkspace();
   return ws ? { ws } : { ok: false, error: "no active workspace" };
+}
+
+/** Resolve the workspace *and* the holder pane a claim/release acts as (§2c). Unlike a note, a
+ *  claim needs an owner identity, so the caller pane (`$LOOM_PANE`) is required — no active-pane
+ *  guess. Workspace scope is the pane's, or an explicit `--workspace`. */
+function claimContext(
+  req: { path?: string; pane?: string; workspace?: string },
+): { ws: WorkspaceUI; by: string } | { ok: false; error: string } {
+  const by = req.pane?.trim();
+  if (!by) {
+    return { ok: false, error: "claim needs a calling pane — run it from inside a pane (set $LOOM_PANE)" };
+  }
+  if (req.workspace) {
+    const ws = workspaceByName(req.workspace);
+    return ws ? { ws, by } : { ok: false, error: `no workspace named "${req.workspace}"` };
+  }
+  const ws = workspaceByPaneName(by) ?? activeWorkspace();
+  return ws ? { ws, by } : { ok: false, error: "no active workspace" };
 }
 
 /** The Agent *kind* for a pane: the op's explicit hint (the hook knows it's Claude), else detected

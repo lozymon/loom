@@ -33,6 +33,9 @@ const h = vi.hoisted(() => ({
   noteGet: vi.fn(),
   noteList: vi.fn(),
   noteDel: vi.fn(),
+  claimFile: vi.fn(),
+  releaseFile: vi.fn(),
+  listClaims: vi.fn(),
   settings: { confirmExternalSpawn: false },
 }));
 
@@ -51,6 +54,7 @@ vi.mock("../stores/workspace", () => ({
 }));
 vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus }));
 vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel }));
+vi.mock("../stores/claims", () => ({ claimFile: h.claimFile, releaseFile: h.releaseFile, listClaims: h.listClaims }));
 vi.mock("./notify", () => ({ notifyAttention: h.notifyAttention }));
 vi.mock("../stores/settings", () => ({ settings: h.settings }));
 
@@ -76,6 +80,9 @@ const {
   noteGet,
   noteList,
   noteDel,
+  claimFile,
+  releaseFile,
+  listClaims,
   settings,
 } = h;
 
@@ -423,5 +430,79 @@ describe("note (blackboard)", () => {
     const res = await call({ op: "note.del", key: "gone" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/no note "gone" to delete/);
+  });
+});
+
+describe("claim / release / claims", () => {
+  const ws = { id: "w1", name: "Home" };
+
+  it("claim takes the lock as the caller pane, scoped to its workspace", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    claimFile.mockReturnValue({ ok: true, fresh: true });
+    const res = await call({ op: "claim", path: "src/auth.ts", pane: "Faye" });
+    expect(claimFile).toHaveBeenCalledWith("w1", "src/auth.ts", "Faye");
+    expect(res).toEqual({ ok: true, data: { action: "claim", path: "src/auth.ts", by: "Faye", fresh: true } });
+  });
+
+  it("claim reports fresh=false when it's already yours", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    claimFile.mockReturnValue({ ok: true, fresh: false });
+    const res = await call({ op: "claim", path: "src/auth.ts", pane: "Faye" });
+    expect(res).toEqual({ ok: true, data: { action: "claim", path: "src/auth.ts", by: "Faye", fresh: false } });
+  });
+
+  it("claim held by another pane is an error naming the holder", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    claimFile.mockReturnValue({ ok: false, by: "Cleo", at: 1 });
+    const res = await call({ op: "claim", path: "src/auth.ts", pane: "Faye" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/"src\/auth.ts" is held by Cleo/);
+  });
+
+  it("claim requires a calling pane", async () => {
+    const res = await call({ op: "claim", path: "src/auth.ts" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/needs a calling pane/);
+    expect(claimFile).not.toHaveBeenCalled();
+  });
+
+  it("release drops your own lock", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: true });
+    const res = await call({ op: "release", path: "src/auth.ts", pane: "Faye" });
+    expect(releaseFile).toHaveBeenCalledWith("w1", "src/auth.ts", "Faye", false);
+    expect(res).toEqual({ ok: true, data: { action: "release", path: "src/auth.ts" } });
+  });
+
+  it("release passes --force through", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: true });
+    await call({ op: "release", path: "src/auth.ts", pane: "Faye", force: true });
+    expect(releaseFile).toHaveBeenCalledWith("w1", "src/auth.ts", "Faye", true);
+  });
+
+  it("release of an unheld path errors", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: false, reason: "unheld" });
+    const res = await call({ op: "release", path: "x", pane: "Faye" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no claim on "x"/);
+  });
+
+  it("release of another pane's lock errors with a --force hint", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: false, reason: "other", by: "Cleo" });
+    const res = await call({ op: "release", path: "x", pane: "Faye" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/held by Cleo — use --force/);
+  });
+
+  it("claims lists the workspace's locks (no holder pane needed)", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    const entries = [{ path: "src/a.ts", by: "Faye", at: 1 }];
+    listClaims.mockReturnValue(entries);
+    const res = await call({ op: "claims" });
+    expect(listClaims).toHaveBeenCalledWith("w1");
+    expect(res).toEqual({ ok: true, data: { action: "claims", workspace: "Home", entries } });
   });
 });

@@ -48,6 +48,9 @@ pub fn is_command(cmd: &str) -> bool {
             | "attention"
             | "status"
             | "note"
+            | "claim"
+            | "release"
+            | "claims"
             | "hooks"
             | "hook"
     )
@@ -371,8 +374,55 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(obj)
         }
 
+        "claim" | "release" | "claims" => {
+            // loom claim <path> [--workspace W]                 — take an advisory lock (§2c)
+            // loom release <path> [--force] [--workspace W]     — drop your lock (--force: any)
+            // loom claims [--workspace W]                       — list the workspace's locks
+            // The caller pane ($LOOM_PANE) is the holder identity for claim/release.
+            let op = args[0].as_str();
+            let mut workspace: Option<String> = None;
+            let mut force = false;
+            let mut positional: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--workspace" | "-w" => {
+                        i += 1;
+                        workspace = Some(args.get(i).ok_or("--workspace needs a name")?.clone());
+                    }
+                    "--force" if op == "release" => force = true,
+                    "--" => {
+                        positional.extend_from_slice(&args[i + 1..]);
+                        break;
+                    }
+                    _ => positional.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            let mut obj = if op == "claims" {
+                json!({ "op": "claims" })
+            } else {
+                let path = positional
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| format!("{op} needs a path: loom {op} <path>"))?;
+                let mut o = json!({ "op": op, "path": path });
+                if force {
+                    o["force"] = json!(true);
+                }
+                o
+            };
+            if let Ok(pane) = env::var("LOOM_PANE") {
+                obj["pane"] = json!(pane);
+            }
+            if let Some(w) = workspace {
+                obj["workspace"] = json!(w);
+            }
+            Ok(obj)
+        }
+
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note, claim, release, claims)"
         )),
     }
 }
@@ -489,7 +539,49 @@ fn handle_response(op: &str, resp: &Value) {
                 _ => {}
             }
         }
+        "claim" => {
+            let path = data
+                .and_then(|d| d.get("path"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            let fresh = data
+                .and_then(|d| d.get("fresh"))
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            if fresh {
+                println!("claimed '{path}'");
+            } else {
+                println!("already yours: '{path}'");
+            }
+        }
+        "release" => {
+            let path = data
+                .and_then(|d| d.get("path"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            println!("released '{path}'");
+        }
+        "claims" => print_claims(data),
         _ => {}
+    }
+}
+
+/// Pretty-print a `claims` board: `path   (held by pane)`, one per line, aligned.
+fn print_claims(data: Option<&Value>) {
+    let Some(arr) = data
+        .and_then(|d| d.get("entries"))
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    if arr.is_empty() {
+        println!("(no claims)");
+        return;
+    }
+    for e in arr {
+        let path = e.get("path").and_then(Value::as_str).unwrap_or("?");
+        let by = e.get("by").and_then(Value::as_str).unwrap_or("");
+        println!("{path:<32} (held by {by})");
     }
 }
 
@@ -779,6 +871,7 @@ fn usage() {
         \x20 loom attention [pane] [--clear]\n\
         \x20 loom status [pane] <text...> | [pane] --clear\n\
         \x20 loom note set <key> <value...> | get <key> | list | del <key>  [--workspace W]\n\
+        \x20 loom claim <path> | release <path> [--force] | claims  [--workspace W]\n\
         \x20 loom hooks [--print] | --install [--user|--project]"
     );
 }

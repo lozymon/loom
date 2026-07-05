@@ -14,6 +14,7 @@ import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type
 import { loadState, saveState } from "../lib/persist";
 import { countLive } from "../lib/paneRegistry";
 import { forgetBoard } from "./blackboard";
+import { forgetClaims } from "./claims";
 import { settings } from "./settings";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
@@ -545,6 +546,7 @@ export function closeWorkspace(id: string) {
   recordClosed({ kind: "workspace", title: closing.name, cwd: closing.cwd, tree: snapshotValue(closing.tree), panes: snapshotValue(closing.panes) });
   const remaining = app.workspaces.filter((w) => w.id !== id);
   forgetBoard(id); // drop the closed workspace's blackboard (§2b) — it's scoped to this ws
+  forgetClaims(id); // and its file claims (§2c)
   batch(() => {
     setApp("workspaces", remaining);
     if (app.activeId === id) setApp("activeId", remaining[Math.min(i, remaining.length - 1)].id);
