@@ -393,13 +393,16 @@ jobs:
       - name: Build (NSIS bundle)
         run: npm run tauri build -- --bundles nsis
 
+      # Only the NSIS installer — NOT the raw `target/release/loom.exe`. The bare exe is not a
+      # working distributable: it doesn't bootstrap the WebView2 runtime (blank window on a machine
+      # without it) and performs no install, so shipping it as a release asset just misleads testers
+      # into running the wrong file. The installer bundles the WebView2 bootstrapper and installs
+      # properly; it's the sole Windows download.
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
           name: loom-windows-nsis
-          path: |
-            src-tauri/target/release/bundle/nsis/*-setup.exe
-            src-tauri/target/release/loom.exe
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
   macos-build:
