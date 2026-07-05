@@ -72,6 +72,20 @@ fn voce_bin() -> PathBuf {
         if cand.is_file() {
             return cand;
         }
+        // Bundled-sidecar fallback: tauri's `externalBin` ships the helper beside `loom`, but may
+        // leave the target-triple suffix on the name (`loom-voce-aarch64-apple-darwin`) rather than
+        // the plain `loom-voce`. Accept the first `loom-voce`-prefixed sibling so resolution works
+        // whichever way the bundle names it (Windows still requires the `.exe`).
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                let ok_ext = !cfg!(windows) || name.ends_with(".exe");
+                if name.starts_with("loom-voce") && ok_ext && entry.path().is_file() {
+                    return entry.path();
+                }
+            }
+        }
     }
     PathBuf::from(voce_name())
 }

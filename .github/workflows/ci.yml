@@ -423,17 +423,38 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            loom-voce
           shared-key: macos-build
 
       - name: Install npm dependencies
         run: npm ci
 
+      # Build the voice helper (cpal backend on macOS; whisper.cpp via cmake — macos runners ship
+      # cmake + clang/libclang), then stage it as a tauri sidecar so it ships INSIDE the .app beside
+      # `loom`. `externalBin` (tauri.macos.conf.json) looks for `src-tauri/binaries/loom-voce-<triple>`,
+      # so name the built binary with the runner's host triple. Voice dictation (Cmd+Shift+M) then
+      # resolves the helper as a sibling of `loom` at runtime (voce.rs).
+      - name: Build loom-voce helper
+        run: npm run build:voce
+
+      - name: Stage loom-voce as a tauri sidecar
+        run: |
+          triple=$(rustc -vV | sed -n 's/host: //p')
+          mkdir -p src-tauri/binaries
+          cp loom-voce/target/release/loom-voce "src-tauri/binaries/loom-voce-${triple}"
+          # Inject externalBin into the macOS overlay for THIS build only (ephemeral, never committed).
+          # It's kept OUT of the checked-in tauri.macos.conf.json on purpose: tauri's build script
+          # validates externalBin on every cargo build, so a committed entry would break macos-lint /
+          # dev builds (which don't stage the binary). We add it here, only after staging.
+          node -e "const fs=require('fs'),f='src-tauri/tauri.macos.conf.json';const j=JSON.parse(fs.readFileSync(f));j.bundle.externalBin=['binaries/loom-voce'];fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
+          echo "staged sidecar: src-tauri/binaries/loom-voce-${triple} + injected externalBin"
+
       # Full release build + .dmg (picks up tauri.macos.conf.json automatically). macOS uses the
-      # system WKWebView — no apt/system deps. The loom-voce helper is NOT bundled: voice capture is
-      # Linux-only until the cpal backend lands (Phase 2), same as the Windows build. The dmg is
-      # UNSIGNED for now — Gatekeeper warns until notarization (Phase 5). Artifact is downloadable
-      # from the Actions run (arm64, matching the macos-latest runner).
+      # system WKWebView — no apt/system deps. The dmg is UNSIGNED for now — Gatekeeper warns until
+      # notarization (Phase 5). Artifact is downloadable from the Actions run (arm64, matching the
+      # macos-latest runner). (Windows loom-voce bundling is a follow-up — nsis job unchanged.)
       - name: Build (dmg bundle)
         run: npm run tauri build -- --bundles dmg
 
