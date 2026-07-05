@@ -22,6 +22,7 @@ import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 
 import { spawnPty, writePty, resizePty, killPty, cwdPty, metaPty, retargetPty } from "../lib/ptyClient";
+import { serializeSpawn } from "../lib/spawnQueue";
 import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detach";
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
@@ -276,20 +277,26 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       }
     }
     try {
-      handle = await spawnPty(
-        {
-          cols: term.cols,
-          rows: term.rows,
-          command,
-          // Per-pane cwd wins (e.g. a `loom spawn --cwd …` pane), then the workspace folder.
-          cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
-          // Per-pane shell (e.g. a WSL distro chosen in the wizard) wins over the global default.
-          shell: spec()?.shell || settings.defaultShell || undefined,
-          name: spec()?.title,
-          logPath,
-        },
-        onOutput,
-        onExit,
+      // Serialize the actual PTY creation across all panes: opening a multi-agent workspace mounts
+      // every Terminal at once, and spawning several `claude` into ConPTYs simultaneously makes all
+      // but the last hang at startup on Windows (console-attach contention — see lib/spawnQueue).
+      // The queue creates them one at a time so each agent claims its console before the next starts.
+      handle = await serializeSpawn(() =>
+        spawnPty(
+          {
+            cols: term.cols,
+            rows: term.rows,
+            command,
+            // Per-pane cwd wins (e.g. a `loom spawn --cwd …` pane), then the workspace folder.
+            cwd: spec()?.cwd || props.ws.cwd || settings.defaultCwd || undefined,
+            // Per-pane shell (e.g. a WSL distro chosen in the wizard) wins over the global default.
+            shell: spec()?.shell || settings.defaultShell || undefined,
+            name: spec()?.title,
+            logPath,
+          },
+          onOutput,
+          onExit,
+        ),
       );
       // Remember whether the live PTY is the auto-opened shell, so its eventual exit lets the
       // pane die instead of re-dropping. A normal launch/restart clears it (re-runs the command).
