@@ -77,10 +77,9 @@ struct Pane {
     // Lets `kill` terminate the child from the command thread even though the `Child`
     // itself lives in (and is reaped by) the reader/flusher thread.
     killer: Box<dyn ChildKiller + Send + Sync>,
-    // The shell child's OS pid, so the Source Control panel can read its live cwd from
-    // `/proc/<pid>/cwd` (see `cwd` below). `None` if the platform didn't report one.
-    // Only read on Unix (the `/proc` cwd lookup is Linux-only); still populated everywhere.
-    #[cfg_attr(windows, allow(dead_code))]
+    // The shell child's OS pid, so the process floor (see `cwd`/`meta` below) can look up its live
+    // cwd + foreground command via `sysinfo` — cross-platform (Linux/macOS/Windows). `None` if the
+    // platform didn't report one.
     pid: Option<u32>,
     // The webview Channels the flusher/reaper write to, behind a mutex so `retarget` can swap
     // them to a *different* window without disturbing the running PTY — the basis of tearing a
@@ -556,68 +555,60 @@ pub fn retarget(
     Ok(())
 }
 
-/// Best-effort current working directory of a pane's shell, read from `/proc/<pid>/cwd`.
-/// This is the one place Loom inspects a pane's live process state — used only for the
-/// explicit Source Control action to scope `git` to where the focused terminal actually is
-/// (see ADR-0001's "live cwd" carve-out). Returns `None` (not an error) when the pid is
-/// unknown or the link can't be read — e.g. the child already exited — so callers fall back.
+// ── Process floor (live cwd + foreground command + busy) ──────────────────────────────────
+//
+// The one place Loom inspects a pane's live process state — used for the Source Control panel's
+// live-cwd scoping and to badge a pane by its running agent. It reads kernel/OS process metadata
+// (`sysinfo`: cwd + argv; `portable-pty`: the foreground process-group leader), NEVER pane output,
+// so it stays inside ADR-0001's opacity carve-out / ADR-0008's kernel provenance.
+//
+// One cross-platform code path (was six `#[cfg]` variants over `/proc`): `sysinfo` resolves
+// cwd/argv on Linux, macOS, and Windows alike. The *only* remaining split is the foreground pgrp
+// read, which is a controlling-tty concept that genuinely doesn't exist on Windows — isolated to
+// the tiny `foreground_leader` helper below, so Windows simply reports no busy/foreground while
+// still getting live cwd.
+
+/// The pane's foreground process-group leader pid (`tcgetpgrp` on the PTY master via portable-pty),
+/// or `None` when unavailable. Unix-only: `MasterPty::process_group_leader` is itself `#[cfg(unix)]`
+/// because Windows/ConPTY has no process-group/controlling-tty concept. This is the single platform
+/// split left in the process floor.
 #[cfg(unix)]
-pub fn cwd(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
-    let pid = match mgr.panes.lock().unwrap().get(&id) {
-        Some(p) => p.pid,
-        None => return Ok(None),
-    };
-    let Some(pid) = pid else { return Ok(None) };
-    match std::fs::read_link(format!("/proc/{pid}/cwd")) {
-        Ok(path) => Ok(Some(path.to_string_lossy().into_owned())),
-        Err(_) => Ok(None),
-    }
+fn foreground_leader(pane: &Pane) -> Option<i32> {
+    pane.master.process_group_leader()
 }
 
-/// Non-Unix stub: no `/proc`, so the panel falls back to the workspace folder (see M7).
+/// Non-Unix stub: no process groups, so no foreground command / busy signal (cwd still resolves).
 #[cfg(not(unix))]
-pub fn cwd(_mgr: &PtyManager, _id: u32) -> Result<Option<String>, String> {
-    Ok(None)
+fn foreground_leader(_pane: &Pane) -> Option<i32> {
+    None
 }
 
-/// Whether a pane is "busy" — running a foreground command rather than sitting at the shell
-/// prompt. We read the PTY's foreground process group (`tcgetpgrp` on the master, via
-/// portable-pty) and compare it to the shell's own pid: at the prompt the shell *is* the
-/// foreground group leader, so a different leader means some child command holds the terminal.
-/// This is a metadata signal (kernel process state), never pane output — it stays inside
-/// ADR-0001's opacity rule, the same carve-out as `cwd`. `None` when the answer is unknown
-/// (pid/leader unavailable, e.g. the child just exited) so the UI shows no busy state.
-#[cfg(unix)]
-pub fn busy(mgr: &PtyManager, id: u32) -> Result<Option<bool>, String> {
-    let panes = mgr.panes.lock().unwrap();
-    let Some(pane) = panes.get(&id) else {
-        return Ok(None);
-    };
-    let Some(pid) = pane.pid else {
-        return Ok(None);
-    };
-    match pane.master.process_group_leader() {
-        Some(leader) => Ok(Some(leader != pid as i32)),
-        None => Ok(None),
-    }
+/// Refresh just the given pids (targeted — never a full process scan) and return the `System` to
+/// query. Keeps the per-tick cost close to the old single `/proc` read while working on every OS.
+fn snapshot(pids: &[u32]) -> sysinfo::System {
+    let pids: Vec<sysinfo::Pid> = pids.iter().map(|&p| sysinfo::Pid::from_u32(p)).collect();
+    let mut sys = sysinfo::System::new();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&pids), true);
+    sys
 }
 
-/// Non-Unix stub: no foreground-process-group query, so panes never report busy (see M7).
-#[cfg(not(unix))]
-pub fn busy(_mgr: &PtyManager, _id: u32) -> Result<Option<bool>, String> {
-    Ok(None)
+/// The cwd of a process by pid, via `sysinfo` (cross-platform; replaces the Linux-only
+/// `/proc/<pid>/cwd` read). `None` when the process is gone or the OS won't report it.
+fn process_cwd(sys: &sysinfo::System, pid: u32) -> Option<String> {
+    sys.process(sysinfo::Pid::from_u32(pid))?
+        .cwd()
+        .map(|p| p.to_string_lossy().into_owned())
 }
 
-/// The argv of `/proc/<pid>/cmdline` as a space-joined string, or `None` when the file is
-/// unreadable (process gone) or empty. cmdline is NUL-separated argv; we drop empties (the
-/// trailing NUL) and join with spaces. Shared by `foreground` and the batched `meta` so the
-/// two can't drift on how a command line is rendered.
-#[cfg(unix)]
-fn read_cmdline(pid: i32) -> Option<String> {
-    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
-    let cmd: String = String::from_utf8_lossy(&raw)
-        .split('\0')
-        .filter(|s| !s.is_empty())
+/// The argv of a process by pid as a space-joined string, via `sysinfo` (cross-platform; replaces
+/// the Linux-only `/proc/<pid>/cmdline` read). `None` when the process is gone or has empty argv.
+/// Shared by `foreground` and `meta` so the two can't drift on how a command line is rendered.
+fn process_cmd(sys: &sysinfo::System, pid: u32) -> Option<String> {
+    let cmd = sys
+        .process(sysinfo::Pid::from_u32(pid))?
+        .cmd()
+        .iter()
+        .map(|s| s.to_string_lossy())
         .collect::<Vec<_>>()
         .join(" ");
     if cmd.is_empty() {
@@ -627,17 +618,25 @@ fn read_cmdline(pid: i32) -> Option<String> {
     }
 }
 
-/// The command line of the pane's foreground process group leader — what's actually running
-/// in the terminal right now (e.g. `claude`), regardless of how it was launched (wizard spec,
-/// the ✦ button, or typed by hand). Lets the frontend badge a pane by its live agent.
-///
-/// Same mechanism and opacity stance as `busy`: we read the foreground pgrp leader (kernel
-/// process state) and its `/proc/<pid>/cmdline` (argv, NUL-joined → space-joined) — process
-/// metadata, never pane output (ADR-0001 carve-out, same as `cwd`). Returns `None` when the
-/// shell itself is in the foreground (at the prompt, leader == shell pid → no command running)
-/// or when the leader/cmdline is unavailable.
-#[cfg(unix)]
-pub fn foreground(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
+/// Best-effort current working directory of a pane's shell (via `sysinfo`). Used only for the
+/// explicit Source Control action to scope `git` to where the focused terminal actually is (see
+/// ADR-0001's "live cwd" carve-out). Returns `None` (not an error) when the pid is unknown or the
+/// process already exited — so callers fall back to the workspace folder. Works on all platforms.
+pub fn cwd(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
+    let pid = match mgr.panes.lock().unwrap().get(&id) {
+        Some(p) => p.pid,
+        None => return Ok(None),
+    };
+    let Some(pid) = pid else { return Ok(None) };
+    Ok(process_cwd(&snapshot(&[pid]), pid))
+}
+
+/// Whether a pane is "busy" — running a foreground command rather than sitting at the shell
+/// prompt. Compares the foreground process-group leader (`foreground_leader`) to the shell's own
+/// pid: at the prompt the shell *is* the leader, so a different leader means a child command holds
+/// the terminal. Process metadata, never pane output (ADR-0001 carve-out). `None` when unknown —
+/// the child just exited, or Windows, which has no pgrp and so never reports busy.
+pub fn busy(mgr: &PtyManager, id: u32) -> Result<Option<bool>, String> {
     let panes = mgr.panes.lock().unwrap();
     let Some(pane) = panes.get(&id) else {
         return Ok(None);
@@ -645,29 +644,45 @@ pub fn foreground(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
     let Some(pid) = pane.pid else {
         return Ok(None);
     };
-    let Some(leader) = pane.master.process_group_leader() else {
+    Ok(foreground_leader(pane).map(|leader| leader != pid as i32))
+}
+
+/// The command line of the pane's foreground process-group leader — what's actually running in the
+/// terminal right now (e.g. `claude`), however it was launched. Lets the frontend badge a pane by
+/// its live agent. Same mechanism/opacity stance as `busy`: the pgrp leader (kernel state) + its
+/// argv (via `sysinfo`), never pane output. `None` when the shell itself is in the foreground
+/// (leader == shell pid → nothing running) or the leader/argv is unavailable (incl. Windows).
+pub fn foreground(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
+    // Take the panes lock (and the pgrp read) once, then release it before the sysinfo refresh.
+    let (pid, leader) = {
+        let panes = mgr.panes.lock().unwrap();
+        let Some(pane) = panes.get(&id) else {
+            return Ok(None);
+        };
+        let Some(pid) = pane.pid else {
+            return Ok(None);
+        };
+        (pid, foreground_leader(pane))
+    };
+    let Some(leader) = leader else {
         return Ok(None);
     };
     // At the prompt the shell is its own foreground leader — nothing is "running".
     if leader == pid as i32 {
         return Ok(None);
     }
-    Ok(read_cmdline(leader))
-}
-
-/// Non-Unix stub: no `/proc`, so foreground detection is unavailable (see M7).
-#[cfg(not(unix))]
-pub fn foreground(_mgr: &PtyManager, _id: u32) -> Result<Option<String>, String> {
-    Ok(None)
+    let Ok(leader) = u32::try_from(leader) else {
+        return Ok(None);
+    };
+    Ok(process_cmd(&snapshot(&[leader]), leader))
 }
 
 /// Batched title-bar metadata: busy-state + foreground command + cwd in one call. `Terminal.tsx`
 /// polls this per visible pane every ~2s; folding the three reads into one command cuts IPC
-/// round-trips 3→1 and takes the panes lock — and the foreground-pgrp syscall — once per tick
-/// instead of three times (`busy` and `foreground` each independently queried the pgrp leader).
-/// Each field carries the exact semantics of its standalone counterpart (`busy`/`foreground`/`cwd`)
-/// and is independently `None` when unknown, so a partial read still updates what it can. Same
-/// opacity stance: process metadata, never pane output (ADR-0001 carve-out).
+/// round-trips 3→1 and takes the panes lock (and the foreground-pgrp read) once per tick. Each
+/// field carries the exact semantics of its standalone counterpart (`busy`/`foreground`/`cwd`) and
+/// is independently `None` when unknown, so a partial read still updates what it can. Same opacity
+/// stance: process metadata, never pane output (ADR-0001 carve-out). Cross-platform.
 #[derive(Serialize)]
 pub struct PaneMeta {
     pub busy: Option<bool>,
@@ -675,46 +690,41 @@ pub struct PaneMeta {
     pub cwd: Option<String>,
 }
 
-#[cfg(unix)]
 pub fn meta(mgr: &PtyManager, id: u32) -> Result<PaneMeta, String> {
     let none = || PaneMeta {
         busy: None,
         foreground: None,
         cwd: None,
     };
-    let panes = mgr.panes.lock().unwrap();
-    let Some(pane) = panes.get(&id) else {
-        return Ok(none());
+    // Hold the panes lock (and the pgrp read) once, then release it before the sysinfo refresh.
+    let (pid, leader) = {
+        let panes = mgr.panes.lock().unwrap();
+        let Some(pane) = panes.get(&id) else {
+            return Ok(none());
+        };
+        let Some(pid) = pane.pid else {
+            return Ok(none());
+        };
+        (pid, foreground_leader(pane))
     };
-    let Some(pid) = pane.pid else {
-        return Ok(none());
-    };
-    // One foreground-pgrp read drives both busy and foreground (they used to query it separately).
-    let leader = pane.master.process_group_leader();
     let busy = leader.map(|l| l != pid as i32);
-    // At the prompt the shell is its own leader → nothing running; otherwise read the leader's argv.
-    let foreground = match leader {
-        Some(l) if l != pid as i32 => read_cmdline(l),
+    // The foreground leader's pid, only when it isn't the shell itself (else nothing is running).
+    let leader_pid = match leader {
+        Some(l) if l != pid as i32 => u32::try_from(l).ok(),
         _ => None,
     };
-    // cwd is the shell's own pid, independent of what's in the foreground.
-    let cwd = std::fs::read_link(format!("/proc/{pid}/cwd"))
-        .ok()
-        .map(|p| p.to_string_lossy().into_owned());
+    // Refresh the shell pid (for cwd) and the leader pid (for the command) together in one scan.
+    let mut pids = vec![pid];
+    if let Some(l) = leader_pid {
+        pids.push(l);
+    }
+    let sys = snapshot(&pids);
+    let cwd = process_cwd(&sys, pid);
+    let foreground = leader_pid.and_then(|l| process_cmd(&sys, l));
     Ok(PaneMeta {
         busy,
         foreground,
         cwd,
-    })
-}
-
-/// Non-Unix stub: none of the `/proc`/pgrp reads exist, so every field is unknown (see M7).
-#[cfg(not(unix))]
-pub fn meta(_mgr: &PtyManager, _id: u32) -> Result<PaneMeta, String> {
-    Ok(PaneMeta {
-        busy: None,
-        foreground: None,
-        cwd: None,
     })
 }
 

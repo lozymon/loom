@@ -13,6 +13,8 @@ name: CI
 #                     cmake for its whisper.cpp build; kept out of rust-lint so that stays webkit-only)
 #   • windows-check — cross-compile `cargo check` for the Windows target from Linux (the keystone:
 #                     catches `#[cfg(windows)]` code that doesn't compile, no Windows runner needed)
+#   • macos-lint    — fmt + clippy + unit tests on a real macos-latest runner (the ONLY macOS
+#                     verifier — no cheap Linux→macOS cross-check exists, so this gates the mac arm)
 #
 #   Release tags (`v*`) and manual `workflow_dispatch` only (heavyweight — produce installers):
 #   • build         — full release build + .deb and .AppImage bundles (uploaded as artifacts)
@@ -144,6 +146,53 @@ jobs:
       - name: Unit tests
         working-directory: loom-voce
         run: cargo test
+
+  macos-lint:
+    name: macOS lint + test (fmt + clippy + unit)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    # The ONLY macOS verifier: unlike the Windows target (mingw cross-checks from Linux), there is
+    # no cheap Linux→macOS `cargo check` (needs the Apple SDK), so a real runner gates the macOS
+    # arm — the `#[cfg(unix)]` floor helper, `sysinfo` on macOS, and the shared cross-platform code.
+    # macOS uses the system WKWebView (no apt / WebKitGTK dev libs needed).
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: macos-lint
+
+      # generate_context! embeds the frontend dist, so it must exist before clippy compiles the lib.
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend (dist for generate_context!)
+        run: npm run build
+
+      - name: Rustfmt
+        working-directory: src-tauri
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Rust unit tests
+        working-directory: src-tauri
+        run: cargo test --lib
 
   build:
     name: Build (.deb + AppImage bundles)
