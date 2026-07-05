@@ -89,8 +89,11 @@ opacity-safe shape) rather than a literal `claim:` namespace inside it, so `note
 notes-only and a user's note key can't collide with a lock. `claimFile` is the test-and-set,
 `releaseFile` is holder-scoped (`--force` overrides); `claim`/`release`/`claims` ops in
 `protocol.ts`/`paneControl.ts` (a `claimContext()` requires the caller pane as holder identity);
-the `loom claim|release|claims` CLI in `cli.rs`; claims dropped on workspace close. *Follow-up:*
-auto-release a pane's claims when it dies (today a coordinator clears a stale lock with `--force`).
+the `loom claim|release|claims` CLI in `cli.rs`; claims dropped on workspace close, and a pane's
+claims **auto-release when it dies** — its process exits (`Terminal` `onExit`) or it's closed
+(`closePane`) both call `releasePaneClaims` → `releaseClaimsBy`, so a crashed or finished agent
+can't leave a lock blocking the fleet. Notes deliberately *don't* clear this way (shared plan state,
+not owned). `--force` remains for clearing a lock a still-running pane forgot to release.
 
 ### 2a. Request/response with correlation 🟡 ✅ shipped
 **Scenario:** Faye needs an answer from Cleo. Today `loom send` types the question in but Faye never

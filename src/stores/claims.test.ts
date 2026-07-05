@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { claims, claimFile, releaseFile, listClaims, forgetClaims } from "./claims";
+import { claims, claimFile, releaseFile, listClaims, releaseClaimsBy, forgetClaims } from "./claims";
 
 // The claims store is the pure test-and-set behind `loom claim/release/claims` (§2c). Tests pin
 // the lock semantics directly; the bus routing onto these calls lives in paneControl.test.ts.
@@ -76,5 +76,24 @@ describe("claims", () => {
     claimFile("w1", "a.ts", "Faye");
     forgetClaims("w1");
     expect(listClaims("w1")).toEqual([]);
+  });
+
+  it("releaseClaimsBy frees only the dead pane's locks, leaving others", () => {
+    claimFile("w1", "a.ts", "Faye");
+    claimFile("w1", "b.ts", "Faye");
+    claimFile("w1", "c.ts", "Cleo");
+    claimFile("w2", "d.ts", "Faye"); // other workspace — untouched
+    expect(releaseClaimsBy("w1", "Faye")).toBe(2);
+    expect(listClaims("w1")).toEqual([{ path: "c.ts", by: "Cleo", at: 1000 }]);
+    expect(listClaims("w2")).toEqual([{ path: "d.ts", by: "Faye", at: 1000 }]);
+    // the freed path can be re-taken by anyone
+    expect(claimFile("w1", "a.ts", "Cleo")).toEqual({ ok: true, fresh: true });
+  });
+
+  it("releaseClaimsBy is a no-op (0) for a pane holding nothing", () => {
+    claimFile("w1", "a.ts", "Faye");
+    expect(releaseClaimsBy("w1", "Wade")).toBe(0);
+    expect(releaseClaimsBy("empty", "Faye")).toBe(0);
+    expect(listClaims("w1")).toHaveLength(1);
   });
 });

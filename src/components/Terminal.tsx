@@ -54,6 +54,7 @@ import {
   switchWorkspaceRelative,
   switchWorkspaceIndex,
   swapPanes,
+  releasePaneClaims,
   type WorkspaceUI,
 } from "../stores/workspace";
 
@@ -202,6 +203,10 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     handle = null;
     setBusy(props.paneId, null);
     setForeground(null);
+    // The process that held this pane's file claims (§2c) just died — free them so a crashed or
+    // finished agent can't leave a lock blocking the fleet. If it drops to a shell below, that
+    // fresh process holds nothing and re-claims as needed.
+    releasePaneClaims(props.paneId);
     // Drop into an interactive shell when a command pane's launch command finishes, so exiting
     // (e.g.) `claude` leaves you at a usable prompt rather than a dead pane. Fires once per launch
     // (currentIsShellDrop guards the follow-on `exit` from looping), and never for a 127

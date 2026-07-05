@@ -14,7 +14,7 @@ import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type
 import { loadState, saveState } from "../lib/persist";
 import { countLive } from "../lib/paneRegistry";
 import { forgetBoard } from "./blackboard";
-import { forgetClaims } from "./claims";
+import { forgetClaims, releaseClaimsBy } from "./claims";
 import { settings } from "./settings";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
@@ -299,12 +299,25 @@ export function closePane(paneId: PaneId) {
   // Capture the spec (incl. any Claude sessionId) so the pane — and its conversation — can be reopened.
   const spec = ws.panes[paneId];
   if (spec) recordClosed({ kind: "pane", title: spec.title, cwd: spec.cwd || ws.cwd, spec: snapshotValue(spec) });
+  releasePaneClaims(paneId); // free any file claims (§2c) this pane held before it's gone
+
   batch(() => {
     setApp("workspaces", i, "tree", next);
     setApp("workspaces", i, "panes", paneId, undefined as unknown as PaneSpec);
     if (ws.focused === paneId) setApp("workspaces", i, "focused", firstLeaf(next));
     if (ws.zoomed === paneId) setApp("workspaces", i, "zoomed", null);
   });
+}
+
+/** Release any file claims (§2c) a pane holds — its holder is going away (process exit or close),
+ *  so the lock shouldn't outlive it. Looks the pane up by its own workspace + display name (how
+ *  claims are keyed). A no-op if the pane holds nothing. Notes are left alone (shared, not owned). */
+export function releasePaneClaims(paneId: PaneId) {
+  const i = wsIdxByPane(paneId);
+  if (i < 0) return;
+  const ws = app.workspaces[i];
+  const name = ws.panes[paneId]?.title;
+  if (name) releaseClaimsBy(ws.id, name);
 }
 
 /** Swap two panes' grid positions (drag-to-rearrange). Only swaps within one workspace. */

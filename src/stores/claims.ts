@@ -67,6 +67,22 @@ export function listClaims(wsId: string): ClaimListing[] {
     .map((path) => ({ path, ...c[path] }));
 }
 
+/** Release every claim held by pane `by` in a workspace — called when that pane dies (its process
+ *  exits) or closes, so an advisory lock never outlives its holder. Returns how many were dropped.
+ *  (Blackboard notes are deliberately *not* cleared this way: they're shared plan state, not owned.) */
+export function releaseClaimsBy(wsId: string, by: string): number {
+  const c = claims[wsId];
+  if (!c) return 0;
+  let n = 0;
+  for (const path of Object.keys(c)) {
+    if (c[path].by === by) {
+      setClaims(wsId, path, undefined as unknown as Claim);
+      n++;
+    }
+  }
+  return n;
+}
+
 /** Drop a whole workspace's claims (on workspace close). */
 export function forgetClaims(wsId: string) {
   if (claims[wsId]) setClaims(wsId, undefined as unknown as Record<string, Claim>);
