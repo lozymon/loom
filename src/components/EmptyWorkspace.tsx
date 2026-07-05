@@ -3,6 +3,8 @@
 // app keeps every workspace at ≥1 pane (closePane never empties a workspace), so this is a
 // defensive surface: it renders correctly if an empty workspace ever exists.
 
+import { MOD_NAMESPACE } from "../lib/keybindings";
+
 export default function EmptyWorkspace(props: { onChooseLayout: () => void }) {
   return (
     <div class="empty-ws">
@@ -18,7 +20,7 @@ export default function EmptyWorkspace(props: { onChooseLayout: () => void }) {
           <button class="empty-ws-primary" onClick={() => props.onChooseLayout()}>Choose a layout</button>
           <button class="empty-ws-secondary" onClick={() => props.onChooseLayout()}>Split a pane</button>
         </div>
-        <span class="empty-ws-hint">or press Ctrl+Shift+D</span>
+        <span class="empty-ws-hint">or press {MOD_NAMESPACE}+D</span>
       </div>
     </div>
   );

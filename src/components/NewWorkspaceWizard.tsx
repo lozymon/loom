@@ -6,6 +6,7 @@
 //            preview where clicking a pane sets its agent / command / cwd individually.
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { MOD_NAMESPACE } from "../lib/keybindings";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   createWorkspace, deletePreset, launchPreset, presets, recents,
@@ -421,7 +422,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
             {/* Footer lives INSIDE the right column (margin-top:auto), per the prototype — so the
                 hint aligns under WHAT RUNS and the column divider runs the full height. */}
             <footer class="wizard-foot">
-              <span class="wiz-foot-hint">Ctrl+Shift+T</span>
+              <span class="wiz-foot-hint">{MOD_NAMESPACE}+T</span>
               <span class="spacer" />
               <button onClick={() => props.onClose()}>Cancel</button>
               <button class="primary" onClick={launch}>Create workspace</button>

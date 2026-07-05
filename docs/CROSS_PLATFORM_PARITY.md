@@ -43,12 +43,19 @@ signing. Everything else collapses to one path.
   the system WKWebView; no apt step. This is the keystone — it's what makes every later phase
   verifiable. **Done + verified:** `macos-lint` job added (runs on every push/PR); **green on its
   first real run** (PR #23, 2m38s) — the macOS arm is now actually exercised, not just assumed.
-- [ ] **P0.2 — Add a gated `macos-build` job** (dmg bundle) on release tags / `workflow_dispatch`,
-  mirroring `windows-build`; upload the `.dmg`/`.app` artifact and wire it into the `release` job's
-  `needs` + asset download.
-- [ ] **P0.3 — `tauri.macos.conf.json` overlay** with `"targets": ["dmg"]` and the macOS bundle
-  identifier/category/icon; the Linux `["deb","appimage"]` config stays untouched (same pattern as
-  `tauri.windows.conf.json`).
+- [x] **P0.2 — Added the gated `macos-build` job** (dmg bundle) on release tags / `workflow_dispatch`,
+  mirroring `windows-build`; uploads the `loom-macos-dmg` artifact and wired into the `release` job's
+  `needs` + asset download. **Verified: the dmg built green** on a real `macos-latest` runner
+  (dispatch run) — macOS now produces an installable app, not just a lint pass. **Notes:** the dmg is
+  **unsigned** for now (Gatekeeper warns until notarization — Phase 5); `loom-voce` is **not** bundled
+  (voice stays Linux-only until cpal, Phase 2), matching the Windows build; single-arch **arm64**.
+- [x] **P0.3 — Added `tauri.macos.conf.json` overlay** (`"targets": ["dmg"]` + `minimumSystemVersion`);
+  the base config already carried `identifier` (`com.loom.app`), `category`, and `icon.icns`, so no
+  base change was needed. Linux `["deb","appimage"]` untouched (same pattern as the Windows overlay).
+- [ ] **P0.4 — Runtime transparency check (mac).** The app window is `transparent: true` +
+  `decorations: false` (frameless redesign). On macOS a transparent window may need
+  `app.macOSPrivateApi: true` / an entitlement — a *runtime* concern the dmg build won't catch.
+  Verify on first real Mac launch; flip the flag if the window renders opaque/black.
 
 ## Phase 1 — Process floor via `sysinfo` (unify `/proc` + stubs → one path)  `[x]` DONE
 

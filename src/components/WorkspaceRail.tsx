@@ -4,6 +4,7 @@
 // live in the top title bar, not here.
 
 import { createSignal, For, Show } from "solid-js";
+import { MOD_NAMESPACE } from "../lib/keybindings";
 import { appState, paneCount, switchWorkspace, closeWorkspace, renameWorkspace, duplicateWorkspace } from "../stores/workspace";
 import { anyAttention, anyNeedsAttention, countNeedsAttention } from "../stores/activity";
 import { settings, setSetting } from "../stores/settings";
@@ -139,7 +140,7 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
             );
           }}
         </For>
-        <button class="rail-new" title="New workspace (Ctrl+Shift+T)" onClick={() => props.onNew()}>
+        <button class="rail-new" title={`New workspace (${MOD_NAMESPACE}+T)`} onClick={() => props.onNew()}>
           <span class="rail-new-plus">＋</span> New workspace
         </button>
       </div>
