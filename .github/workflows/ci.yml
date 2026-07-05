@@ -444,7 +444,12 @@ jobs:
           triple=$(rustc -vV | sed -n 's/host: //p')
           mkdir -p src-tauri/binaries
           cp loom-voce/target/release/loom-voce "src-tauri/binaries/loom-voce-${triple}"
-          echo "staged sidecar: src-tauri/binaries/loom-voce-${triple}"
+          # Inject externalBin into the macOS overlay for THIS build only (ephemeral, never committed).
+          # It's kept OUT of the checked-in tauri.macos.conf.json on purpose: tauri's build script
+          # validates externalBin on every cargo build, so a committed entry would break macos-lint /
+          # dev builds (which don't stage the binary). We add it here, only after staging.
+          node -e "const fs=require('fs'),f='src-tauri/tauri.macos.conf.json';const j=JSON.parse(fs.readFileSync(f));j.bundle.externalBin=['binaries/loom-voce'];fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
+          echo "staged sidecar: src-tauri/binaries/loom-voce-${triple} + injected externalBin"
 
       # Full release build + .dmg (picks up tauri.macos.conf.json automatically). macOS uses the
       # system WKWebView — no apt/system deps. The dmg is UNSIGNED for now — Gatekeeper warns until

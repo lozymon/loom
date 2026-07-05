@@ -98,9 +98,11 @@ time, the exact thing `parecord` was chosen to avoid. So the seam is **cfg-split
   compiles the cpal arm — the only place it's built (this box has no cmake, so loom-voce can't build
   locally at all).
 - [~] **P2.3 — Bundle `loom-voce` into the macOS package (done); Windows is a follow-up.** macOS:
-  `externalBin: ["binaries/loom-voce"]` (`tauri.macos.conf.json`) ships the helper inside the `.app`
-  beside `loom`; the `macos-build` job now builds `loom-voce` and stages it as
-  `binaries/loom-voce-<triple>` before `tauri build`. `voce.rs` resolves it as a sibling of `loom`,
+  the `macos-build` job builds `loom-voce`, stages it as `binaries/loom-voce-<triple>`, and **injects
+  `externalBin` into the macOS overlay for that build only** (kept OUT of the committed
+  `tauri.macos.conf.json` on purpose — tauri validates `externalBin` on *every* cargo build, so a
+  committed entry would break `macos-lint`/dev builds that don't stage the binary). `voce.rs`
+  resolves the shipped helper as a sibling of `loom`,
   with a fallback that also accepts a triple-suffixed sidecar name (robust to either tauri naming).
   **No model bundling needed** — `loom-voce` auto-downloads the whisper model on first use (curl/wget,
   present on macOS). **Windows loom-voce bundling: deliberately deferred** (the `windows-build` job is
