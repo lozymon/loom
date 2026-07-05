@@ -15,13 +15,13 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 whisper-rs = "0.14"
 
-# Audio capture is done by shelling out to the system recorder (parecord/arecord) — no build-time
-# ALSA `-dev` headers, no sudo. See src/audio.rs for why we avoid cpal here.
-
-# Speech-to-text: the whisper.cpp binding (`whisper-rs = "0.12"`) is intentionally NOT taken yet.
-# The engine in src/stt.rs is a stub with a wiring guide; adding the dep pulls in a cmake+C build
-# of whisper.cpp. Uncomment when wiring transcription (install cmake no-sudo via `pip install cmake`):
-# whisper-rs = "0.12"
+# Audio capture, split by platform (see src/audio.rs):
+#  • Linux  — shell out to parecord/arecord: no build-time ALSA `-dev` headers, no sudo. That's why
+#             cpal is target-gated OUT below, keeping the Linux build byte-identical and header-free.
+#  • macOS/Windows — cpal (CoreAudio/WASAPI): builds cleanly with no problematic system headers, and
+#             there's no parecord/arecord to shell out to. Only compiled on those targets.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+cpal = "0.15"
 
 [profile.release]
 opt-level = 3

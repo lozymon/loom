@@ -79,18 +79,29 @@ the agent badge. Was Linux-only `/proc` reads with `#[cfg(not(unix))]` `None` st
   **Windows cross-check** `cargo check --target x86_64-pc-windows-gnu --all-targets` clean; **macOS
   `macos-lint` green** (PR #23) — the first real macOS run, so the sysinfo floor is exercised there.
 
-## Phase 2 — Voice capture via `cpal` (unify recorder shell-outs → one path)  `[ ]`
+## Phase 2 — Voice capture on macOS/Windows via `cpal`  `[~]` (backend done; bundling pending)
 
-`loom-voce/src/audio.rs` shells out to `parecord`/`arecord` (Linux-only).
+`loom-voce/src/audio.rs` shelled out to `parecord`/`arecord` (Linux-only).
 
-- [ ] **P2.1 — Replace `spawn_recorder()` with a `cpal` input stream** behind the existing
-  `start_capture` seam (CoreAudio on macOS, WASAPI on Windows, ALSA/Pulse on Linux). Resample the
-  device's native rate → 16kHz mono f32 for whisper.cpp; keep the `Sender<Vec<f32>>` contract.
-- [ ] **P2.2 — Build deps:** `cpal` needs ALSA headers on Linux (`libasound2-dev`) — add to the
-  `voce` CI job (already installs cmake/libclang). macOS/Windows need no extra system headers.
-- [ ] **P2.3 — Bundle `loom-voce` on all platforms** (drop the Linux-only assumption in the tauri
-  bundle config once the helper builds cross-platform); the Ctrl/Cmd+Shift+M hotkey stops reporting
-  "couldn't start" off-Linux.
+**Design correction (important):** the plan originally said "replace with cpal everywhere." That
+would **break the Linux build on a no-sudo box** — cpal → `alsa-sys` needs `libasound2-dev` at build
+time, the exact thing `parecord` was chosen to avoid. So the seam is **cfg-split**, not unified:
+
+- [x] **P2.1 — cfg-split `start_capture`.** `#[cfg(target_os = "linux")]` keeps the parecord/arecord
+  shell-out **verbatim** (no new build deps); `#[cfg(not(target_os = "linux"))]` uses **cpal**
+  (CoreAudio/WASAPI). The cpal backend downmixes the device's native channels → mono and resamples
+  native-rate → 16kHz in-process (`Resampler`, streaming linear interpolation), preserving the
+  `Sender<Vec<f32>>` / 16kHz-mono-frame contract the STT loop expects.
+- [x] **P2.2 — `cpal` is target-gated** (`[target.'cfg(not(target_os = "linux"))'.dependencies]`), so
+  the Linux build pulls nothing new and stays header-free / no-sudo-buildable. **Verification:** the
+  ubuntu `voce` job compiles the Linux arm; a new **`voce-macos`** CI job (clippy on macos-latest)
+  compiles the cpal arm — the only place it's built (this box has no cmake, so loom-voce can't build
+  locally at all).
+- [ ] **P2.3 — Bundle `loom-voce` into the macOS/Windows packages** (currently Linux-only via
+  `bundle.linux.*.files`) and generalise the dictation-hotkey "couldn't start" message. Until this
+  lands, the cpal backend *compiles* on mac/win but isn't yet *shipped* there.
+- **Runtime verification still owed:** no CI has a microphone, so actual capture/transcription on
+  macOS/Windows needs a human to run dictation (Cmd/Ctrl+Shift+M) once P2.3 ships the helper + model.
 
 ## Phase 3 — Region capture via `xcap` + in-house overlay (M9; unify 3 paths → one)  `[ ]`
 
