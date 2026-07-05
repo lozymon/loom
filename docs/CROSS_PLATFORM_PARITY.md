@@ -97,11 +97,20 @@ time, the exact thing `parecord` was chosen to avoid. So the seam is **cfg-split
   ubuntu `voce` job compiles the Linux arm; a new **`voce-macos`** CI job (clippy on macos-latest)
   compiles the cpal arm — the only place it's built (this box has no cmake, so loom-voce can't build
   locally at all).
-- [ ] **P2.3 — Bundle `loom-voce` into the macOS/Windows packages** (currently Linux-only via
-  `bundle.linux.*.files`) and generalise the dictation-hotkey "couldn't start" message. Until this
-  lands, the cpal backend *compiles* on mac/win but isn't yet *shipped* there.
-- **Runtime verification still owed:** no CI has a microphone, so actual capture/transcription on
-  macOS/Windows needs a human to run dictation (Cmd/Ctrl+Shift+M) once P2.3 ships the helper + model.
+- [~] **P2.3 — Bundle `loom-voce` into the macOS package (done); Windows is a follow-up.** macOS:
+  `externalBin: ["binaries/loom-voce"]` (`tauri.macos.conf.json`) ships the helper inside the `.app`
+  beside `loom`; the `macos-build` job now builds `loom-voce` and stages it as
+  `binaries/loom-voce-<triple>` before `tauri build`. `voce.rs` resolves it as a sibling of `loom`,
+  with a fallback that also accepts a triple-suffixed sidecar name (robust to either tauri naming).
+  **No model bundling needed** — `loom-voce` auto-downloads the whisper model on first use (curl/wget,
+  present on macOS). **Windows loom-voce bundling: deliberately deferred** (the `windows-build` job is
+  unchanged) — whisper.cpp bindgen needs libclang on the runner, a separate blind-CI risk to take on
+  its own. Local mac builds now require staging the sidecar first (or `tauri build` fails on the
+  missing `externalBin`); CI handles it. `binaries/` is gitignored.
+- **Runtime verification still owed (P2.4):** no CI has a microphone, and no Mac is in the loop, so
+  the dmg-shipped helper is **compile/bundle-verified only**. Real capture→transcription on macOS
+  needs a human to install the dmg and run dictation (Cmd+Shift+M) once — the first true end-to-end
+  check of the cpal path. This is the natural "needs a Mac" boundary flagged in the plan.
 
 ## Phase 3 — Region capture via `xcap` + in-house overlay (M9; unify 3 paths → one)  `[ ]`
 
