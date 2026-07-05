@@ -77,10 +77,9 @@ struct Pane {
     // Lets `kill` terminate the child from the command thread even though the `Child`
     // itself lives in (and is reaped by) the reader/flusher thread.
     killer: Box<dyn ChildKiller + Send + Sync>,
-    // The shell child's OS pid, so the Source Control panel can read its live cwd from
-    // `/proc/<pid>/cwd` (see `cwd` below). `None` if the platform didn't report one.
-    // Only read on Unix (the `/proc` cwd lookup is Linux-only); still populated everywhere.
-    #[cfg_attr(windows, allow(dead_code))]
+    // The shell child's OS pid, so the process floor (see `cwd`/`meta` below) can look up its live
+    // cwd + foreground command via `sysinfo` — cross-platform (Linux/macOS/Windows). `None` if the
+    // platform didn't report one.
     pid: Option<u32>,
     // The webview Channels the flusher/reaper write to, behind a mutex so `retarget` can swap
     // them to a *different* window without disturbing the running PTY — the basis of tearing a

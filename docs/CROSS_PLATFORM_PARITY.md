@@ -41,7 +41,8 @@ signing. Everything else collapses to one path.
 - [x] **P0.1 — Add a `macos-latest` lint/test job to CI** (`.github/workflows/ci.yml`), mirroring
   `rust-lint`: `cargo fmt --check` + `clippy -D warnings` + `cargo test --lib`. macOS runners use
   the system WKWebView; no apt step. This is the keystone — it's what makes every later phase
-  verifiable. **Done:** `macos-lint` job added (runs on every push/PR).
+  verifiable. **Done + verified:** `macos-lint` job added (runs on every push/PR); **green on its
+  first real run** (PR #23, 2m38s) — the macOS arm is now actually exercised, not just assumed.
 - [ ] **P0.2 — Add a gated `macos-build` job** (dmg bundle) on release tags / `workflow_dispatch`,
   mirroring `windows-build`; upload the `.dmg`/`.app` artifact and wire it into the `release` job's
   `needs` + asset download.
@@ -67,9 +68,9 @@ the agent badge. Was Linux-only `/proc` reads with `#[cfg(not(unix))]` `None` st
 - [x] **P1.3 — Result:** macOS gets the full floor (leader via portable-pty + strings via sysinfo);
   **Windows gains live cwd** (sysinfo works there even though pgrp/busy stays `None`). Opacity stance
   unchanged — process metadata, never pane output (ADR-0001 carve-out / ADR-0008 kernel provenance).
-- **Verified:** Linux `cargo fmt`/`clippy -D warnings`/`cargo test --lib` (20) green; **Windows
-  cross-check** `cargo check --target x86_64-pc-windows-gnu --all-targets` clean; macOS pending its
-  first CI run (P0.1).
+- **Verified on all three:** Linux `cargo fmt`/`clippy -D warnings`/`cargo test --lib` (20) green;
+  **Windows cross-check** `cargo check --target x86_64-pc-windows-gnu --all-targets` clean; **macOS
+  `macos-lint` green** (PR #23) — the first real macOS run, so the sysinfo floor is exercised there.
 
 ## Phase 2 — Voice capture via `cpal` (unify recorder shell-outs → one path)  `[ ]`
 
@@ -102,14 +103,21 @@ path **and** the missing macOS path with one owned implementation, zero external
 - [ ] **P3.4 — Build deps honesty:** `xcap` on Linux pulls PipeWire + libclang (`libspa`/bindgen).
   Acceptable on CI; a one-time local `apt install`. Document it.
 
-## Phase 4 — Shortcuts: a logical `Mod` key (the one real macOS UX divergence)  `[ ]`
+## Phase 4 — Shortcuts: a logical `Mod` key (the one real macOS UX divergence)  `[x]` DONE (PR #24)
 
-- [ ] **P4.1 — Introduce a `Mod` abstraction in `lib/keybindings.ts`** that resolves to `Cmd` on
-  macOS and `Ctrl` elsewhere, instead of hardcoded `Ctrl+Shift` (ADR-0005). Detect platform once
-  (Tauri `platform()` / `navigator`). Update the shortcuts cheat-sheet overlay to render the
-  resolved key. Pure TS — verifiable on Linux, correct on mac.
-- [ ] **P4.2 — Amend ADR-0005** to record `Ctrl+Shift` as the *logical* namespace, `Cmd+Shift` as
-  its macOS rendering.
+- [x] **P4.1 — Introduced the platform-aware chord in `lib/keybindings.ts`** — `appChord(e)`
+  (primary modifier = `metaKey` on macOS, `ctrlKey` elsewhere; Shift required; other modifier +
+  Alt excluded) plus `MOD_LABEL`/`MOD_NAMESPACE` for rendering. All four dispatch sites (App,
+  Terminal, DetachedPane, Settings capture) call it; the cheat-sheet, palette, Settings list, and
+  pane-menu labels all follow the platform. Platform detected once from `navigator` (guarded for
+  the node test env → non-mac, the CI path). Pure TS.
+- [x] **P4.2 — Amended ADR-0005** — `Ctrl+Shift` is the *logical* namespace; `Cmd+Shift` its macOS
+  rendering; the split lives only in `appChord`.
+- **Verified:** `tsc` clean; 182 frontend tests green (incl. 4 new `appChord` tests).
+- **Known follow-up (P4.3, not done):** ~25 static `title="… (Ctrl+Shift+X)"` tooltip strings across
+  TitleBar/WorkspaceRail/EmptyWorkspace/etc. still read "Ctrl" literally on macOS. Functional
+  shortcuts + all *dynamic* labels are platform-correct; converting the static tooltips (route them
+  through `formatBinding`/`MOD_NAMESPACE`) is mechanical cleanup for a follow-up.
 
 ## Phase 5 — Packaging, signing & docs  `[ ]`
 
