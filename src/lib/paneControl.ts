@@ -22,6 +22,7 @@ import {
 } from "../stores/workspace";
 import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
 import { claimFile, releaseFile, listClaims } from "../stores/claims";
+import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
 import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
 import {
   sessionStart,
@@ -195,6 +196,41 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       const scope = noteScope(req); // list needs only the workspace, no holder
       if ("error" in scope) return scope;
       return { ok: true, data: { action: "claims", workspace: scope.ws.name, entries: listClaims(scope.ws.id) } };
+    }
+
+    // ---- Ask/reply RPC (§2a) — `ask` injects the question + reply instructions into the callee
+    // and returns a correlation id; the `loom ask` CLI long-polls `ask.await`; `reply` delivers.
+    // Opacity-safe: the answer is agent-pushed via `reply`, never read from output. ----
+    case "ask": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      const question = (req.question ?? "").trim();
+      if (!question) return { ok: false, error: "ask needs a question" };
+      const from = req.from?.trim() || "someone";
+      const id = createAsk(req.target, from, question, req.timeoutMs ?? 300_000);
+      // Type the question into the callee with a single-line instruction telling its agent how to
+      // answer. Enter submits it (like `send`), so an agent pane receives it as a prompt.
+      const line = `[loom ask #${id} from ${from} — reply with: loom reply ${id} "<answer>"] ${question}`;
+      const n = writeToPanes([r.paneId], line + "\r");
+      if (n === 0) {
+        cancelAsk(id); // retire the just-created ask; the pane isn't live
+        return { ok: false, error: `pane "${req.target}" is not live` };
+      }
+      return { ok: true, data: { id } };
+    }
+
+    case "ask.await": {
+      const result = await awaitAsk(req.id, Math.min(req.waitMs ?? 8000, 9000));
+      return { ok: true, data: result };
+    }
+
+    case "reply": {
+      const answer = (req.answer ?? "").trim();
+      const from = req.from?.trim() || undefined;
+      if (!replyAsk(req.id, answer, from)) {
+        return { ok: false, error: `no open ask #${req.id} (it expired or was already answered)` };
+      }
+      return { ok: true, data: { id: req.id } };
     }
 
     // ---- Agent lifecycle (ADR-0008) — feed the entity store, and bridge to the coarse floor

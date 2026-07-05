@@ -26,6 +26,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -51,6 +53,8 @@ pub fn is_command(cmd: &str) -> bool {
             | "claim"
             | "release"
             | "claims"
+            | "ask"
+            | "reply"
             | "hooks"
             | "hook"
     )
@@ -78,6 +82,12 @@ pub fn run() {
     // stdin, push the matching ADR-0008 lifecycle op. Fire-and-forget, silent, never fails.
     if args[0] == "hook" {
         run_hook_emit(&args[1..]);
+        return;
+    }
+    // `ask` is the only multi-round-trip command (§2a): it fires one `ask`, then long-polls
+    // `ask.await` until the callee replies — so it can't use the single-shot build/send path below.
+    if args[0] == "ask" {
+        run_ask(&args[1..]);
         return;
     }
     let req = match build_request(&args) {
@@ -421,8 +431,25 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(obj)
         }
 
+        "reply" => {
+            // loom reply <id> <answer...>   — answer an ask you were sent (§2a).
+            // The id comes from the `[loom ask #N …]` prompt that was typed into this pane.
+            if args.len() < 2 {
+                return Err("reply needs an ask id: loom reply <id> <answer>".to_string());
+            }
+            let id: u64 = args[1]
+                .parse()
+                .map_err(|_| format!("'{}' is not an ask id (a number)", args[1]))?;
+            let answer = args[2..].join(" ");
+            let mut obj = json!({ "op": "reply", "id": id, "answer": answer });
+            if let Ok(pane) = env::var("LOOM_PANE") {
+                obj["from"] = json!(pane);
+            }
+            Ok(obj)
+        }
+
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note, claim, release, claims)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note, claim, release, claims, ask, reply)"
         )),
     }
 }
@@ -562,6 +589,13 @@ fn handle_response(op: &str, resp: &Value) {
             println!("released '{path}'");
         }
         "claims" => print_claims(data),
+        "reply" => {
+            let id = data
+                .and_then(|d| d.get("id"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            println!("replied to ask #{id}");
+        }
         _ => {}
     }
 }
@@ -582,6 +616,120 @@ fn print_claims(data: Option<&Value>) {
         let path = e.get("path").and_then(Value::as_str).unwrap_or("?");
         let by = e.get("by").and_then(Value::as_str).unwrap_or("");
         println!("{path:<32} (held by {by})");
+    }
+}
+
+// ---- `loom ask <pane> <question>` — request/response RPC (§2a) ----
+//
+// The one multi-round-trip command: fire one `ask` (returns a correlation id), then long-poll
+// `ask.await` in <10s slices — under the relay's parked-connection cap — until the callee runs
+// `loom reply <id> <answer>`. Prints the answer on success; exits non-zero on timeout so
+// `answer=$(loom ask Cleo "…") || handle_no_answer` scripts cleanly.
+fn run_ask(args: &[String]) {
+    let mut timeout_s: u64 = 300;
+    let mut positional: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--timeout" | "-t" => {
+                i += 1;
+                timeout_s = match args.get(i).and_then(|s| s.parse().ok()) {
+                    Some(n) if n > 0 => n,
+                    _ => {
+                        eprintln!("loom: --timeout needs a positive number of seconds");
+                        exit(2);
+                    }
+                };
+            }
+            "--" => {
+                positional.extend_from_slice(&args[i + 1..]);
+                break;
+            }
+            _ => positional.push(args[i].clone()),
+        }
+        i += 1;
+    }
+    if positional.is_empty() {
+        eprintln!("loom: ask needs a pane: loom ask <pane> <question>");
+        exit(2);
+    }
+    let target = positional.remove(0);
+    if positional.is_empty() {
+        eprintln!("loom: ask needs a question: loom ask <pane> <question>");
+        exit(2);
+    }
+    let question = positional.join(" ");
+
+    // 1. Fire the ask; the frontend types the question into `target` and hands back an id.
+    let mut ask_req = json!({
+        "op": "ask",
+        "target": target,
+        "question": question,
+        "timeoutMs": timeout_s.saturating_mul(1000),
+    });
+    if let Ok(pane) = env::var("LOOM_PANE") {
+        ask_req["from"] = json!(pane);
+    }
+    let resp = match control_sock::send(&ask_req) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("loom: {e}");
+            exit(1);
+        }
+    };
+    if resp.get("ok").and_then(Value::as_bool) != Some(true) {
+        let err = resp
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("ask failed");
+        eprintln!("loom: {err}");
+        exit(1);
+    }
+    let id = resp
+        .pointer("/data/id")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+
+    // 2. Long-poll for the reply until the deadline.
+    let deadline = Instant::now() + Duration::from_secs(timeout_s);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            eprintln!("loom: ask #{id} to '{target}' timed out after {timeout_s}s");
+            exit(1);
+        }
+        let wait_ms = remaining.as_millis().min(8000) as u64;
+        let await_req = json!({ "op": "ask.await", "id": id, "waitMs": wait_ms });
+        let r = match control_sock::send(&await_req) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("loom: {e}");
+                exit(1);
+            }
+        };
+        match r.pointer("/data/state").and_then(Value::as_str) {
+            Some("answered") => {
+                let answer = r
+                    .pointer("/data/answer")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                println!("{answer}");
+                return;
+            }
+            Some("pending") => {
+                // No reply yet — a brief pause keeps a hot loop from hammering the socket if the
+                // frontend returns quickly, then poll again.
+                thread::sleep(Duration::from_millis(200));
+            }
+            other => {
+                // "expired", "unknown", or a malformed reply — the ask is gone.
+                eprintln!(
+                    "loom: ask #{id} to '{target}' ended without an answer ({})",
+                    other.unwrap_or("no state")
+                );
+                exit(1);
+            }
+        }
     }
 }
 
@@ -872,6 +1020,8 @@ fn usage() {
         \x20 loom status [pane] <text...> | [pane] --clear\n\
         \x20 loom note set <key> <value...> | get <key> | list | del <key>  [--workspace W]\n\
         \x20 loom claim <path> | release <path> [--force] | claims  [--workspace W]\n\
+        \x20 loom ask <pane> <question...> [--timeout S]\n\
+        \x20 loom reply <id> <answer...>\n\
         \x20 loom hooks [--print] | --install [--user|--project]"
     );
 }

@@ -36,6 +36,10 @@ const h = vi.hoisted(() => ({
   claimFile: vi.fn(),
   releaseFile: vi.fn(),
   listClaims: vi.fn(),
+  createAsk: vi.fn(),
+  awaitAsk: vi.fn(),
+  replyAsk: vi.fn(),
+  cancelAsk: vi.fn(),
   settings: { confirmExternalSpawn: false },
 }));
 
@@ -55,6 +59,7 @@ vi.mock("../stores/workspace", () => ({
 vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus }));
 vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel }));
 vi.mock("../stores/claims", () => ({ claimFile: h.claimFile, releaseFile: h.releaseFile, listClaims: h.listClaims }));
+vi.mock("./askRegistry", () => ({ createAsk: h.createAsk, awaitAsk: h.awaitAsk, replyAsk: h.replyAsk, cancelAsk: h.cancelAsk }));
 vi.mock("./notify", () => ({ notifyAttention: h.notifyAttention }));
 vi.mock("../stores/settings", () => ({ settings: h.settings }));
 
@@ -83,6 +88,10 @@ const {
   claimFile,
   releaseFile,
   listClaims,
+  createAsk,
+  awaitAsk,
+  replyAsk,
+  cancelAsk,
   settings,
 } = h;
 
@@ -504,5 +513,69 @@ describe("claim / release / claims", () => {
     const res = await call({ op: "claims" });
     expect(listClaims).toHaveBeenCalledWith("w1");
     expect(res).toEqual({ ok: true, data: { action: "claims", workspace: "Home", entries } });
+  });
+});
+
+describe("ask / reply", () => {
+  it("ask registers a correlation id and types the question + reply instructions into the pane", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 7 });
+    createAsk.mockReturnValue(42);
+    writeToPanes.mockReturnValue(1);
+    const res = await call({ op: "ask", target: "Cleo", question: "which auth lib?", from: "Faye" });
+    expect(createAsk).toHaveBeenCalledWith("Cleo", "Faye", "which auth lib?", 300_000);
+    // one write to the pane, carrying the id + the reply recipe, submitted with Enter
+    const [ids, text] = writeToPanes.mock.calls[0];
+    expect(ids).toEqual([7]);
+    expect(text).toContain("loom ask #42 from Faye");
+    expect(text).toContain("loom reply 42");
+    expect(text).toContain("which auth lib?");
+    expect(text.endsWith("\r")).toBe(true);
+    expect(res).toEqual({ ok: true, data: { id: 42 } });
+  });
+
+  it("ask cancels the registration and errors if the pane isn't live", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 7 });
+    createAsk.mockReturnValue(42);
+    writeToPanes.mockReturnValue(0); // not live
+    const res = await call({ op: "ask", target: "Cleo", question: "q", from: "Faye" });
+    expect(cancelAsk).toHaveBeenCalledWith(42);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not live/);
+  });
+
+  it("ask rejects a blank question", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 7 });
+    const res = await call({ op: "ask", target: "Cleo", question: "   " });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/needs a question/);
+    expect(createAsk).not.toHaveBeenCalled();
+  });
+
+  it("ask errors on an unknown target", async () => {
+    resolvePaneByName.mockReturnValue({ error: 'no pane named "Ghost"' });
+    const res = await call({ op: "ask", target: "Ghost", question: "q" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no pane named "Ghost"/);
+  });
+
+  it("ask.await forwards the poll result and clamps waitMs under the relay cap", async () => {
+    awaitAsk.mockResolvedValue({ state: "answered", answer: "lucia-auth", by: "Cleo" });
+    const res = await call({ op: "ask.await", id: 42, waitMs: 100000 });
+    expect(awaitAsk).toHaveBeenCalledWith(42, 9000); // clamped from 100000
+    expect(res).toEqual({ ok: true, data: { state: "answered", answer: "lucia-auth", by: "Cleo" } });
+  });
+
+  it("reply delivers the answer and records the replier", async () => {
+    replyAsk.mockReturnValue(true);
+    const res = await call({ op: "reply", id: 42, answer: "  lucia-auth  ", from: "Cleo" });
+    expect(replyAsk).toHaveBeenCalledWith(42, "lucia-auth", "Cleo");
+    expect(res).toEqual({ ok: true, data: { id: 42 } });
+  });
+
+  it("reply errors when the ask is gone (expired or already answered)", async () => {
+    replyAsk.mockReturnValue(false);
+    const res = await call({ op: "reply", id: 99, answer: "x" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no open ask #99/);
   });
 });

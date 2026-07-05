@@ -139,6 +139,15 @@ export type ControlRequest =
   | { op: "claim"; path: string; pane?: string; workspace?: string }
   | { op: "release"; path: string; pane?: string; workspace?: string; force?: boolean }
   | { op: "claims"; pane?: string; workspace?: string }
+  // ---- Ask/reply RPC (docs/AGENTIC-ENHANCEMENTS.md §2a) ----
+  // Turns the fire-and-forget bus into request/response: `ask` types a question into `target`
+  // (with reply instructions carrying the correlation id) and returns the id immediately; the
+  // `loom ask` CLI then long-polls `ask.await` (kept under the relay's ~10s cap) until the callee
+  // runs `reply`. Opacity-safe: the answer is agent-pushed, never scraped. `from` is the asking
+  // pane (shown in the injected prompt); `timeoutMs` bounds how long the ask stays open.
+  | { op: "ask"; target: string; question: string; from?: string; timeoutMs?: number }
+  | { op: "ask.await"; id: number; waitMs?: number }
+  | { op: "reply"; id: number; answer: string; from?: string }
   // ---- Agent lifecycle (ADR-0008) ----
   // The rich form of attention/status: an agent reports its own Session/Task lifecycle, pushed
   // (via `loom hooks` / the MCP server), never parsed from output. `target` is the calling pane.

@@ -47,8 +47,8 @@ there's no shared state between panes. The sender certainly can't read Cleo's an
 scraping output, which ADR-0001 forbids. Section 2 fixes exactly that. All three ops stay
 opacity-safe: agents *push* structured data through the bus; Loom never parses pane output.
 
-**Build order (cheapest first):** 2b → 2c → 2a. The blackboard is the smallest and unblocks the
-other two; claims are a thin layer on it; ask/reply is the most powerful and the most work.
+**Build order (cheapest first):** 2b → 2c → 2a — **all three now shipped.** The blackboard came
+first (smallest), claims layered on the same shape, and ask/reply (the stateful one) last.
 
 ### 2b. Shared blackboard / scratchpad 🟡 — *building now*
 **Scenario:** Faye (coordinator) decides "Cleo owns the API, Wade owns the UI." Today the only way
@@ -92,20 +92,29 @@ notes-only and a user's note key can't collide with a lock. `claimFile` is the t
 the `loom claim|release|claims` CLI in `cli.rs`; claims dropped on workspace close. *Follow-up:*
 auto-release a pane's claims when it dies (today a coordinator clears a stale lock with `--force`).
 
-### 2a. Request/response with correlation 🟡
+### 2a. Request/response with correlation 🟡 ✅ shipped
 **Scenario:** Faye needs an answer from Cleo. Today `loom send` types the question in but Faye never
 hears the reply. Make it a real RPC that **blocks until Cleo answers**:
 
 ```
 answer=$(loom ask Cleo "which auth library are we using?")
-# Cleo's agent responds: loom reply "$LOOM_MSG_ID" "lucia-auth"
+# Cleo's agent responds: loom reply <id> "lucia-auth"   (id comes from the injected prompt)
 ```
 
-**Correlation:** each `ask` mints a `msg_id` injected into the callee's context; the reply echoes it
-so concurrent questions match up. Rust stays a pure relay but must now hold the asking socket open
-and route the reply back by id; `paneControl.ts` grows a pending-replies map. Biggest lift of the
-three — it makes the relay *stateful about pending calls* — but it's what turns a pane from "a thing
-you shout at" into a **callable worker**.
+**Correlation:** each `ask` mints an id, typed into the callee's pane inside the reply instructions;
+the reply echoes it so concurrent questions match up. It turns a pane from "a thing you shout at"
+into a **callable worker**.
+
+**✅ Built as:** the relay caps each parked connection at ~10s (a fast-fail for a wedged frontend),
+and Rust is a pure relay that can't special-case an `ask` — so rather than hold one socket open for
+an agent-speed answer, `ask` is a **long-poll mailbox**: it returns a correlation id immediately,
+then the `loom ask` CLI loops `ask.await` in <10s slices until the reply lands or the ask expires.
+`lib/askRegistry.ts` is the correlation state (parked polls, reply-beats-poll stashing, expiry,
+cancel); `ask`/`ask.await`/`reply` ops in `protocol.ts`/`paneControl.ts` (`ask` injects the prompt
++ reply recipe and returns the id; `reply` delivers); `run_ask()` in `cli.rs` is the poll loop.
+`ask` exits non-zero on timeout so `answer=$(loom ask …) || handle_no_answer` scripts cleanly.
+Verified end-to-end (happy-path RPC, `$(…)` capture, timeout, unknown-pane/expired-ask errors).
+*Follow-up:* a `--timeout` is the only bound today; a UI list of open asks would help debugging.
 
 > **Cross-cutting design tension — scope.** Per-workspace (simple, matches Loom's model) vs.
 > global-but-namespaced (more powerful; real fleets span repos across workspaces — the very reason
