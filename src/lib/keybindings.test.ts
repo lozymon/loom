@@ -4,6 +4,7 @@ import {
   DEFAULT_KEYBINDINGS,
   SWITCH_WORKSPACE_ACTIONS,
   actionForKey,
+  appChord,
   formatBinding,
 } from "./keybindings";
 
@@ -58,5 +59,27 @@ describe("keybinding registry", () => {
     expect(formatBinding("?")).toBe("Ctrl+Shift+?");
     expect(formatBinding("d")).toBe("Ctrl+Shift+D");
     expect(formatBinding("arrowup")).toBe("Ctrl+Shift+↑");
+  });
+});
+
+describe("appChord — the app-shortcut modifier gate", () => {
+  // In the test env `IS_MAC` is false, so the primary modifier is Ctrl (the CI-verified path).
+  const chord = (o: Partial<Record<"ctrlKey" | "metaKey" | "shiftKey" | "altKey", boolean>>) =>
+    appChord({ ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...o });
+
+  it("fires on Ctrl+Shift", () => {
+    expect(chord({ ctrlKey: true, shiftKey: true })).toBe(true);
+  });
+
+  it("requires Shift (plain Ctrl doesn't fire — plain Ctrl+C must reach the PTY)", () => {
+    expect(chord({ ctrlKey: true })).toBe(false);
+  });
+
+  it("rejects when Alt is also held", () => {
+    expect(chord({ ctrlKey: true, shiftKey: true, altKey: true })).toBe(false);
+  });
+
+  it("rejects a Super/Meta-smuggled combo on non-mac (Meta+Shift alone)", () => {
+    expect(chord({ metaKey: true, shiftKey: true })).toBe(false);
   });
 });

@@ -18,6 +18,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@xterm/xterm/css/xterm.css";
 import "../App.css";
 import { retargetPty, writePty, resizePty } from "../lib/ptyClient";
+import { appChord } from "../lib/keybindings";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { settings } from "../stores/settings";
 import { currentTheme } from "../stores/theme";
@@ -81,7 +82,7 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
 
     // Clipboard in the Ctrl+Shift namespace (ADR-0005), so plain Ctrl+C still reaches the PTY.
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return true;
+      if (e.type !== "keydown" || !appChord(e)) return true;
       const k = e.key.toLowerCase();
       if (k === "c") {
         const sel = term.getSelection();

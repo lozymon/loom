@@ -35,7 +35,7 @@ import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
-import { actionForKey, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
+import { actionForKey, appChord, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
 import { detectAgent, resumeClaudeCommand } from "../lib/agents";
 import { paneActiveTask } from "../stores/sessions";
 import type { PaneId, PtyHandle, LogErrorEvent } from "../ipc/protocol";
@@ -624,7 +624,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "font-decrease": () => adjustFontSize(-1),
     };
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return true;
+      if (e.type !== "keydown" || !appChord(e)) return true;
       if (isModifierKey(e.key)) return true;
       const action = actionForKey(settings.keybindings, e.key);
       if (!action) return true;

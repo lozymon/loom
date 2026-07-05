@@ -36,7 +36,7 @@ import { applyGlobalHotkey } from "./lib/globalHotkey";
 import { redock } from "./lib/detach";
 import { openEditorForActivePane } from "./lib/editor";
 import { dictateIntoActivePane, initVoceExitListener } from "./lib/voceClient";
-import { actionForKey, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
+import { actionForKey, appChord, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import { setSessionSink } from "./stores/sessions";
 import { saveSession, saveTask, pruneHistory } from "./lib/sessionLogClient";
@@ -191,7 +191,7 @@ export default function App() {
     GLOBAL_ACTIONS[id] = () => switchWorkspaceIndex(i);
   });
   const onGlobalKey = (e: KeyboardEvent) => {
-    if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
+    if (!appChord(e)) return;
     if (isModifierKey(e.key)) return;
     // When a terminal has focus, its own handler runs these — bail so we don't double-fire.
     if ((document.activeElement as HTMLElement | null)?.closest(".xterm")) return;
