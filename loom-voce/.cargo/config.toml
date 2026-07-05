@@ -1,0 +1,10 @@
+# Statically link the MSVC runtime on Windows so the shipped `loom-voce.exe` has no external
+# dependency on the VC++ Redistributable (MSVCP140.dll / VCRUNTIME140.dll). whisper.cpp pulls in the
+# C++ runtime; with `+crt-static` the `cmake` crate builds whisper with the static MSVC runtime too
+# (CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded), so the binary is self-contained on a clean Windows box
+# — no "MSVCP140.dll was not found" on machines without the redistributable installed.
+#
+# Scoped to the MSVC target only: the Linux/macOS builds and the windows-gnu cross-check are
+# untouched.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

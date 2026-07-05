@@ -16,6 +16,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use crate::winproc::NoConsoleWindow;
 use base64::Engine;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
@@ -214,6 +216,7 @@ fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
 pub fn wsl_distros() -> Vec<String> {
     let out = match std::process::Command::new("wsl.exe")
         .args(["--list", "--quiet"])
+        .no_console_window()
         .output()
     {
         Ok(o) if o.status.success() => o,

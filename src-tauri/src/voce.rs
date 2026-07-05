@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+
+use crate::winproc::NoConsoleWindow;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use tauri::{AppHandle, Emitter};
@@ -115,7 +117,8 @@ pub fn voce_dictate(app: AppHandle, pane: String, model: Option<String>) -> Resu
     // mic-level lines to the webview meter; stderr (human logs) is discarded.
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::null())
+        .no_console_window();
     // loom-voce delivers its transcript by shelling out to `loom send <pane>`, which needs the bus
     // socket and the loom binary — give it the same discovery env a pane child gets (pty.rs).
     cmd.env("LOOM_SOCK", crate::control::endpoint());

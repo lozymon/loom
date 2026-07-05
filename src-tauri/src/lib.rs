@@ -13,6 +13,7 @@ mod pty;
 mod sessionlog;
 mod tray;
 mod voce;
+mod winproc;
 mod workspace;
 
 use std::sync::Arc;

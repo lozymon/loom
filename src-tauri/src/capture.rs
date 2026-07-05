@@ -19,6 +19,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(windows)]
+use crate::winproc::NoConsoleWindow;
+
 /// A unique temp path like `…/loom-snap-<nanos>.png` in the system temp dir.
 fn snap_path() -> PathBuf {
     let nanos = SystemTime::now()
@@ -152,6 +155,7 @@ $img.Save($env:TH_SNAP_OUT, [System.Drawing.Imaging.ImageFormat]::Png)
     let status = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Sta", "-Command", script])
         .env("TH_SNAP_OUT", &path)
+        .no_console_window()
         .status()
         .map_err(|e| format!("failed to launch PowerShell for capture: {e}"))?;
 

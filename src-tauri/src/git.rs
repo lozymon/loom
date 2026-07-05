@@ -16,6 +16,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::winproc::NoConsoleWindow;
+
 use serde::Serialize;
 
 /// One changed path as reported by `git status`. `status` is the raw two-char porcelain code
@@ -51,6 +53,7 @@ fn git(dir: &str, args: &[&str]) -> Result<(bool, String, String), String> {
         .arg("-C")
         .arg(dir)
         .args(args)
+        .no_console_window()
         .output()
         .map_err(|e| format!("failed to run git: {e}"))?;
     Ok((
@@ -203,6 +206,7 @@ pub async fn git_diff(
             .arg(&root)
             .args(["diff", "--no-index", "--color=never", "--", "/dev/null"])
             .arg(&target)
+            .no_console_window()
             .output()
             .map_err(|e| format!("failed to run git: {e}"))?;
         return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
@@ -218,6 +222,7 @@ pub async fn git_diff(
         .arg(&root)
         .args(&args)
         .arg(&path)
+        .no_console_window()
         .output()
         .map_err(|e| format!("failed to run git: {e}"))?;
     if !out.status.success() {
