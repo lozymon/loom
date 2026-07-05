@@ -120,6 +120,15 @@ Verified end-to-end (happy-path RPC, `$(…)` capture, timeout, unknown-pane/exp
 > global-but-namespaced (more powerful; real fleets span repos across workspaces — the very reason
 > the human broadcast bar was removed). We start **per-workspace** and can widen later.
 
+### 2d. MCP parity for the coordination tools ✅ shipped
+All three primitives are now **model-native**, not just CLI: `loom mcp` exposes `board_set`/`get`/
+`list`/`del` (§2b), `claim_file`/`release_file`/`list_claims` (§2c), and `ask_pane`/`reply_ask`
+(§2a) as agent tools, alongside the existing pane tools. **✅ Built as:** the tool catalogue + a
+pure, unit-tested `build_request(name, args, pane)` in `mcp.rs` (the caller pane is threaded in from
+`$LOOM_PANE` for workspace scope / writer / holder identity); `ask_pane` runs the same long-poll
+loop as the CLI and returns the answer as a structured tool result. Verified end-to-end over
+JSON-RPC (tools/list, cross-pane board read, claim enforcement, blocking `ask_pane` → `reply_ask`).
+
 ## 3. Repeatability — capture a working setup and replay it
 
 ### 3a. Workspace templates with roles 🟡
