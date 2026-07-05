@@ -378,18 +378,43 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            loom-voce
           shared-key: windows-build
 
       - name: Install npm dependencies
         run: npm ci
 
+      # Build the voice helper (cpal/WASAPI backend on Windows) and stage it as a tauri sidecar so it
+      # ships beside loom.exe in the installer. whisper-rs-sys needs cmake (preinstalled on the runner)
+      # + libclang for bindgen — LLVM is preinstalled at C:\Program Files\LLVM, so point bindgen at it.
+      - name: Build loom-voce helper
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+        run: npm run build:voce
+
+      - name: Stage loom-voce as a tauri sidecar
+        shell: pwsh
+        run: |
+          $triple = ((rustc -vV | Select-String '^host:').ToString() -split '\s+')[1]
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries | Out-Null
+          Copy-Item loom-voce/target/release/loom-voce.exe "src-tauri/binaries/loom-voce-$triple.exe"
+          # Inject externalBin into the Windows overlay for THIS build only (ephemeral, never committed).
+          # It's kept OUT of the checked-in tauri.windows.conf.json on purpose: tauri validates
+          # externalBin on every build (including windows-check's cross-compile), so a committed entry
+          # would break those jobs, which don't stage the binary.
+          $f = 'src-tauri/tauri.windows.conf.json'
+          $j = Get-Content $f -Raw | ConvertFrom-Json
+          $j.bundle | Add-Member -NotePropertyName externalBin -NotePropertyValue @('binaries/loom-voce') -Force
+          $j | ConvertTo-Json -Depth 20 | Set-Content $f
+          Write-Host "staged sidecar src-tauri/binaries/loom-voce-$triple.exe + injected externalBin"
+
       # Full release build + NSIS installer (picks up tauri.windows.conf.json automatically;
-      # bundles the WebView2 bootstrapper). No apt step — Windows runners ship the toolchain.
-      # This is also how we get a runnable Windows build: cross-linking from Linux is blocked
-      # by the mingw BFD linker ("export ordinal too large" on the wry/windows crates), so the
-      # MSVC toolchain on this runner is the supported path. The artifact below is downloadable
-      # from the Actions run — install it on any Windows box without a local build toolchain.
+      # bundles the WebView2 bootstrapper + the loom-voce sidecar staged above). No apt step —
+      # Windows runners ship the toolchain. Cross-linking from Linux is blocked by the mingw BFD
+      # linker ("export ordinal too large" on the wry/windows crates), so MSVC on this runner is the
+      # supported path.
       - name: Build (NSIS bundle)
         run: npm run tauri build -- --bundles nsis
 
