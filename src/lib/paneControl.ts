@@ -17,7 +17,12 @@ import {
   revealPaneByName,
   spawnPane,
   workspaceByName,
+  workspaceByPaneName,
+  type WorkspaceUI,
 } from "../stores/workspace";
+import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
+import { claimFile, releaseFile, listClaims } from "../stores/claims";
+import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
 import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
 import {
   sessionStart,
@@ -125,6 +130,109 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       return { ok: true, data: { name: req.target, text, cleared: text === "" } };
     }
 
+    // ---- Shared blackboard (§2b) — per-workspace key/value board. Scope resolves to the caller
+    // pane's workspace (or an explicit --workspace); `action` is echoed so the CLI knows how to
+    // print. Opacity-safe: values are agent-pushed, never read from pane output. ----
+    case "note.set": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      const key = (req.key ?? "").trim();
+      if (!key) return { ok: false, error: "note set needs a key" };
+      noteSet(scope.ws.id, key, req.value ?? "", req.pane ?? "?");
+      return { ok: true, data: { action: "set", key, workspace: scope.ws.name } };
+    }
+
+    case "note.get": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      const key = (req.key ?? "").trim();
+      const e = noteGet(scope.ws.id, key);
+      if (!e) return { ok: false, error: `no note "${key}" on the "${scope.ws.name}" board` };
+      return { ok: true, data: { action: "get", key, value: e.value, by: e.by, at: e.at } };
+    }
+
+    case "note.list": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      return { ok: true, data: { action: "list", workspace: scope.ws.name, entries: noteList(scope.ws.id) } };
+    }
+
+    case "note.del": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      const key = (req.key ?? "").trim();
+      if (!noteDel(scope.ws.id, key)) return { ok: false, error: `no note "${key}" to delete` };
+      return { ok: true, data: { action: "del", key, workspace: scope.ws.name } };
+    }
+
+    // ---- File claims (§2c) — advisory locks, a sibling of the blackboard. claim/release need a
+    // holder identity (the caller pane); a lost claim is an ok:false so `loom claim x || …` scripts
+    // cleanly. Opacity-safe: cooperative metadata, nothing read from pane output. ----
+    case "claim": {
+      const ctx = claimContext(req);
+      if ("error" in ctx) return ctx;
+      const path = (req.path ?? "").trim();
+      if (!path) return { ok: false, error: "claim needs a path" };
+      const r = claimFile(ctx.ws.id, path, ctx.by);
+      if (!r.ok) return { ok: false, error: `"${path}" is held by ${r.by}` };
+      return { ok: true, data: { action: "claim", path, by: ctx.by, fresh: r.fresh } };
+    }
+
+    case "release": {
+      const ctx = claimContext(req);
+      if ("error" in ctx) return ctx;
+      const path = (req.path ?? "").trim();
+      if (!path) return { ok: false, error: "release needs a path" };
+      const r = releaseFile(ctx.ws.id, path, ctx.by, req.force === true);
+      if (!r.ok) {
+        return r.reason === "unheld"
+          ? { ok: false, error: `no claim on "${path}"` }
+          : { ok: false, error: `"${path}" is held by ${r.by} — use --force to override` };
+      }
+      return { ok: true, data: { action: "release", path } };
+    }
+
+    case "claims": {
+      const scope = noteScope(req); // list needs only the workspace, no holder
+      if ("error" in scope) return scope;
+      return { ok: true, data: { action: "claims", workspace: scope.ws.name, entries: listClaims(scope.ws.id) } };
+    }
+
+    // ---- Ask/reply RPC (§2a) — `ask` injects the question + reply instructions into the callee
+    // and returns a correlation id; the `loom ask` CLI long-polls `ask.await`; `reply` delivers.
+    // Opacity-safe: the answer is agent-pushed via `reply`, never read from output. ----
+    case "ask": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      const question = (req.question ?? "").trim();
+      if (!question) return { ok: false, error: "ask needs a question" };
+      const from = req.from?.trim() || "someone";
+      const id = createAsk(req.target, from, question, req.timeoutMs ?? 300_000);
+      // Type the question into the callee with a single-line instruction telling its agent how to
+      // answer. Enter submits it (like `send`), so an agent pane receives it as a prompt.
+      const line = `[loom ask #${id} from ${from} — reply with: loom reply ${id} "<answer>"] ${question}`;
+      const n = writeToPanes([r.paneId], line + "\r");
+      if (n === 0) {
+        cancelAsk(id); // retire the just-created ask; the pane isn't live
+        return { ok: false, error: `pane "${req.target}" is not live` };
+      }
+      return { ok: true, data: { id } };
+    }
+
+    case "ask.await": {
+      const result = await awaitAsk(req.id, Math.min(req.waitMs ?? 8000, 9000));
+      return { ok: true, data: result };
+    }
+
+    case "reply": {
+      const answer = (req.answer ?? "").trim();
+      const from = req.from?.trim() || undefined;
+      if (!replyAsk(req.id, answer, from)) {
+        return { ok: false, error: `no open ask #${req.id} (it expired or was already answered)` };
+      }
+      return { ok: true, data: { id: req.id } };
+    }
+
     // ---- Agent lifecycle (ADR-0008) — feed the entity store, and bridge to the coarse floor
     // (attention/status) so existing UI keeps reflecting state until the fleet board lands. ----
     case "session.start": {
@@ -188,6 +296,40 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
     default:
       return { ok: false, error: `unknown op "${(req as { op?: string }).op}"` };
   }
+}
+
+/** Resolve which workspace's blackboard a `loom note` op targets (§2b): an explicit `workspace`
+ *  name wins, else the caller pane's workspace, else the active one. Returns an error response the
+ *  case can hand straight back. */
+function noteScope(req: { pane?: string; workspace?: string }): { ws: WorkspaceUI } | { ok: false; error: string } {
+  if (req.workspace) {
+    const ws = workspaceByName(req.workspace);
+    return ws ? { ws } : { ok: false, error: `no workspace named "${req.workspace}"` };
+  }
+  if (req.pane) {
+    const ws = workspaceByPaneName(req.pane);
+    if (ws) return { ws };
+  }
+  const ws = activeWorkspace();
+  return ws ? { ws } : { ok: false, error: "no active workspace" };
+}
+
+/** Resolve the workspace *and* the holder pane a claim/release acts as (§2c). Unlike a note, a
+ *  claim needs an owner identity, so the caller pane (`$LOOM_PANE`) is required — no active-pane
+ *  guess. Workspace scope is the pane's, or an explicit `--workspace`. */
+function claimContext(
+  req: { path?: string; pane?: string; workspace?: string },
+): { ws: WorkspaceUI; by: string } | { ok: false; error: string } {
+  const by = req.pane?.trim();
+  if (!by) {
+    return { ok: false, error: "claim needs a calling pane — run it from inside a pane (set $LOOM_PANE)" };
+  }
+  if (req.workspace) {
+    const ws = workspaceByName(req.workspace);
+    return ws ? { ws, by } : { ok: false, error: `no workspace named "${req.workspace}"` };
+  }
+  const ws = workspaceByPaneName(by) ?? activeWorkspace();
+  return ws ? { ws, by } : { ok: false, error: "no active workspace" };
 }
 
 /** The Agent *kind* for a pane: the op's explicit hint (the hook knows it's Claude), else detected

@@ -41,20 +41,105 @@ Running a fleet burns tokens invisibly today. Depends on a usage-reporting conve
 
 ## 2. Coordination primitives — agents working *together*, not just in parallel
 
-The control bus is the real moat. Today it's send / spawn / broadcast (fire-and-forget). Richer ops:
+The control bus is the real moat. Today it's **fire-and-forget, one-way**: `loom send Cleo "run
+tests"` types into Cleo's PTY and the sender learns only "delivered" — it can't *hear back*, and
+there's no shared state between panes. The sender certainly can't read Cleo's answer without
+scraping output, which ADR-0001 forbids. Section 2 fixes exactly that. All three ops stay
+opacity-safe: agents *push* structured data through the bus; Loom never parses pane output.
 
-### 2a. Request/response with correlation 🟡
-An agent asks another pane a question and **awaits a structured reply**, rather than fire-and-forget
-`send`. Turns panes into callable workers. Extends `ControlRequest` in `protocol.ts`, handled in
-`paneControl.ts`; needs a correlation id + a reply path back through the socket relay.
+**Build order (cheapest first):** 2b → 2c → 2a — **all three now shipped.** The blackboard came
+first (smallest), claims layered on the same shape, and ask/reply (the stateful one) last.
 
-### 2b. Shared blackboard / scratchpad 🟡
-A `loom note set/get` key-value store agents read/write to share plan state, claimed files,
-"who's doing what." Prevents two agents clobbering the same work. New bus op + a small TS-side store.
+### 2b. Shared blackboard / scratchpad 🟡 — *building now*
+**Scenario:** Faye (coordinator) decides "Cleo owns the API, Wade owns the UI." Today the only way
+to record that is to type it into each agent's terminal, and nothing keeps it — ten minutes later
+Wade can't ask "who's doing the API?" A blackboard is a classic multi-agent shared surface:
 
-### 2c. File-level claims / locking 🟡
-`loom claim src/foo.ts` so a coordinator prevents collisions across a fleet. High value with the
-worktree/detach model. Could build on 2b (a claim is a well-known note namespace).
+```
+loom note set plan.api "Cleo — in progress"
+loom note set plan.ui  "Wade — done"
+loom note get plan.api          # any pane reads it
+loom note list                  # dump the whole board
+```
+
+It's **pull** (agents read when they need it) — calmer than 2a's push. Good for "who's doing what,"
+the agreed plan, a discovered gotcha ("staging DB down, skip integration tests"). Cheap: a new bus
+op plus a small reactive store (mirrors `stores/activity.ts`), and it's naturally UI-visible (a side
+panel could render the board). **Scope:** the board is per-workspace (matches Loom's mental model);
+a `--workspace` flag overrides, and the caller's workspace is the default. Global-but-namespaced is
+a future extension.
+
+### 2c. File-level claims / locking 🟡 ✅ shipped
+**Scenario:** the scariest fleet failure — `loom broadcast "fix the failing tests"` to four panes,
+two of them independently start editing `src/auth.ts`, and they stomp each other. A lightweight
+cooperative lock prevents it:
+
+```
+loom claim src/auth.ts          # -> "claimed", or fails "held by Cleo" (exit 1)
+loom release src/auth.ts        # holder-only; --force to clear a stale lock
+loom claims                     # the whole allocation
+```
+
+It's **advisory** — agents opt in by calling `claim`; Loom doesn't intercept filesystem writes — but
+for cooperating agents that's enough. The `claim` is an atomic test-and-set: it fails (exit 1) if
+another pane holds the path, so `loom claim x || work_on_something_else` scripts cleanly.
+
+**✅ Built as:** `stores/claims.ts` — a *sibling* of the blackboard (same per-workspace, ephemeral,
+opacity-safe shape) rather than a literal `claim:` namespace inside it, so `note list` stays
+notes-only and a user's note key can't collide with a lock. `claimFile` is the test-and-set,
+`releaseFile` is holder-scoped (`--force` overrides); `claim`/`release`/`claims` ops in
+`protocol.ts`/`paneControl.ts` (a `claimContext()` requires the caller pane as holder identity);
+the `loom claim|release|claims` CLI in `cli.rs`; claims dropped on workspace close, and a pane's
+claims **auto-release when it dies** — its process exits (`Terminal` `onExit`) or it's closed
+(`closePane`) both call `releasePaneClaims` → `releaseClaimsBy`, so a crashed or finished agent
+can't leave a lock blocking the fleet. Notes deliberately *don't* clear this way (shared plan state,
+not owned). `--force` remains for clearing a lock a still-running pane forgot to release.
+
+### 2a. Request/response with correlation 🟡 ✅ shipped
+**Scenario:** Faye needs an answer from Cleo. Today `loom send` types the question in but Faye never
+hears the reply. Make it a real RPC that **blocks until Cleo answers**:
+
+```
+answer=$(loom ask Cleo "which auth library are we using?")
+# Cleo's agent responds: loom reply <id> "lucia-auth"   (id comes from the injected prompt)
+```
+
+**Correlation:** each `ask` mints an id, typed into the callee's pane inside the reply instructions;
+the reply echoes it so concurrent questions match up. It turns a pane from "a thing you shout at"
+into a **callable worker**.
+
+**✅ Built as:** the relay caps each parked connection at ~10s (a fast-fail for a wedged frontend),
+and Rust is a pure relay that can't special-case an `ask` — so rather than hold one socket open for
+an agent-speed answer, `ask` is a **long-poll mailbox**: it returns a correlation id immediately,
+then the `loom ask` CLI loops `ask.await` in <10s slices until the reply lands or the ask expires.
+`lib/askRegistry.ts` is the correlation state (parked polls, reply-beats-poll stashing, expiry,
+cancel); `ask`/`ask.await`/`reply` ops in `protocol.ts`/`paneControl.ts` (`ask` injects the prompt
++ reply recipe and returns the id; `reply` delivers); `run_ask()` in `cli.rs` is the poll loop.
+`ask` exits non-zero on timeout so `answer=$(loom ask …) || handle_no_answer` scripts cleanly.
+Verified end-to-end (happy-path RPC, `$(…)` capture, timeout, unknown-pane/expired-ask errors).
+*Follow-up:* a `--timeout` is the only bound today; a UI list of open asks would help debugging.
+
+> **Cross-cutting design tension — scope.** Per-workspace (simple, matches Loom's model) vs.
+> global-but-namespaced (more powerful; real fleets span repos across workspaces — the very reason
+> the human broadcast bar was removed). We start **per-workspace** and can widen later.
+
+### 2d. MCP parity for the coordination tools ✅ shipped
+All three primitives are now **model-native**, not just CLI: `loom mcp` exposes `board_set`/`get`/
+`list`/`del` (§2b), `claim_file`/`release_file`/`list_claims` (§2c), and `ask_pane`/`reply_ask`
+(§2a) as agent tools, alongside the existing pane tools. **✅ Built as:** the tool catalogue + a
+pure, unit-tested `build_request(name, args, pane)` in `mcp.rs` (the caller pane is threaded in from
+`$LOOM_PANE` for workspace scope / writer / holder identity); `ask_pane` runs the same long-poll
+loop as the CLI and returns the answer as a structured tool result. Verified end-to-end over
+JSON-RPC (tools/list, cross-pane board read, claim enforcement, blocking `ask_pane` → `reply_ask`).
+
+### 2e. Fleet panel — make the coordination state visible ✅ shipped
+The blackboard and file claims are cross-pane state a fleet builds up invisibly; you could only see
+it by running `loom note list` / `loom claims` in a pane. **✅ Built as:** `FleetPanel.tsx`, a docked
+right-side panel (Ctrl+Shift+K, the title-bar ◈ button, or the command palette) that shows the
+active workspace's **Blackboard** (key → value + writer) and **File claims** (path → holder) with
+live counts. Purely reactive off the `blackboard`/`claims` stores — a note or claim from any pane
+updates it live, no polling — and re-scopes when you switch workspaces. Mirrors the Source Control /
+Docs panel shell. *Follow-up:* open asks aren't shown yet (the ask registry isn't a reactive store).
 
 ## 3. Repeatability — capture a working setup and replay it
 

@@ -25,6 +25,8 @@ const ICONS: Record<string, string> = {
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="3.6" r="1.7"/><circle cx="4.5" cy="12.4" r="1.7"/><circle cx="11.5" cy="5.4" r="1.7"/><path d="M4.5 5.3v5.4"/><path d="M11.5 7.1c0 2.3-2.4 2.8-4.6 3.4"/></svg>',
   docs:
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.2h5l3 3v8.6H4z"/><path d="M9 2.2v3h3"/><path d="M6 8.2h4M6 10.6h4"/></svg>',
+  fleet:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="1.7"/><circle cx="3" cy="3.4" r="1.4"/><circle cx="13" cy="3.4" r="1.4"/><circle cx="8" cy="13.4" r="1.4"/><path d="M6.8 6.8 4.1 4.3M9.2 6.8 11.9 4.3M8 9.7v2.3"/></svg>',
   history:
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.4 1.5"/></svg>',
   reopen:
@@ -43,11 +45,13 @@ export default function TitleBar(props: {
   onSettings: () => void;
   onGit: () => void;
   onDocs: () => void;
+  onFleet: () => void;
   onShortcuts: () => void;
   onHistory: () => void;
   onReopen: () => void;
   gitOn: () => boolean;
   docsOn: () => boolean;
+  fleetOn: () => boolean;
   settingsOn: () => boolean;
   paletteOn: () => boolean;
   historyOn: () => boolean;
@@ -101,6 +105,15 @@ export default function TitleBar(props: {
             title="Docs reader — mark a passage → send to a pane (Ctrl+Shift+R)"
             onClick={() => props.onDocs()}
             innerHTML={ICONS.docs}
+          />
+        </Show>
+        <Show when={settings.navVisible.fleet}>
+          <button
+            class="tb-icon"
+            classList={{ on: props.fleetOn() }}
+            title="Fleet panel — the workspace's blackboard & file claims (Ctrl+Shift+K)"
+            onClick={() => props.onFleet()}
+            innerHTML={ICONS.fleet}
           />
         </Show>
         <Show when={settings.navVisible.history}>

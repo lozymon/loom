@@ -17,7 +17,7 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 /** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
  *  so this config stays reachable). */
-export type NavItemId = "overview" | "palette" | "git" | "docs" | "history" | "reopen";
+export type NavItemId = "overview" | "palette" | "git" | "docs" | "fleet" | "history" | "reopen";
 
 export interface Settings {
   // ---- Appearance (terminal text) ----
@@ -85,6 +85,8 @@ export interface Settings {
   docsWidth: number;
   /** Height (px) of the Docs file list; drag the divider below it to resize. */
   docsListHeight: number;
+  /** Width (px) of the docked Fleet (coordination) panel; drag its left edge to resize. */
+  fleetWidth: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -109,13 +111,14 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionLogging: false,
   resumeAgentSessions: true,
   keybindings: { ...DEFAULT_KEYBINDINGS },
-  navVisible: { overview: true, palette: true, git: true, docs: true, history: true, reopen: true },
+  navVisible: { overview: true, palette: true, git: true, docs: true, fleet: true, history: true, reopen: true },
   railWidth: 212,
   railCollapsed: false,
   gitWidth: 440,
   gitListHeight: 180,
   docsWidth: 480,
   docsListHeight: 180,
+  fleetWidth: 340,
 };
 
 const [settings, setStore] = createStore<Settings>({ ...DEFAULT_SETTINGS });

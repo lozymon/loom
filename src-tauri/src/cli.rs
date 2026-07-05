@@ -26,6 +26,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -47,6 +49,12 @@ pub fn is_command(cmd: &str) -> bool {
             | "focus"
             | "attention"
             | "status"
+            | "note"
+            | "claim"
+            | "release"
+            | "claims"
+            | "ask"
+            | "reply"
             | "hooks"
             | "hook"
     )
@@ -74,6 +82,12 @@ pub fn run() {
     // stdin, push the matching ADR-0008 lifecycle op. Fire-and-forget, silent, never fails.
     if args[0] == "hook" {
         run_hook_emit(&args[1..]);
+        return;
+    }
+    // `ask` is the only multi-round-trip command (§2a): it fires one `ask`, then long-polls
+    // `ask.await` until the callee replies — so it can't use the single-shot build/send path below.
+    if args[0] == "ask" {
+        run_ask(&args[1..]);
         return;
     }
     let req = match build_request(&args) {
@@ -297,8 +311,145 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(json!({ "op": "status", "target": target, "text": text }))
         }
 
+        "note" => {
+            // loom note set <key> <value...>   — post to the workspace blackboard (§2b)
+            // loom note get <key>              — read one entry
+            // loom note list                   — dump the whole board
+            // loom note del <key>              — remove one entry
+            // Scoped to the caller pane's workspace ($LOOM_PANE), or --workspace <name>.
+            if args.len() < 2 {
+                return Err("note needs a subcommand: set | get | list | del".to_string());
+            }
+            let action = args[1].clone();
+            // Pull an optional --workspace/-w out of the tail; a leading "--" ends flag parsing so
+            // a value that starts with a dash still works (loom note set k -- --flagish).
+            let mut workspace: Option<String> = None;
+            let mut rest: Vec<String> = Vec::new();
+            let mut i = 2;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--workspace" | "-w" => {
+                        i += 1;
+                        workspace = Some(
+                            args.get(i)
+                                .ok_or("--workspace needs a name")?
+                                .clone(),
+                        );
+                    }
+                    "--" => {
+                        rest.extend_from_slice(&args[i + 1..]);
+                        break;
+                    }
+                    _ => rest.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            let mut obj = match action.as_str() {
+                "set" => {
+                    if rest.is_empty() {
+                        return Err("note set needs a key: loom note set <key> <value>".to_string());
+                    }
+                    let key = rest.remove(0);
+                    let value = rest.join(" ");
+                    json!({ "op": "note.set", "key": key, "value": value })
+                }
+                "get" => {
+                    let key = rest
+                        .into_iter()
+                        .next()
+                        .ok_or("note get needs a key: loom note get <key>")?;
+                    json!({ "op": "note.get", "key": key })
+                }
+                "list" | "ls" => json!({ "op": "note.list" }),
+                "del" | "rm" => {
+                    let key = rest
+                        .into_iter()
+                        .next()
+                        .ok_or("note del needs a key: loom note del <key>")?;
+                    json!({ "op": "note.del", "key": key })
+                }
+                other => {
+                    return Err(format!(
+                        "unknown note subcommand '{other}' (set | get | list | del)"
+                    ))
+                }
+            };
+            // The caller pane (from $LOOM_PANE) scopes to its workspace and is recorded as writer.
+            if let Ok(pane) = env::var("LOOM_PANE") {
+                obj["pane"] = json!(pane);
+            }
+            if let Some(w) = workspace {
+                obj["workspace"] = json!(w);
+            }
+            Ok(obj)
+        }
+
+        "claim" | "release" | "claims" => {
+            // loom claim <path> [--workspace W]                 — take an advisory lock (§2c)
+            // loom release <path> [--force] [--workspace W]     — drop your lock (--force: any)
+            // loom claims [--workspace W]                       — list the workspace's locks
+            // The caller pane ($LOOM_PANE) is the holder identity for claim/release.
+            let op = args[0].as_str();
+            let mut workspace: Option<String> = None;
+            let mut force = false;
+            let mut positional: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--workspace" | "-w" => {
+                        i += 1;
+                        workspace = Some(args.get(i).ok_or("--workspace needs a name")?.clone());
+                    }
+                    "--force" if op == "release" => force = true,
+                    "--" => {
+                        positional.extend_from_slice(&args[i + 1..]);
+                        break;
+                    }
+                    _ => positional.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            let mut obj = if op == "claims" {
+                json!({ "op": "claims" })
+            } else {
+                let path = positional
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| format!("{op} needs a path: loom {op} <path>"))?;
+                let mut o = json!({ "op": op, "path": path });
+                if force {
+                    o["force"] = json!(true);
+                }
+                o
+            };
+            if let Ok(pane) = env::var("LOOM_PANE") {
+                obj["pane"] = json!(pane);
+            }
+            if let Some(w) = workspace {
+                obj["workspace"] = json!(w);
+            }
+            Ok(obj)
+        }
+
+        "reply" => {
+            // loom reply <id> <answer...>   — answer an ask you were sent (§2a).
+            // The id comes from the `[loom ask #N …]` prompt that was typed into this pane.
+            if args.len() < 2 {
+                return Err("reply needs an ask id: loom reply <id> <answer>".to_string());
+            }
+            let id: u64 = args[1]
+                .parse()
+                .map_err(|_| format!("'{}' is not an ask id (a number)", args[1]))?;
+            let answer = args[2..].join(" ");
+            let mut obj = json!({ "op": "reply", "id": id, "answer": answer });
+            if let Ok(pane) = env::var("LOOM_PANE") {
+                obj["from"] = json!(pane);
+            }
+            Ok(obj)
+        }
+
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note, claim, release, claims, ask, reply)"
         )),
     }
 }
@@ -391,7 +542,214 @@ fn handle_response(op: &str, resp: &Value) {
                 println!("status of '{name}' → {text}");
             }
         }
+        "note" => {
+            let action = data
+                .and_then(|d| d.get("action"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let key = || {
+                data.and_then(|d| d.get("key"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("?")
+            };
+            match action {
+                "set" => println!("noted '{}'", key()),
+                "del" => println!("deleted '{}'", key()),
+                "get" => {
+                    let value = data
+                        .and_then(|d| d.get("value"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    println!("{value}");
+                }
+                "list" => print_notes(data),
+                _ => {}
+            }
+        }
+        "claim" => {
+            let path = data
+                .and_then(|d| d.get("path"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            let fresh = data
+                .and_then(|d| d.get("fresh"))
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            if fresh {
+                println!("claimed '{path}'");
+            } else {
+                println!("already yours: '{path}'");
+            }
+        }
+        "release" => {
+            let path = data
+                .and_then(|d| d.get("path"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            println!("released '{path}'");
+        }
+        "claims" => print_claims(data),
+        "reply" => {
+            let id = data
+                .and_then(|d| d.get("id"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            println!("replied to ask #{id}");
+        }
         _ => {}
+    }
+}
+
+/// Pretty-print a `claims` board: `path   (held by pane)`, one per line, aligned.
+fn print_claims(data: Option<&Value>) {
+    let Some(arr) = data
+        .and_then(|d| d.get("entries"))
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    if arr.is_empty() {
+        println!("(no claims)");
+        return;
+    }
+    for e in arr {
+        let path = e.get("path").and_then(Value::as_str).unwrap_or("?");
+        let by = e.get("by").and_then(Value::as_str).unwrap_or("");
+        println!("{path:<32} (held by {by})");
+    }
+}
+
+// ---- `loom ask <pane> <question>` — request/response RPC (§2a) ----
+//
+// The one multi-round-trip command: fire one `ask` (returns a correlation id), then long-poll
+// `ask.await` in <10s slices — under the relay's parked-connection cap — until the callee runs
+// `loom reply <id> <answer>`. Prints the answer on success; exits non-zero on timeout so
+// `answer=$(loom ask Cleo "…") || handle_no_answer` scripts cleanly.
+fn run_ask(args: &[String]) {
+    let mut timeout_s: u64 = 300;
+    let mut positional: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--timeout" | "-t" => {
+                i += 1;
+                timeout_s = match args.get(i).and_then(|s| s.parse().ok()) {
+                    Some(n) if n > 0 => n,
+                    _ => {
+                        eprintln!("loom: --timeout needs a positive number of seconds");
+                        exit(2);
+                    }
+                };
+            }
+            "--" => {
+                positional.extend_from_slice(&args[i + 1..]);
+                break;
+            }
+            _ => positional.push(args[i].clone()),
+        }
+        i += 1;
+    }
+    if positional.is_empty() {
+        eprintln!("loom: ask needs a pane: loom ask <pane> <question>");
+        exit(2);
+    }
+    let target = positional.remove(0);
+    if positional.is_empty() {
+        eprintln!("loom: ask needs a question: loom ask <pane> <question>");
+        exit(2);
+    }
+    let question = positional.join(" ");
+
+    // 1. Fire the ask; the frontend types the question into `target` and hands back an id.
+    let mut ask_req = json!({
+        "op": "ask",
+        "target": target,
+        "question": question,
+        "timeoutMs": timeout_s.saturating_mul(1000),
+    });
+    if let Ok(pane) = env::var("LOOM_PANE") {
+        ask_req["from"] = json!(pane);
+    }
+    let resp = match control_sock::send(&ask_req) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("loom: {e}");
+            exit(1);
+        }
+    };
+    if resp.get("ok").and_then(Value::as_bool) != Some(true) {
+        let err = resp
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("ask failed");
+        eprintln!("loom: {err}");
+        exit(1);
+    }
+    let id = resp
+        .pointer("/data/id")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+
+    // 2. Long-poll for the reply until the deadline.
+    let deadline = Instant::now() + Duration::from_secs(timeout_s);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            eprintln!("loom: ask #{id} to '{target}' timed out after {timeout_s}s");
+            exit(1);
+        }
+        let wait_ms = remaining.as_millis().min(8000) as u64;
+        let await_req = json!({ "op": "ask.await", "id": id, "waitMs": wait_ms });
+        let r = match control_sock::send(&await_req) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("loom: {e}");
+                exit(1);
+            }
+        };
+        match r.pointer("/data/state").and_then(Value::as_str) {
+            Some("answered") => {
+                let answer = r
+                    .pointer("/data/answer")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                println!("{answer}");
+                return;
+            }
+            Some("pending") => {
+                // No reply yet — a brief pause keeps a hot loop from hammering the socket if the
+                // frontend returns quickly, then poll again.
+                thread::sleep(Duration::from_millis(200));
+            }
+            other => {
+                // "expired", "unknown", or a malformed reply — the ask is gone.
+                eprintln!(
+                    "loom: ask #{id} to '{target}' ended without an answer ({})",
+                    other.unwrap_or("no state")
+                );
+                exit(1);
+            }
+        }
+    }
+}
+
+/// Pretty-print a `note list` board: `key   value  (by)`, one per line, aligned.
+fn print_notes(data: Option<&Value>) {
+    let Some(arr) = data
+        .and_then(|d| d.get("entries"))
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    if arr.is_empty() {
+        println!("(board empty)");
+        return;
+    }
+    for e in arr {
+        let key = e.get("key").and_then(Value::as_str).unwrap_or("?");
+        let value = e.get("value").and_then(Value::as_str).unwrap_or("");
+        let by = e.get("by").and_then(Value::as_str).unwrap_or("");
+        println!("{key:<20} {value}  ({by})");
     }
 }
 
@@ -660,6 +1018,10 @@ fn usage() {
         \x20 loom focus <pane>\n\
         \x20 loom attention [pane] [--clear]\n\
         \x20 loom status [pane] <text...> | [pane] --clear\n\
+        \x20 loom note set <key> <value...> | get <key> | list | del <key>  [--workspace W]\n\
+        \x20 loom claim <path> | release <path> [--force] | claims  [--workspace W]\n\
+        \x20 loom ask <pane> <question...> [--timeout S]\n\
+        \x20 loom reply <id> <answer...>\n\
         \x20 loom hooks [--print] | --install [--user|--project]"
     );
 }

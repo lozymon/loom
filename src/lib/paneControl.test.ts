@@ -24,10 +24,22 @@ const h = vi.hoisted(() => ({
   revealPaneByName: vi.fn(),
   spawnPane: vi.fn(),
   workspaceByName: vi.fn(),
+  workspaceByPaneName: vi.fn(),
   noteAttention: vi.fn(),
   clearAttention: vi.fn(),
   setStatus: vi.fn(),
   notifyAttention: vi.fn(),
+  noteSet: vi.fn(),
+  noteGet: vi.fn(),
+  noteList: vi.fn(),
+  noteDel: vi.fn(),
+  claimFile: vi.fn(),
+  releaseFile: vi.fn(),
+  listClaims: vi.fn(),
+  createAsk: vi.fn(),
+  awaitAsk: vi.fn(),
+  replyAsk: vi.fn(),
+  cancelAsk: vi.fn(),
   settings: { confirmExternalSpawn: false },
 }));
 
@@ -42,8 +54,12 @@ vi.mock("../stores/workspace", () => ({
   revealPaneByName: h.revealPaneByName,
   spawnPane: h.spawnPane,
   workspaceByName: h.workspaceByName,
+  workspaceByPaneName: h.workspaceByPaneName,
 }));
 vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus }));
+vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel }));
+vi.mock("../stores/claims", () => ({ claimFile: h.claimFile, releaseFile: h.releaseFile, listClaims: h.listClaims }));
+vi.mock("./askRegistry", () => ({ createAsk: h.createAsk, awaitAsk: h.awaitAsk, replyAsk: h.replyAsk, cancelAsk: h.cancelAsk }));
 vi.mock("./notify", () => ({ notifyAttention: h.notifyAttention }));
 vi.mock("../stores/settings", () => ({ settings: h.settings }));
 
@@ -60,10 +76,22 @@ const {
   revealPaneByName,
   spawnPane,
   workspaceByName,
+  workspaceByPaneName,
   noteAttention,
   clearAttention,
   setStatus,
   notifyAttention,
+  noteSet,
+  noteGet,
+  noteList,
+  noteDel,
+  claimFile,
+  releaseFile,
+  listClaims,
+  createAsk,
+  awaitAsk,
+  replyAsk,
+  cancelAsk,
   settings,
 } = h;
 
@@ -327,5 +355,227 @@ describe("status", () => {
     const res = await call({ op: "status", target: "Cleo", text: "   " });
     expect(setStatus).toHaveBeenCalledWith(6, "");
     expect(res).toEqual({ ok: true, data: { name: "Cleo", text: "", cleared: true } });
+  });
+});
+
+describe("note (blackboard)", () => {
+  const ws = { id: "w1", name: "Home" };
+
+  it("scopes set to the caller pane's workspace and records the writer", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    const res = await call({ op: "note.set", key: "plan.api", value: "Cleo — wip", pane: "Faye" });
+    expect(workspaceByPaneName).toHaveBeenCalledWith("Faye");
+    expect(noteSet).toHaveBeenCalledWith("w1", "plan.api", "Cleo — wip", "Faye");
+    expect(res).toEqual({ ok: true, data: { action: "set", key: "plan.api", workspace: "Home" } });
+  });
+
+  it("prefers an explicit --workspace over the caller pane", async () => {
+    workspaceByName.mockReturnValue({ id: "w2", name: "Infra" });
+    await call({ op: "note.set", key: "k", value: "v", pane: "Faye", workspace: "Infra" });
+    expect(workspaceByName).toHaveBeenCalledWith("Infra");
+    expect(workspaceByPaneName).not.toHaveBeenCalled();
+    expect(noteSet).toHaveBeenCalledWith("w2", "k", "v", "Faye");
+  });
+
+  it("falls back to the active workspace when no pane/workspace resolves", async () => {
+    workspaceByPaneName.mockReturnValue(undefined);
+    activeWorkspace.mockReturnValue(ws);
+    await call({ op: "note.set", key: "k", value: "v", pane: "ghost" });
+    expect(noteSet).toHaveBeenCalledWith("w1", "k", "v", "ghost");
+  });
+
+  it("errors when --workspace names nothing", async () => {
+    workspaceByName.mockReturnValue(undefined);
+    const res = await call({ op: "note.set", key: "k", value: "v", workspace: "nope" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no workspace named "nope"/);
+    expect(noteSet).not.toHaveBeenCalled();
+  });
+
+  it("rejects a set with a blank key", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    const res = await call({ op: "note.set", key: "   ", value: "v" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/needs a key/);
+    expect(noteSet).not.toHaveBeenCalled();
+  });
+
+  it("get returns the entry (value, writer, timestamp)", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    noteGet.mockReturnValue({ value: "lucia-auth", by: "Cleo", at: 123 });
+    const res = await call({ op: "note.get", key: "auth.lib" });
+    expect(noteGet).toHaveBeenCalledWith("w1", "auth.lib");
+    expect(res).toEqual({ ok: true, data: { action: "get", key: "auth.lib", value: "lucia-auth", by: "Cleo", at: 123 } });
+  });
+
+  it("get errors on a missing key", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    noteGet.mockReturnValue(undefined);
+    const res = await call({ op: "note.get", key: "absent" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no note "absent" on the "Home" board/);
+  });
+
+  it("list returns the board entries", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    const entries = [{ key: "a", value: "1", by: "Faye", at: 1 }];
+    noteList.mockReturnValue(entries);
+    const res = await call({ op: "note.list" });
+    expect(noteList).toHaveBeenCalledWith("w1");
+    expect(res).toEqual({ ok: true, data: { action: "list", workspace: "Home", entries } });
+  });
+
+  it("del reports a hit", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    noteDel.mockReturnValue(true);
+    const res = await call({ op: "note.del", key: "a" });
+    expect(noteDel).toHaveBeenCalledWith("w1", "a");
+    expect(res).toEqual({ ok: true, data: { action: "del", key: "a", workspace: "Home" } });
+  });
+
+  it("del errors when the key wasn't set", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    noteDel.mockReturnValue(false);
+    const res = await call({ op: "note.del", key: "gone" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no note "gone" to delete/);
+  });
+});
+
+describe("claim / release / claims", () => {
+  const ws = { id: "w1", name: "Home" };
+
+  it("claim takes the lock as the caller pane, scoped to its workspace", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    claimFile.mockReturnValue({ ok: true, fresh: true });
+    const res = await call({ op: "claim", path: "src/auth.ts", pane: "Faye" });
+    expect(claimFile).toHaveBeenCalledWith("w1", "src/auth.ts", "Faye");
+    expect(res).toEqual({ ok: true, data: { action: "claim", path: "src/auth.ts", by: "Faye", fresh: true } });
+  });
+
+  it("claim reports fresh=false when it's already yours", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    claimFile.mockReturnValue({ ok: true, fresh: false });
+    const res = await call({ op: "claim", path: "src/auth.ts", pane: "Faye" });
+    expect(res).toEqual({ ok: true, data: { action: "claim", path: "src/auth.ts", by: "Faye", fresh: false } });
+  });
+
+  it("claim held by another pane is an error naming the holder", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    claimFile.mockReturnValue({ ok: false, by: "Cleo", at: 1 });
+    const res = await call({ op: "claim", path: "src/auth.ts", pane: "Faye" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/"src\/auth.ts" is held by Cleo/);
+  });
+
+  it("claim requires a calling pane", async () => {
+    const res = await call({ op: "claim", path: "src/auth.ts" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/needs a calling pane/);
+    expect(claimFile).not.toHaveBeenCalled();
+  });
+
+  it("release drops your own lock", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: true });
+    const res = await call({ op: "release", path: "src/auth.ts", pane: "Faye" });
+    expect(releaseFile).toHaveBeenCalledWith("w1", "src/auth.ts", "Faye", false);
+    expect(res).toEqual({ ok: true, data: { action: "release", path: "src/auth.ts" } });
+  });
+
+  it("release passes --force through", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: true });
+    await call({ op: "release", path: "src/auth.ts", pane: "Faye", force: true });
+    expect(releaseFile).toHaveBeenCalledWith("w1", "src/auth.ts", "Faye", true);
+  });
+
+  it("release of an unheld path errors", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: false, reason: "unheld" });
+    const res = await call({ op: "release", path: "x", pane: "Faye" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no claim on "x"/);
+  });
+
+  it("release of another pane's lock errors with a --force hint", async () => {
+    workspaceByPaneName.mockReturnValue(ws);
+    releaseFile.mockReturnValue({ ok: false, reason: "other", by: "Cleo" });
+    const res = await call({ op: "release", path: "x", pane: "Faye" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/held by Cleo — use --force/);
+  });
+
+  it("claims lists the workspace's locks (no holder pane needed)", async () => {
+    activeWorkspace.mockReturnValue(ws);
+    const entries = [{ path: "src/a.ts", by: "Faye", at: 1 }];
+    listClaims.mockReturnValue(entries);
+    const res = await call({ op: "claims" });
+    expect(listClaims).toHaveBeenCalledWith("w1");
+    expect(res).toEqual({ ok: true, data: { action: "claims", workspace: "Home", entries } });
+  });
+});
+
+describe("ask / reply", () => {
+  it("ask registers a correlation id and types the question + reply instructions into the pane", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 7 });
+    createAsk.mockReturnValue(42);
+    writeToPanes.mockReturnValue(1);
+    const res = await call({ op: "ask", target: "Cleo", question: "which auth lib?", from: "Faye" });
+    expect(createAsk).toHaveBeenCalledWith("Cleo", "Faye", "which auth lib?", 300_000);
+    // one write to the pane, carrying the id + the reply recipe, submitted with Enter
+    const [ids, text] = writeToPanes.mock.calls[0];
+    expect(ids).toEqual([7]);
+    expect(text).toContain("loom ask #42 from Faye");
+    expect(text).toContain("loom reply 42");
+    expect(text).toContain("which auth lib?");
+    expect(text.endsWith("\r")).toBe(true);
+    expect(res).toEqual({ ok: true, data: { id: 42 } });
+  });
+
+  it("ask cancels the registration and errors if the pane isn't live", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 7 });
+    createAsk.mockReturnValue(42);
+    writeToPanes.mockReturnValue(0); // not live
+    const res = await call({ op: "ask", target: "Cleo", question: "q", from: "Faye" });
+    expect(cancelAsk).toHaveBeenCalledWith(42);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not live/);
+  });
+
+  it("ask rejects a blank question", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 7 });
+    const res = await call({ op: "ask", target: "Cleo", question: "   " });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/needs a question/);
+    expect(createAsk).not.toHaveBeenCalled();
+  });
+
+  it("ask errors on an unknown target", async () => {
+    resolvePaneByName.mockReturnValue({ error: 'no pane named "Ghost"' });
+    const res = await call({ op: "ask", target: "Ghost", question: "q" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no pane named "Ghost"/);
+  });
+
+  it("ask.await forwards the poll result and clamps waitMs under the relay cap", async () => {
+    awaitAsk.mockResolvedValue({ state: "answered", answer: "lucia-auth", by: "Cleo" });
+    const res = await call({ op: "ask.await", id: 42, waitMs: 100000 });
+    expect(awaitAsk).toHaveBeenCalledWith(42, 9000); // clamped from 100000
+    expect(res).toEqual({ ok: true, data: { state: "answered", answer: "lucia-auth", by: "Cleo" } });
+  });
+
+  it("reply delivers the answer and records the replier", async () => {
+    replyAsk.mockReturnValue(true);
+    const res = await call({ op: "reply", id: 42, answer: "  lucia-auth  ", from: "Cleo" });
+    expect(replyAsk).toHaveBeenCalledWith(42, "lucia-auth", "Cleo");
+    expect(res).toEqual({ ok: true, data: { id: 42 } });
+  });
+
+  it("reply errors when the ask is gone (expired or already answered)", async () => {
+    replyAsk.mockReturnValue(false);
+    const res = await call({ op: "reply", id: 99, answer: "x" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no open ask #99/);
   });
 });
