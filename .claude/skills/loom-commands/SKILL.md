@@ -5,10 +5,11 @@ description: Reference for driving Loom terminal panes from inside a pane — th
 
 <what-this-is>
 
-Loom is a GUI terminal multiplexer. Every pane is an opaque PTY; Loom never parses pane
-output (ADR-0001). A process running **inside** a pane can nonetheless drive the other
-panes through an *inbound* control bus (ADR-0007): the `loom` CLI (or the `loom mcp` MCP
-tools) talks to the running app over the unix socket at `$LOOM_SOCK`.
+Loom is an **agent-first developer environment** built on real terminals. Every pane is a
+byte-opaque PTY — Loom never parses pane output in the engine (ADR-0001/0008; an opt-in
+heuristic tier is ADR-0011). A process running **inside** a pane can nonetheless drive the
+other panes through an *inbound* control bus (ADR-0007): the `loom` CLI (or the `loom mcp`
+MCP tools) talks to the running app over the unix socket at `$LOOM_SOCK`.
 
 Two faces of the same bus — use whichever fits your context:
 

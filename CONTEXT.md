@@ -1,11 +1,11 @@
 # Loom
 
-A Linux-first desktop "control room" of real terminals — a GUI terminal multiplexer that runs many PTYs at once in resizable split grids and a left rail of workspaces.
+A Linux-first desktop **agent-first developer environment** built on real terminals — a control room for driving and observing a fleet of CLI agents, running many PTYs at once in resizable split grids and a left rail of workspaces. The engine stays generic (a Pane is any PTY); the product leads with agents.
 
 ## Language
 
 **Pane**:
-A single tile in the grid, bound one-to-one to a PTY running an arbitrary command. The fundamental unit Loom renders. Panes are *opaque* — Loom streams their bytes but never interprets them. A Pane is **Live** (PTY running) or **Dead** (child exited; tile stays in place showing its exit code with a restart affordance). A Pane only leaves the layout when explicitly closed (✕), never automatically on child exit.
+A single tile in the grid, bound one-to-one to a PTY running an arbitrary command. The fundamental unit Loom renders. Panes are *byte-opaque in the engine* — the PTY hot path streams their bytes and never parses them. Loom's awareness of an agent comes from what the agent pushes (bus/hooks/MCP) or the kernel exposes (cwd, foreground pgrp); a separate opt-in observer may derive *heuristic* signals from output, always marked lossy and overridden by a pushed signal (ADR-0008, ADR-0011). A Pane is **Live** (PTY running) or **Dead** (child exited; tile stays in place showing its exit code with a restart affordance). A Pane only leaves the layout when explicitly closed (✕), never automatically on child exit.
 _Avoid_: terminal (the visible thing is a Pane; "terminal" is ambiguous between the UI tile and the OS device), window, cell
 
 **Pane name**:

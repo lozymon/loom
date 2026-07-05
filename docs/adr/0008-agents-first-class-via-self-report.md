@@ -2,6 +2,8 @@
 
 **Status:** Accepted (2026-06-28). **Supersedes [ADR-0001](0001-opaque-panes-no-agent-awareness.md).**
 
+> **Partially superseded by [ADR-0011](0011-heuristic-output-observer.md) (2026-07-05).** ADR-0011 relaxes this ADR's blanket "any awareness derived from Pane output stays rejected" into a *labeled, opt-in, per-agent-kind, always-overridable* heuristic tier **below** the floor. The entity model, the pushed/kernel provenance for ground-truth facts, and the byte-opaque engine described here are all unchanged — a scraped fact is never ground truth and never overrides a pushed one.
+
 ADR-0001 bundled two bans together: **(a)** the data model has no `Agent`/`Session` entity, and **(b)** Loom never parses a Pane's output byte stream. Reorienting Loom into an agent-first developer environment ([AGENT_FIRST_PLAN.md](../../AGENT_FIRST_PLAN.md)) needs (a) gone — a real fleet view, a session log, and approvals triage all need durable agent entities — while (b) is exactly right and we keep it. This ADR **reverses (a) and reaffirms (b)**, drawing the line by the *provenance* of a fact rather than by whether Loom models it.
 
 ## The dividing line: provenance, not modelling
@@ -10,7 +12,7 @@ ADR-0001 bundled two bans together: **(a)** the data model has no `Agent`/`Sessi
 
 > Loom may model and persist any fact an agent **pushes to it deliberately** (structured lifecycle signals via Claude Code hooks or the `loom mcp` server) or that the **kernel exposes** (process state, cwd). It must never model a fact **derived from parsing a Pane's output bytes.**
 
-The PTY engine (`pty.rs`) stays byte-opaque; its coalescing/back-pressure path never grows a parser. Output-scraping for awareness — BridgeSpace-style token counts, status inferred from ANSI redraws — stays rejected, exactly as ADR-0001 intended. What changes is only that we now *have* entities to attach the pushed and kernel facts to.
+The PTY engine (`pty.rs`) stays byte-opaque; its coalescing/back-pressure path never grows a parser. Output-scraping for awareness — reference-app-style token counts, status inferred from ANSI redraws — stays rejected, exactly as ADR-0001 intended. What changes is only that we now *have* entities to attach the pushed and kernel facts to.
 
 ## The domain model
 

@@ -1,9 +1,11 @@
 # Loom — Terminal Control Room
 
-> A Linux-first desktop app for running many real terminals at once, arranged in resizable split grids and a left workspace rail — a GUI terminal multiplexer (think tmux/Terminator) tuned for driving fleets of CLI agents. Built on Tauri 2 + SolidJS + xterm.js, with PTYs managed in Rust.
+> **Historical build log.** This records the M0–M11 milestone plan as built, in its original "terminal multiplexer" framing. Loom's identity has since moved to an **agent-first developer environment** — see [ADR-0008](docs/adr/0008-agents-first-class-via-self-report.md), [ADR-0011](docs/adr/0011-heuristic-output-observer.md), and [AGENT_FIRST_PLAN.md](AGENT_FIRST_PLAN.md). The engine described here is unchanged; only the product framing moved.
+
+> A Linux-first desktop **agent-first developer environment** built on real terminals — many real PTYs at once in resizable split grids and a left workspace rail (a GUI tmux/Terminator substrate), tuned for driving and observing a fleet of CLI agents. Built on Tauri 2 + SolidJS + xterm.js, with PTYs managed in Rust.
 
 ## Context
-A "control room" of live terminals. Each pane is a real pseudo-terminal running any command — a shell, `claude`, a dev server, `tail -f`, `vim`. You split panes into a resizable grid, group them into Workspaces on a left rail, and (the headline trick) **broadcast one input to many panes at once** to launch and prompt a whole fleet in lockstep. Generic first: agents are just the most interesting thing you can run in a pane, not a special case baked into the model. This doc is the executable, incremental build plan; it front-loads the riskiest assumption (high-throughput PTY output rendering smoothly through Tauri IPC into WebKitGTK). *(Update 2026-06-25: the human broadcast bar was later removed as unused; one-to-many fan-out is now agent-driven only, via the `loom broadcast` control-bus command — see docs/ASSESSMENT.md.)*
+A "control room" of live terminals. Each pane is a real pseudo-terminal running any command — a shell, `claude`, a dev server, `tail -f`, `vim`. You split panes into a resizable grid, group them into Workspaces on a left rail, and (the headline trick) **broadcast one input to many panes at once** to launch and prompt a whole fleet in lockstep. The engine is generic — a pane is any PTY — but the product leads with agents (first-class since ADR-0008). This doc is the executable, incremental build plan; it front-loads the riskiest assumption (high-throughput PTY output rendering smoothly through Tauri IPC into WebKitGTK). *(Update 2026-06-25: the human broadcast bar was later removed as unused; one-to-many fan-out is now agent-driven only, via the `loom broadcast` control-bus command — see docs/ASSESSMENT.md.)*
 
 **Locked-in stack:**
 - **Shell:** Tauri 2 (Rust + system WebKitGTK webview) — small bundles, fast on Linux.
@@ -11,7 +13,7 @@ A "control room" of live terminals. Each pane is a real pseudo-terminal running 
 - **PTYs:** Rust **`portable-pty`** (wezterm crate) — one PTY + child process per pane.
 - **Persistence:** local JSON config (serde) for workspaces/layouts. SQLite only if/when searchable scrollback or session logging is wanted (deferred).
 
-**Environment:** Node v24, Rust 1.96/cargo, Linux Mint 22.3 (apt). Project lives at `/home/lozymon/code/agentdeck/` (directory still named `agentdeck` — rename to `loom` is optional, see below).
+**Environment:** Node v24, Rust 1.96/cargo, Linux Mint 22.3 (apt). Project lives at `/home/lozymon/code/loom/`.
 
 ## Architecture
 ```
@@ -56,7 +58,7 @@ type Workspace = { id: string; name: string; cwd: string; tree: LayoutNode; pane
 - **Input routing:** **click-to-focus**, exactly one focused Pane; all keystrokes route to its PTY via `pty_write`. Mouse wheel scrolls that Pane's xterm scrollback locally (reaches the PTY only when the inner app enables mouse mode). App shortcuts occupy **only the `Ctrl+Shift+<key>` namespace** (`C/V` copy/paste, `D` split, `W` close, `←/→/↑/↓` move focus, `T` new Workspace…); every other combo — plain `Ctrl+C` (SIGINT), `Ctrl+B`, arrows, function keys — passes through untouched. No prefix key. See [ADR-0005](docs/adr/0005-ctrl-shift-shortcut-namespace.md).
 
 ### New-workspace wizard (the **+** on the rail)
-Clicking **+** on the workspace rail opens a 3-step setup wizard (**Start → Layout → Agents**), mirroring the reference app:
+Clicking **+** on the workspace rail opens a 3-step setup wizard (**Start → Layout → Agents**):
 1. **Start** — pick the **working folder** (where every terminal in this workspace starts). Surfaces **Recent workspaces** (folder + remembered terminal count) and **Presets** (saved configs) for one-click relaunch.
 2. **Layout** — a row of **grid-preset tiles**: 1, 2, 4, 6, 8, 10, 12 terminals. Tapping a tile builds a **width-biased** balanced grid via `buildBalancedTree(n)` — `rows = floor(√n)`, `cols = ceil(n/rows)`, so tiles stay as wide as possible: 2→1×2, 4→2×2, 6→2×3, 8→2×4, 10→2×5, 12→3×4 (rows×cols). The freeform splitter still works after launch; this is the fast on-ramp, not a separate mode.
 3. **Agents** *(optional)* — assign a launch command per pane (default `$SHELL`; one-click presets like `claude`). Exit via **"Open without AI"** (all panes = plain shells) or **"Next: Add AI agents"** then launch.
@@ -88,7 +90,7 @@ SQLite is deferred to a later milestone only if searchable scrollback / session 
 
 ## Out of scope for v1 (explicit no's)
 These are deliberate exclusions, each recorded where relevant. Listed here so scope is unambiguous:
-- **Agent-awareness** — no output parsing, token counts, or status badges; panes are opaque (ADR-0001).
+- **Agent-awareness** — no output parsing, token counts, or status badges; panes are opaque (ADR-0001). *(Superseded post-v1: agents became first-class via pushed signals — [ADR-0008](docs/adr/0008-agents-first-class-via-self-report.md) — with an opt-in heuristic output-observer as a lossy fallback — [ADR-0011](docs/adr/0011-heuristic-output-observer.md); the engine hot path stays byte-opaque.)*
 - **Right-side Browser panel** — dropped for now. The reference app's `localhost`/docs preview is a whole second surface (embedded navigable webview) off the critical path; users alt-tab to a real browser. Revisit post-v1.
 - **Detach/reattach daemon** — quitting kills all PTYs; persistence = respawn, not live-process survival (ADR-0002).
 - **Multi-window & tear-off panes** — a Pane lives in one Workspace in the one window; multi-monitor/tear-off is a later feature.

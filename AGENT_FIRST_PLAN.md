@@ -16,7 +16,7 @@ Four scoping decisions, made up front, that constrain everything below:
 
 | Axis | Decision | Consequence |
 | --- | --- | --- |
-| **Opacity / awareness** | **Full agent-aware pivot.** Introduce real `Agent` / `Session` / `Task` entities; Loom understands agent lifecycles end-to-end. | Reverses ADR-0001's "no Agent/Session entity." Needs a superseding ADR. |
+| **Opacity / awareness** | **Full agent-aware pivot.** Introduce real `Agent` / `Session` / `Task` entities; Loom understands agent lifecycles end-to-end. | Reverses ADR-0001's "no Agent/Session entity" (shipped as ADR-0008). Output-scraping later relaxed to a labeled, opt-in heuristic tier — ADR-0011. |
 | **Surfaces** | **Terminal-centric + interactive git.** No built-in code editor, no separate task/plan/orchestration panels. | Awareness shows up *in the surfaces we already have* (title bars, overview/fleet board, badges) + a git panel promoted to stage/commit. |
 | **Orchestration** | **Stay a host.** No built-in "brain." One agent-in-a-pane can still drive the fleet via the bus/MCP. | Loom *observes and represents* agents; it doesn't plan or dispatch work itself. |
 | **Identity** | **Reorient the product.** Agent-first leads the defaults, onboarding, and docs. | The generic-multiplexer framing recedes (but the engine stays generic underneath). |
@@ -50,6 +50,14 @@ the model:
 
 The result: rich for hook/MCP-capable agents (Claude Code today), coarse-but-correct for everything
 else — and the byte engine never gets touched.
+
+> **Amendment (2026-07-05, [ADR-0011](docs/adr/0011-heuristic-output-observer.md)).** The
+> engine-opacity half of this principle is absolute and unchanged (`pty.rs` never parses). The
+> *awareness-provenance* half is relaxed: **below** the OS floor sits an **opt-in, per-agent-kind
+> heuristic tier** — a separate TS observer of the bytes the frontend already renders — for
+> hookless agents (Aider, Gemini, Codex). It is always labeled a guess and always overridden by a
+> pushed/kernel fact, so "pushed = truth" still holds; it just no longer means "output is never
+> read for a lossy hint." The heuristic never becomes ground truth.
 
 ## 2. Where Loom is today (the starting point)
 

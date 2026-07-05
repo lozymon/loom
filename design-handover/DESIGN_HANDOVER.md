@@ -14,8 +14,8 @@
 
 ## 1. What Loom is (in one breath)
 
-A **desktop "control room" of real terminals** — a GUI terminal multiplexer (a
-graphical tmux/Terminator) for running *many* command-line tools at once,
+A **desktop agent-first developer environment** built on real terminals (a
+graphical tmux/Terminator substrate) — for running *many* command-line tools at once,
 arranged in **resizable split grids** with a **left rail of workspaces**. It's
 tuned for driving fleets of CLI agents, so it has a **broadcast bar** that types
 one prompt into many panes at once.

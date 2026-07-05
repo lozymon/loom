@@ -2,6 +2,8 @@
 
 Notes for discussion. My honest read after going through the whole app.
 
+> **Lens update (agent-first).** This review judged surfaces by "could you just run a tool in a pane?" — multiplexer reasoning. The current test is "does it feed the agent loop?" The keep-decisions below already pass that test (docs→agent context, diff→agent review); only the framing predates the agent-first identity.
+
 ## The headline
 
 This is a _finished_ product, not a half-built one. M0–M11 plus the entire

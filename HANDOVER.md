@@ -8,9 +8,9 @@
 
 ## TL;DR
 
-Loom is a **Linux-first GUI terminal multiplexer** (a GUI tmux/Terminator)
-for driving fleets of CLI agents: many real PTYs in resizable split grids with a
-left workspace rail and broadcast-input. It is **implemented and shipping** —
+Loom is a **Linux-first agent-first developer environment** built on real terminals
+(a GUI tmux/Terminator substrate) for driving fleets of CLI agents: many real PTYs in
+resizable split grids with a left workspace rail. It is **implemented and shipping** —
 the whole M0–M11 plan *and* the IDEAS.md follow-up roadmap are done. Treat new
 work as incremental on a mature, healthy codebase, not greenfield.
 
