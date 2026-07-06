@@ -6,6 +6,25 @@ versioning.
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-07-06
+
+A Windows-focused follow-up to 1.5.0: make the Windows build actually ship and run. Linux and
+macOS builds are unchanged.
+
+### Fixed
+- **Windows installer** — ship only the NSIS installer, not the raw `loom.exe` alongside it.
+- **loom-voce on Windows** — the voice-dictation helper now builds and runs: statically link the
+  MSVC runtime (no `MSVCP140.dll`/`VCRUNTIME140.dll` dependency on a clean machine, via
+  `+crt-static` through `RUSTFLAGS`), and suppress the console-window popups every auxiliary child
+  (git, editor, loom-voce, capture, `wsl.exe`) would otherwise flash.
+- **Multi-agent workspaces on Windows** — spawn agent panes directly instead of through
+  `powershell -Command`, and serialize PTY spawns so every pane in a multi-pane workspace starts
+  reliably instead of racing.
+
+### Added
+- **loom-voce in the Windows installer** (P2.3) — the voice helper is bundled into the NSIS
+  installer via `externalBin`, matching the Linux `.deb`/AppImage and the macOS dmg.
+
 ## [1.5.0] — 2026-07-05
 
 Two themes: **fleet coordination** (agents working together over the control bus) and the start of

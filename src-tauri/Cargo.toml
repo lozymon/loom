@@ -1,6 +1,6 @@
 [package]
 name = "loom"
-version = "1.5.0"
+version = "1.5.1"
 description = "A control room of live terminals — a GUI terminal multiplexer for driving fleets of CLI agents"
 authors = ["Loom"]
 edition = "2021"
