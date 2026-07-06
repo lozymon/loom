@@ -248,11 +248,8 @@ impl WhisperStt {
         install_logging_hooks();
 
         let path = ensure_model(model)?;
-        let ctx = WhisperContext::new_with_params(
-            &path.to_string_lossy(),
-            WhisperContextParameters::default(),
-        )
-        .with_context(|| format!("failed to load whisper model at {}", path.display()))?;
+        let ctx = WhisperContext::new_with_params(&path, WhisperContextParameters::default())
+            .with_context(|| format!("failed to load whisper model at {}", path.display()))?;
 
         // English-only models (`*.en`) must be decoded as English; multilingual ones auto-detect.
         let language = if model.ends_with(".en") {
@@ -305,15 +302,17 @@ impl WhisperStt {
             .full(params, input)
             .context("whisper transcription failed")?;
 
-        let n = state
-            .full_n_segments()
-            .context("failed to count whisper segments")?;
+        // whisper-rs 0.16: `full_n_segments` returns the count directly, and per-segment text comes
+        // from `get_segment(i).to_str()` (the old `full_get_segment_text` was removed).
+        let n = state.full_n_segments();
         let mut text = String::new();
         for i in 0..n {
-            let seg = state
-                .full_get_segment_text(i)
-                .with_context(|| format!("failed to read whisper segment {i}"))?;
-            text.push_str(&seg);
+            if let Some(seg) = state.get_segment(i) {
+                let s = seg
+                    .to_str()
+                    .with_context(|| format!("failed to read whisper segment {i}"))?;
+                text.push_str(s);
+            }
         }
         Ok(text)
     }
@@ -371,22 +370,62 @@ fn download(url: &str, dest: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// `$XDG_CACHE_HOME`, else `$HOME/.cache`.
+/// The per-user cache root for downloaded models. `$XDG_CACHE_HOME` wins everywhere when set;
+/// otherwise the platform default: `$HOME/.cache` on Linux/macOS, `%LOCALAPPDATA%` (then
+/// `%USERPROFILE%\.cache`) on Windows, where neither XDG_CACHE_HOME nor HOME normally exists.
 fn cache_dir() -> Result<PathBuf> {
     if let Ok(x) = std::env::var("XDG_CACHE_HOME") {
         if !x.is_empty() {
             return Ok(PathBuf::from(x));
         }
     }
-    let home = std::env::var("HOME").context("neither XDG_CACHE_HOME nor HOME is set")?;
-    Ok(PathBuf::from(home).join(".cache"))
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() {
+            return Ok(PathBuf::from(home).join(".cache"));
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            if !local.is_empty() {
+                return Ok(PathBuf::from(local));
+            }
+        }
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            if !profile.is_empty() {
+                return Ok(PathBuf::from(profile).join(".cache"));
+            }
+        }
+        bail!("no cache dir: set XDG_CACHE_HOME, HOME, LOCALAPPDATA, or USERPROFILE");
+    }
+    #[cfg(not(windows))]
+    bail!("neither XDG_CACHE_HOME nor HOME is set");
 }
 
-/// Is `bin` on `PATH`?
+/// Is `bin` on `PATH`? On Windows an executable is `bin.exe` (etc.), never the bare `bin`, so probe
+/// each `PATHEXT` suffix as well — otherwise `which("curl")` misses the `curl.exe` that ships in
+/// System32 and the model download wrongly reports "need curl or wget".
 fn which(bin: &str) -> bool {
-    std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(bin).is_file()))
-        .unwrap_or(false)
+    let Some(paths) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let exts: Vec<String> = if cfg!(windows) {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".EXE;.CMD;.BAT;.COM".into())
+            .split(';')
+            .filter(|e| !e.is_empty())
+            .map(|e| e.to_string())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    std::env::split_paths(&paths).any(|dir| {
+        if dir.join(bin).is_file() {
+            return true;
+        }
+        exts.iter()
+            .any(|ext| dir.join(format!("{bin}{ext}")).is_file())
+    })
 }
 
 #[cfg(test)]
