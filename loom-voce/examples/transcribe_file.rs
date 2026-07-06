@@ -22,7 +22,8 @@ fn main() -> anyhow::Result<()> {
     let samples = read_wav_s16le_mono(Path::new(&wav))?;
     eprintln!("loaded {} samples from {wav}", samples.len());
 
-    let mut engine = WhisperStt::load(&model)?;
+    // language: None → let whisper auto-detect (multilingual models); ignored by `*.en` models.
+    let mut engine = WhisperStt::load(&model, None)?;
     let text = engine.transcribe(&samples)?;
     println!("TRANSCRIPT: {}", text.trim());
     Ok(())
