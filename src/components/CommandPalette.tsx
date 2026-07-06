@@ -23,7 +23,7 @@ import {
 import { fuzzyScore } from "../lib/matching";
 import { ago } from "../lib/time";
 import { formatBinding, type ActionId } from "../lib/keybindings";
-import { settings } from "../stores/settings";
+import { settings, setSetting, VOICE_LANGUAGES } from "../stores/settings";
 import { activity } from "../stores/activity";
 
 type PaneState = "working" | "idle" | "needs" | "dead";
@@ -80,6 +80,18 @@ export default function CommandPalette(props: {
       { label: "Next workspace", icon: "→", kind: "action", key: kb("next-workspace"), run: () => switchWorkspaceRelative(1) },
       { label: "Previous workspace", icon: "←", kind: "action", key: kb("prev-workspace"), run: () => switchWorkspaceRelative(-1) },
     ];
+    // Dictation language togglers: pin the forced language (or Auto-detect) without opening
+    // Settings. The active one is checked; searchable by "dictation"/"language"/the language name.
+    for (const l of VOICE_LANGUAGES) {
+      const active = settings.voiceLanguage === l.code;
+      list.push({
+        label: `Dictation language: ${l.label}`,
+        icon: active ? "✓" : "🗣",
+        kind: "action",
+        hint: active ? "current" : undefined,
+        run: () => setSetting("voiceLanguage", l.code),
+      });
+    }
     const f = focused();
     if (f !== null) {
       list.push(

@@ -233,8 +233,9 @@ const MIN_SAMPLES: usize = TARGET_RATE as usize;
 /// at a time (a fresh state per call — state reuse is a later optimization).
 pub struct WhisperStt {
     ctx: WhisperContext,
-    /// Forced decode language, or `None` to let a multilingual model auto-detect.
-    language: Option<&'static str>,
+    /// Forced decode language (ISO code like "en"/"no"/"pt"), or `None` to let a multilingual
+    /// model auto-detect the spoken language per utterance.
+    language: Option<String>,
     threads: i32,
 }
 
@@ -242,7 +243,11 @@ impl WhisperStt {
     /// Load the named ggml model (downloading to the cache on first use) and mmap it.
     /// `model` is a short name like `base.en`, `small.en`, `medium` — resolved to
     /// `ggml-<model>.bin` under the loom-voce cache.
-    pub fn load(model: &str) -> Result<Self> {
+    ///
+    /// `language` forces the decode language (an ISO code like "no" for Norwegian); `None` lets a
+    /// multilingual model auto-detect. An explicit override wins over the model-name default, so a
+    /// multi-language user can pin one language when auto-detect keeps misreading short clips.
+    pub fn load(model: &str, language: Option<&str>) -> Result<Self> {
         // Route whisper.cpp/ggml's own logging through the `log` facade; with no logger installed
         // this silences its stderr chatter (which would otherwise clutter the dictation prompt).
         install_logging_hooks();
@@ -251,11 +256,12 @@ impl WhisperStt {
         let ctx = WhisperContext::new_with_params(&path, WhisperContextParameters::default())
             .with_context(|| format!("failed to load whisper model at {}", path.display()))?;
 
-        // English-only models (`*.en`) must be decoded as English; multilingual ones auto-detect.
-        let language = if model.ends_with(".en") {
-            Some("en")
-        } else {
-            None
+        // An explicit override wins. Otherwise: English-only models (`*.en`) must decode as English;
+        // multilingual ones auto-detect (`None`).
+        let language = match language {
+            Some(code) if !code.trim().is_empty() => Some(code.trim().to_string()),
+            _ if model.ends_with(".en") => Some("en".to_string()),
+            _ => None,
         };
         let threads = std::thread::available_parallelism()
             .map(|n| n.get() as i32)
@@ -288,7 +294,7 @@ impl WhisperStt {
         };
 
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_language(self.language);
+        params.set_language(self.language.as_deref());
         params.set_n_threads(self.threads);
         params.set_translate(false);
         // Keep the output text clean and quiet — no special tokens, no progress spew.

@@ -69,6 +69,13 @@ struct Cli {
     /// Whisper model to load (tiny.en, base.en, small.en, medium.en, …). Downloaded on first use.
     #[arg(long, default_value = "base.en")]
     model: String,
+
+    /// Force the decode language (ISO code, e.g. `en`, `no`, `pt`) instead of auto-detecting.
+    /// Empty (the default) auto-detects on a multilingual model. Use this to pin one language when
+    /// auto-detect keeps confusing short clips (e.g. Norwegian misread as Danish/Swedish); it needs
+    /// a multilingual model (an `*.en` model only decodes English regardless).
+    #[arg(long)]
+    language: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -83,10 +90,17 @@ fn main() -> Result<()> {
     } else {
         loom::resolve_target(cli.pane.as_deref()).context("could not resolve target pane")?
     };
-    eprintln!("loom-voce → {}  (model {})", target.describe(), cli.model);
+    let lang = cli.language.as_deref().filter(|s| !s.trim().is_empty());
+    eprintln!(
+        "loom-voce → {}  (model {}, language {})",
+        target.describe(),
+        cli.model,
+        lang.unwrap_or("auto"),
+    );
 
     // Load the STT engine (blocks while whisper.cpp mmaps the model).
-    let mut engine = stt::WhisperStt::load(&cli.model).context("failed to load whisper model")?;
+    let mut engine = stt::WhisperStt::load(&cli.model, cli.language.as_deref())
+        .context("failed to load whisper model")?;
 
     // Start mic capture on its own thread; frames arrive as 16kHz mono f32 chunks.
     let (frames_tx, frames_rx) = mpsc::channel::<Vec<f32>>();

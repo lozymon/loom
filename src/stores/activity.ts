@@ -36,9 +36,15 @@ export interface PaneActivity {
   // dictation hotkey spawns it, cleared on the helper's exit via the Rust `voce://done` event).
   // Pure UI state — drives the 🎙 chip indicator; nothing is read from pane output (ADR-0001).
   listening: boolean;
+  // While a first-use Whisper model download is running for this pane's dictation helper: the model
+  // name being fetched ("" = not downloading) and bytes fetched so far, pushed from Rust
+  // (`voce://download`, which watches loom-voce's cache). Drives the "Downloading model…" state in
+  // the listening overlay so the one-time fetch reads as progress, not a hang.
+  downloadingModel: string;
+  downloadedBytes: number;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "", listening: false };
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "", listening: false, downloadingModel: "", downloadedBytes: 0 };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -115,6 +121,19 @@ export function setListening(id: PaneId) {
 /** Clear the "listening" flag (loom-voce exited — the `voce://done` event, or a spawn failure). */
 export function clearListening(id: PaneId) {
   if (activity[id]?.listening) setActivity(id, "listening", false);
+}
+
+/** Set the first-use model-download state for a pane's dictation helper (`voce://download`). */
+export function setDownloading(id: PaneId, model: string, bytes: number) {
+  ensure(id);
+  if (activity[id].downloadingModel !== model) setActivity(id, "downloadingModel", model);
+  if (activity[id].downloadedBytes !== bytes) setActivity(id, "downloadedBytes", bytes);
+}
+
+/** Clear the model-download state (download finished, or the helper exited). */
+export function clearDownloading(id: PaneId) {
+  if (activity[id]?.downloadingModel) setActivity(id, "downloadingModel", "");
+  if (activity[id]?.downloadedBytes) setActivity(id, "downloadedBytes", 0);
 }
 
 /** The user looked at the pane — clear its sticky unseen/bell/attention signals. */

@@ -15,6 +15,16 @@ const STORE_KEY = "settings";
 
 export type CursorStyle = "block" | "bar" | "underline";
 
+/** Selectable forced dictation languages: display label + Whisper ISO code. `""` = auto-detect
+ *  (the multi-language default). Shared by the Settings dropdown and the command-palette togglers,
+ *  so they never drift. Add a row here to offer another language in both places. */
+export const VOICE_LANGUAGES: { code: string; label: string }[] = [
+  { code: "", label: "Auto-detect" },
+  { code: "en", label: "English" },
+  { code: "pt", label: "Portuguese" },
+  { code: "no", label: "Norwegian" },
+];
+
 /** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
  *  so this config stays reachable). */
 export type NavItemId = "overview" | "palette" | "git" | "docs" | "fleet" | "history" | "reopen";
@@ -67,6 +77,15 @@ export interface Settings {
   /** Relaunch Claude Code panes with their own session id so a restart resumes the conversation
    *  (first run pins `--session-id`, later runs `--resume`; see lib/agents.ts). On by default. */
   resumeAgentSessions: boolean;
+  // ---- Voice dictation (loom-voce) ----
+  /** Whisper model the dictation hotkey loads. `*.en` models are English-only; the multilingual
+   *  ones (small/medium/large-v3) auto-detect the spoken language, which is what a multi-language
+   *  user (e.g. English + Portuguese + Norwegian) needs. Downloaded on first use. */
+  voiceModel: string;
+  /** Force the dictation decode language (ISO code, e.g. "no", "pt"); empty = auto-detect per
+   *  phrase. A pinned language helps when auto-detect keeps misreading short clips, but it applies
+   *  to every utterance — leave empty if you actually mix languages in a session. */
+  voiceLanguage: string;
   // ---- Keyboard ----
   /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */
   keybindings: Keybindings;
@@ -110,6 +129,8 @@ export const DEFAULT_SETTINGS: Settings = {
   docsPreview: true,
   sessionLogging: false,
   resumeAgentSessions: true,
+  voiceModel: "small-q5_1",
+  voiceLanguage: "",
   keybindings: { ...DEFAULT_KEYBINDINGS },
   navVisible: { overview: true, palette: true, git: true, docs: true, fleet: true, history: true, reopen: true },
   railWidth: 212,
