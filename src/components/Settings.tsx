@@ -16,6 +16,7 @@ import {
   setKeybinding,
   resetKeybinding,
   resetKeybindings,
+  VOICE_LANGUAGES,
   type CursorStyle,
   type NavItemId,
 } from "../stores/settings";
@@ -326,6 +327,60 @@ export default function Settings(props: { onClose: () => void }) {
               under Key bindings) runs this on the pane's working folder. The folder is appended as
               the last argument, or substituted for <code>{"{dir}"}</code> if you include it (e.g.
               <code>code -n {"{dir}"}</code>). Leave empty to hide the button.
+            </p>
+          </section>
+
+          {/* ---- Voice dictation ---- */}
+          <section class="settings-section">
+            <h3>Voice dictation</h3>
+            <div class="settings-card">
+              <label class="settings-row">
+                <span class="settings-label">Whisper model</span>
+                <select
+                  class="settings-select"
+                  value={settings.voiceModel}
+                  onChange={(e) => setSetting("voiceModel", e.currentTarget.value)}
+                >
+                  <option value="base.en">base.en — English only, fastest</option>
+                  <option value="base-q5_1">base (q5_1) — multilingual, very fast</option>
+                  <option value="small-q5_1">small (q5_1) — multilingual, fast (recommended)</option>
+                  <option value="small">small — multilingual</option>
+                  <option value="medium-q5_0">medium (q5_0) — accurate, faster than medium</option>
+                  <option value="medium">medium — multilingual, most accurate on CPU</option>
+                  <option value="large-v3">large-v3 — multilingual, best (slow on CPU)</option>
+                </select>
+              </label>
+              <label class="settings-row">
+                <span class="settings-label">Language</span>
+                <select
+                  class="settings-select"
+                  value={settings.voiceLanguage}
+                  onChange={(e) => setSetting("voiceLanguage", e.currentTarget.value)}
+                >
+                  <For each={VOICE_LANGUAGES}>
+                    {(l) => (
+                      <option value={l.code}>
+                        {l.code === "" ? "Auto-detect (mix languages freely)" : l.label}
+                      </option>
+                    )}
+                  </For>
+                </select>
+              </label>
+            </div>
+            <p class="settings-hint muted">
+              Used by the dictation hotkey (<code>{formatBinding(settings.keybindings["dictate"])}</code>).
+              The multilingual models (<b>small</b>/<b>medium</b>/<b>large-v3</b>) auto-detect the
+              spoken language per phrase — pick one of these if you dictate in more than one language.
+              Set <b>Language</b> to pin a single language when auto-detect keeps misreading short
+              clips; leave it on <b>Auto-detect</b> if you actually mix languages in a session
+              (pinning applies to every phrase, and needs a multilingual model). The chosen model
+              downloads on first use.
+            </p>
+            <p class="settings-hint muted">
+              The <b>q5_1</b>/<b>q5_0</b> entries are quantized — about half the size and noticeably
+              faster on CPU, with only a small accuracy cost. <b>small (q5_1)</b> is the best
+              speed/quality balance for dictation. Bigger models are slower per phrase; if that's the
+              bottleneck, a GPU build is the real fix.
             </p>
           </section>
 

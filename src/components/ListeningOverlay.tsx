@@ -42,6 +42,17 @@ export default function ListeningOverlay() {
   // delivers. Swaps the popup to a "Transcribing…" state so the pause reads as progress, not a hang.
   const [finishing, setFinishing] = createSignal(false);
 
+  // Set while a first-use Whisper model is downloading for the listening pane (Rust watches
+  // loom-voce's cache and pushes `voce://download` → the pane's downloadingModel/Bytes). Takes
+  // precedence over Listening/Transcribing so the one-time fetch never looks like a hang.
+  const downloading = createMemo(() => {
+    const p = listening();
+    if (!p) return null;
+    const a = activity[p.id];
+    return a?.downloadingModel ? { model: a.downloadingModel, bytes: a.downloadedBytes } : null;
+  });
+  const fmtMB = (b: number) => (b > 0 ? `${(b / 1_000_000).toFixed(0)} MB` : "starting…");
+
   // A scrolling ring of normalized bar heights (0..1), newest on the right. Fed by the mic level of
   // the listening pane; reset to flat whenever no pane is listening so each session starts clean.
   const [wave, setWave] = createSignal<number[]>(new Array(BARS).fill(0));
@@ -70,7 +81,9 @@ export default function ListeningOverlay() {
     const onKey = (e: KeyboardEvent) => {
       const pane = listening();
       if (!pane) return;
-      if (e.key === "Enter" && !finishing()) {
+      // While the model is still downloading the helper hasn't started capturing — swallow Enter so
+      // we don't buffer a premature "finish" that ends the capture the instant it begins.
+      if (e.key === "Enter" && !finishing() && !downloading()) {
         e.preventDefault();
         e.stopImmediatePropagation();
         setFinishing(true);
@@ -88,24 +101,38 @@ export default function ListeningOverlay() {
   return (
     <Show when={listening()}>
       {(pane) => (
-        <div class="voce-overlay" classList={{ finishing: finishing() }} role="status" aria-live="polite">
+        <div class="voce-overlay" classList={{ finishing: finishing(), downloading: !!downloading() }} role="status" aria-live="polite">
           <div class="voce-card">
             <div class="voce-mic" aria-hidden="true">
               <span class="voce-ring" />
               <span class="voce-ring voce-ring-2" />
-              <span class="voce-glyph">🎙</span>
+              <span class="voce-glyph">{downloading() ? "⬇" : "🎙"}</span>
             </div>
             <div class="voce-text">
-              <div class="voce-title">{finishing() ? "Transcribing…" : "Listening…"}</div>
+              <div class="voce-title">
+                {downloading() ? "Downloading model…" : finishing() ? "Transcribing…" : "Listening…"}
+              </div>
               <div class="voce-sub">
                 <Show
-                  when={!finishing()}
-                  fallback={<>Converting your speech to text…</>}
+                  when={downloading()}
+                  fallback={
+                    <Show
+                      when={!finishing()}
+                      fallback={<>Converting your speech to text…</>}
+                    >
+                      Speak now — dictating into <strong>{pane().title || "this pane"}</strong>
+                      <span class="voce-hint">
+                        <kbd>Enter</kbd> to finish · <kbd>Esc</kbd> to cancel
+                      </span>
+                    </Show>
+                  }
                 >
-                  Speak now — dictating into <strong>{pane().title || "this pane"}</strong>
-                  <span class="voce-hint">
-                    <kbd>Enter</kbd> to finish · <kbd>Esc</kbd> to cancel
-                  </span>
+                  {(dl) => (
+                    <>
+                      Fetching the <strong>{dl().model}</strong> model (one-time) — {fmtMB(dl().bytes)}
+                      <span class="voce-hint">First use of this model · <kbd>Esc</kbd> to cancel</span>
+                    </>
+                  )}
                 </Show>
               </div>
             </div>

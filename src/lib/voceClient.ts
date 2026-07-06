@@ -9,10 +9,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { PaneId } from "../ipc/protocol";
 import { activeWorkspace, resolvePaneByName } from "../stores/workspace";
-import { activity, setListening, clearListening } from "../stores/activity";
+import { activity, setListening, clearListening, setDownloading, clearDownloading } from "../stores/activity";
+import { settings } from "../stores/settings";
 
 const VOCE_DONE_EVENT = "voce://done";
 const VOCE_LEVEL_EVENT = "voce://level";
+const VOCE_DOWNLOAD_EVENT = "voce://download";
 
 /** Latest mic level (RMS, ~0.0–0.3 for speech) per capturing pane name, streamed from loom-voce
  *  while it listens. Read reactively by the dictation overlay to drive its live waveform; entries
@@ -29,8 +31,14 @@ export async function dictateIntoPane(paneId: PaneId, name: string): Promise<voi
   if (activity[paneId]?.listening) return;
   setListening(paneId);
   try {
-    // model: null → loom-voce uses its default (base.en). A per-app model setting can pass it here.
-    await invoke("voce_dictate", { pane: name, model: null });
+    // Pass the configured Whisper model + optional forced language (Settings → Voice dictation).
+    // A multilingual model auto-detects the language; a non-empty voiceLanguage pins it instead.
+    // Empty strings → null, so loom-voce falls back to its own default / auto-detect.
+    await invoke("voce_dictate", {
+      pane: name,
+      model: settings.voiceModel.trim() || null,
+      language: settings.voiceLanguage.trim() || null,
+    });
   } catch (e) {
     clearListening(paneId);
     window.alert(`Couldn't start voice dictation:\n${e}`);
@@ -76,7 +84,12 @@ export async function dictateIntoActivePane(): Promise<void> {
 export function initVoceExitListener(): () => void {
   const done = listen<string>(VOCE_DONE_EVENT, (e) => {
     const r = resolvePaneByName(e.payload);
-    if ("paneId" in r) clearListening(r.paneId);
+    if ("paneId" in r) {
+      clearListening(r.paneId);
+      // Belt-and-suspenders: if the helper died mid-download, clear the downloading state too so it
+      // can't get stuck on "Downloading model…".
+      clearDownloading(r.paneId);
+    }
     // Drop the pane's level so a re-dictation starts from a clean (flat) waveform.
     setVoiceLevels((m) => {
       if (!(e.payload in m)) return m;
@@ -88,8 +101,20 @@ export function initVoceExitListener(): () => void {
   const level = listen<{ pane: string; level: number }>(VOCE_LEVEL_EVENT, (e) => {
     setVoiceLevels((m) => ({ ...m, [e.payload.pane]: e.payload.level }));
   });
+  // First-use model download progress: set/clear the pane's downloading state so the overlay shows
+  // "Downloading model…" with a live size readout until the model lands (`done: true`).
+  const download = listen<{ pane: string; model: string; bytes: number; done: boolean }>(
+    VOCE_DOWNLOAD_EVENT,
+    (e) => {
+      const r = resolvePaneByName(e.payload.pane);
+      if (!("paneId" in r)) return;
+      if (e.payload.done) clearDownloading(r.paneId);
+      else setDownloading(r.paneId, e.payload.model, e.payload.bytes);
+    },
+  );
   return () => {
     void done.then((f) => f());
     void level.then((f) => f());
+    void download.then((f) => f());
   };
 }
