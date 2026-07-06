@@ -5,6 +5,8 @@
 
 use std::process::{Command, Stdio};
 
+use crate::winproc::NoConsoleWindow;
+
 /// Resolve a bare editor program name to a launchable path. On Windows, an editor's PATH entry is
 /// often a batch wrapper (VS Code ships `code.cmd`, not `code.exe`), and `CreateProcessW` only
 /// auto-appends `.exe` — so `Command::new("code")` fails with "program not found". Walk `PATH` ×
@@ -49,7 +51,8 @@ pub fn open_editor(program: String, args: Vec<String>, cwd: Option<String>) -> R
     cmd.args(&args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::null())
+        .no_console_window();
     if let Some(dir) = cwd.as_deref().filter(|d| !d.is_empty()) {
         cmd.current_dir(dir);
     }

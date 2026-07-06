@@ -378,28 +378,62 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            loom-voce
           shared-key: windows-build
 
       - name: Install npm dependencies
         run: npm ci
 
+      # Build the voice helper (cpal/WASAPI backend on Windows) and stage it as a tauri sidecar so it
+      # ships beside loom.exe in the installer. whisper-rs-sys needs cmake (preinstalled on the runner)
+      # + libclang for bindgen — LLVM is preinstalled at C:\Program Files\LLVM, so point bindgen at it.
+      - name: Build loom-voce helper
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+          # Statically link the MSVC runtime so loom-voce.exe has no MSVCP140.dll / VCRUNTIME140.dll
+          # dependency on a clean machine. Set here (not in a .cargo/config.toml) because cargo
+          # discovers config from the CWD, and build:voce runs from the repo root via --manifest-path,
+          # so a loom-voce/.cargo/config.toml is never read. RUSTFLAGS also propagates crt-static to
+          # whisper.cpp's cmake build (CARGO_CFG_TARGET_FEATURE → CMAKE_MSVC_RUNTIME_LIBRARY).
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: npm run build:voce
+
+      - name: Stage loom-voce as a tauri sidecar
+        shell: pwsh
+        run: |
+          $triple = ((rustc -vV | Select-String '^host:').ToString() -split '\s+')[1]
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries | Out-Null
+          Copy-Item loom-voce/target/release/loom-voce.exe "src-tauri/binaries/loom-voce-$triple.exe"
+          # Inject externalBin into the Windows overlay for THIS build only (ephemeral, never committed).
+          # It's kept OUT of the checked-in tauri.windows.conf.json on purpose: tauri validates
+          # externalBin on every build (including windows-check's cross-compile), so a committed entry
+          # would break those jobs, which don't stage the binary.
+          $f = 'src-tauri/tauri.windows.conf.json'
+          $j = Get-Content $f -Raw | ConvertFrom-Json
+          $j.bundle | Add-Member -NotePropertyName externalBin -NotePropertyValue @('binaries/loom-voce') -Force
+          $j | ConvertTo-Json -Depth 20 | Set-Content $f
+          Write-Host "staged sidecar src-tauri/binaries/loom-voce-$triple.exe + injected externalBin"
+
       # Full release build + NSIS installer (picks up tauri.windows.conf.json automatically;
-      # bundles the WebView2 bootstrapper). No apt step — Windows runners ship the toolchain.
-      # This is also how we get a runnable Windows build: cross-linking from Linux is blocked
-      # by the mingw BFD linker ("export ordinal too large" on the wry/windows crates), so the
-      # MSVC toolchain on this runner is the supported path. The artifact below is downloadable
-      # from the Actions run — install it on any Windows box without a local build toolchain.
+      # bundles the WebView2 bootstrapper + the loom-voce sidecar staged above). No apt step —
+      # Windows runners ship the toolchain. Cross-linking from Linux is blocked by the mingw BFD
+      # linker ("export ordinal too large" on the wry/windows crates), so MSVC on this runner is the
+      # supported path.
       - name: Build (NSIS bundle)
         run: npm run tauri build -- --bundles nsis
 
+      # Only the NSIS installer — NOT the raw `target/release/loom.exe`. The bare exe is not a
+      # working distributable: it doesn't bootstrap the WebView2 runtime (blank window on a machine
+      # without it) and performs no install, so shipping it as a release asset just misleads testers
+      # into running the wrong file. The installer bundles the WebView2 bootstrapper and installs
+      # properly; it's the sole Windows download.
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
           name: loom-windows-nsis
-          path: |
-            src-tauri/target/release/bundle/nsis/*-setup.exe
-            src-tauri/target/release/loom.exe
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
   macos-build:

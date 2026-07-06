@@ -16,6 +16,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use crate::winproc::NoConsoleWindow;
 use base64::Engine;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
@@ -184,10 +186,31 @@ fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
         return cmd;
     }
 
-    // PowerShell / cmd / any other shell: the whole string is the program (it may be a path with
-    // spaces, so we don't split it). cmd.exe takes `/c`, everything else the PowerShell flags.
-    let mut cmd = CommandBuilder::new(shell);
     let is_cmd = stem == "cmd";
+
+    // Command pane: spawn the program DIRECTLY, bypassing the shell wrapper. Running an interactive
+    // TUI (an agent like `claude`) through `powershell.exe -Command "<cmd>"` intermittently
+    // deadlocks the PowerShell 5.1 host at startup under a ConPTY — the host sits at 0 CPU, single
+    // threaded, and never even spawns the program, so the pane stays blank forever (observed when
+    // two agent panes launch at once; one wins the race, one wedges). Spawning the resolved program
+    // directly removes the fragile wrapper entirely. We only do this when the program *resolves* on
+    // PATH: an unresolved program (a typo) falls through to the shell wrapper below, which prints a
+    // "not recognized" error into the pane and exits to a Dead pane — the graceful failure the Unix
+    // `$SHELL -lc` path gives — instead of hard-failing the whole spawn.
+    if let Some(c) = command {
+        if let Some((prog, args)) = resolve_direct_spawn(c) {
+            let mut cmd = CommandBuilder::new(prog);
+            for a in args {
+                cmd.arg(a);
+            }
+            return cmd;
+        }
+    }
+
+    // Plain shell (no command), or a command whose program didn't resolve: launch the shell. The
+    // whole string is the program (it may be a path with spaces, so we don't split it). cmd.exe
+    // takes `/c`, everything else the PowerShell flags.
+    let mut cmd = CommandBuilder::new(shell);
     match command {
         Some(c) if is_cmd => {
             cmd.arg("/c");
@@ -207,6 +230,94 @@ fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
     cmd
 }
 
+/// Resolve a command pane's program (the first token) to an absolute path on PATH and split off its
+/// argument tokens, so the pane can spawn it directly instead of through a `powershell -Command`
+/// wrapper (which can deadlock under a ConPTY — see `launch_command`). Returns `None` when the
+/// program can't be found, so the caller falls back to the shell wrapper for a graceful error.
+#[cfg(windows)]
+fn resolve_direct_spawn(command: &str) -> Option<(std::path::PathBuf, Vec<String>)> {
+    let mut tokens = tokenize(command).into_iter();
+    let prog = tokens.next()?;
+    let resolved = resolve_on_path(&prog)?;
+    Some((resolved, tokens.collect()))
+}
+
+/// Split a command line into program + argument tokens, honoring single/double quotes so an arg
+/// with spaces (`--append-system-prompt "be nice"`) stays one token. Deliberately simple — no
+/// backslash escapes; Loom's command panes launch a program with flag-style args, not shell scripts
+/// (a user needing full shell syntax uses a plain shell pane and types it).
+#[cfg(windows)]
+fn tokenize(command: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut cur = String::new();
+    let mut in_token = false;
+    let mut quote: Option<char> = None;
+    for ch in command.chars() {
+        match quote {
+            Some(q) => {
+                if ch == q {
+                    quote = None;
+                } else {
+                    cur.push(ch);
+                }
+            }
+            None => match ch {
+                '"' | '\'' => {
+                    quote = Some(ch);
+                    in_token = true;
+                }
+                c if c.is_whitespace() => {
+                    if in_token {
+                        tokens.push(std::mem::take(&mut cur));
+                        in_token = false;
+                    }
+                }
+                c => {
+                    cur.push(c);
+                    in_token = true;
+                }
+            },
+        }
+    }
+    if in_token {
+        tokens.push(cur);
+    }
+    tokens
+}
+
+/// Find `prog` as an executable on PATH, honoring PATHEXT so a bare `claude` matches `claude.exe`.
+/// An explicit path (absolute or containing a separator) is checked in place; a bare name is looked
+/// up in each PATH directory. Searches the current process PATH — the same environment the child
+/// inherits — which on Windows already carries the user's PATH entries (unlike the Unix login-shell
+/// case, there's no profile to source).
+#[cfg(windows)]
+fn resolve_on_path(prog: &str) -> Option<std::path::PathBuf> {
+    let p = std::path::Path::new(prog);
+    if p.is_absolute() || prog.contains(['\\', '/']) {
+        return with_pathext(p);
+    }
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths).find_map(|dir| with_pathext(&dir.join(prog)))
+}
+
+/// `base` if it's already an existing file, else `base` + each PATHEXT suffix (`.EXE`, `.CMD`, …).
+#[cfg(windows)]
+fn with_pathext(base: &std::path::Path) -> Option<std::path::PathBuf> {
+    if base.is_file() {
+        return Some(base.to_path_buf());
+    }
+    let exts = std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT;.COM".into());
+    exts.split(';')
+        .filter(|e| !e.is_empty())
+        .map(|ext| {
+            // PATHEXT entries include the leading dot, so append to the full path as a string.
+            let mut s = base.as_os_str().to_os_string();
+            s.push(ext);
+            std::path::PathBuf::from(s)
+        })
+        .find(|cand| cand.is_file())
+}
+
 /// Installed WSL distributions, for the new-workspace shell picker. Runs `wsl.exe --list --quiet`
 /// (names only, one per line) and decodes its UTF-16LE output. Any failure (WSL not installed, no
 /// distros) yields an empty list — the picker then simply offers no WSL entries. Never an error.
@@ -214,6 +325,7 @@ fn launch_command(shell: &str, command: Option<&str>) -> CommandBuilder {
 pub fn wsl_distros() -> Vec<String> {
     let out = match std::process::Command::new("wsl.exe")
         .args(["--list", "--quiet"])
+        .no_console_window()
         .output()
     {
         Ok(o) if o.status.success() => o,
@@ -796,6 +908,112 @@ mod tests {
     fn check_command_empty_is_available() {
         // An empty command is a plain shell — always launchable.
         assert!(check_command("", None));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::{launch_command, resolve_on_path, tokenize};
+
+    fn argv(cmd: &portable_pty::CommandBuilder) -> Vec<String> {
+        cmd.get_argv()
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn command_pane_spawns_resolvable_program_directly() {
+        // `whoami` resolves on PATH (System32), so a command pane launches it DIRECTLY — argv[0] is
+        // the resolved program and there's no `powershell -Command` wrapper (the ConPTY wedge fix).
+        let cmd = launch_command("powershell.exe", Some("whoami"));
+        let a = argv(&cmd);
+        assert!(
+            a[0].to_lowercase().ends_with("whoami.exe"),
+            "argv[0] should be the resolved program, got {:?}",
+            a[0]
+        );
+        assert!(
+            !a.iter().any(|s| s == "-Command"),
+            "resolvable command must not be wrapped in powershell -Command: {a:?}"
+        );
+    }
+
+    #[test]
+    fn unresolvable_command_falls_back_to_shell_wrapper() {
+        // A typo'd program can't resolve → fall back to `powershell -Command` so the "not
+        // recognized" error surfaces in the pane instead of hard-failing the spawn.
+        let cmd = launch_command(
+            "powershell.exe",
+            Some("definitely-not-a-real-binary-xyz --x"),
+        );
+        let a = argv(&cmd);
+        assert!(
+            a[0].to_lowercase().ends_with("powershell.exe"),
+            "argv[0] should be the shell, got {:?}",
+            a[0]
+        );
+        assert!(
+            a.iter().any(|s| s == "-Command"),
+            "unresolved command should use the shell wrapper: {a:?}"
+        );
+        assert!(a
+            .last()
+            .unwrap()
+            .contains("definitely-not-a-real-binary-xyz"));
+    }
+
+    #[test]
+    fn plain_shell_pane_launches_interactive_powershell() {
+        // No command → an interactive PowerShell prompt (unchanged), never the -Command wrapper.
+        let cmd = launch_command("powershell.exe", None);
+        let a = argv(&cmd);
+        assert!(a[0].to_lowercase().ends_with("powershell.exe"));
+        assert!(a.iter().any(|s| s == "-NoLogo"));
+        assert!(!a.iter().any(|s| s == "-Command"));
+    }
+
+    #[test]
+    fn tokenize_simple_program_and_flags() {
+        assert_eq!(
+            tokenize("claude --session-id 1ff0092b-f0d9-4d2f-a048-7581d8f9bcea"),
+            vec![
+                "claude",
+                "--session-id",
+                "1ff0092b-f0d9-4d2f-a048-7581d8f9bcea"
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_keeps_quoted_arg_with_spaces() {
+        // A quoted arg stays one token; the surrounding quotes are stripped.
+        assert_eq!(
+            tokenize(r#"claude --append-system-prompt "be nice and terse""#),
+            vec!["claude", "--append-system-prompt", "be nice and terse"]
+        );
+    }
+
+    #[test]
+    fn tokenize_collapses_extra_whitespace_and_bare_program() {
+        assert_eq!(tokenize("   claude   "), vec!["claude"]);
+        assert_eq!(tokenize(""), Vec::<String>::new());
+    }
+
+    #[test]
+    fn resolve_on_path_finds_powershell_by_bare_name() {
+        // powershell.exe is on PATH on every Windows box; a bare name must resolve via PATHEXT.
+        let got = resolve_on_path("powershell").expect("powershell should resolve on PATH");
+        assert!(
+            got.is_file(),
+            "resolved path should be a real file: {got:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_on_path_missing_program_is_none() {
+        // A typo'd program doesn't resolve — the caller then falls back to the shell wrapper.
+        assert!(resolve_on_path("definitely-not-a-real-binary-xyz").is_none());
     }
 }
 
