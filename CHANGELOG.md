@@ -6,6 +6,21 @@ versioning.
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-07-06
+
+Voice dictation goes multi-language: dictate in more than English, pick your Whisper model, and pin
+or auto-detect the spoken language.
+
+### Added
+- **Multi-language dictation** — the dictation hotkey now transcribes any language a multilingual
+  Whisper model supports (e.g. English + Portuguese + Norwegian), not just English.
+- **Model picker** — choose the Whisper model in Settings. `*.en` models stay English-only; the
+  multilingual models (small/medium/large-v3) auto-detect the spoken language. Models download on
+  first use with progress feedback.
+- **Forced language** — pin a dictation language (or Auto-detect) from Settings or the command
+  palette (`Dictation language: …`), without reopening Settings each time.
+- **Quantized models** — smaller/faster model variants for lower-memory machines.
+
 ## [1.5.1] — 2026-07-06
 
 A Windows-focused follow-up to 1.5.0: make the Windows build actually ship and run. Linux and
