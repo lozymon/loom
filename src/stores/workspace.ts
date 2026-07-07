@@ -255,6 +255,21 @@ export function setPaneSessionId(paneId: PaneId, sessionId: string) {
   if (i >= 0) setApp("workspaces", i, "panes", paneId, "sessionId", sessionId);
 }
 
+/** Adopt an agent started *by hand* in a pane as that pane's launch command, so it persists and
+ *  respawns on restart instead of coming back as a plain shell. `command` is the live foreground
+ *  command line; `sessionId`, when given, is the captured Claude session so a restart resumes that
+ *  exact conversation (see Terminal.tsx `adopt`). Idempotent-ish: a blank command is ignored. */
+export function adoptPaneCommand(paneId: PaneId, command: string, sessionId?: string) {
+  const cmd = command.trim();
+  if (!cmd) return;
+  const i = wsIdxByPane(paneId);
+  if (i < 0) return;
+  batch(() => {
+    setApp("workspaces", i, "panes", paneId, "command", cmd);
+    if (sessionId) setApp("workspaces", i, "panes", paneId, "sessionId", sessionId);
+  });
+}
+
 /** Rename a workspace (rail double-click). Blank input is ignored — keeps the old name. */
 export function renameWorkspace(id: string, name: string) {
   const i = wsIdxById(id);

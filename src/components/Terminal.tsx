@@ -27,7 +27,7 @@ import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detac
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
-import { claudeSessionExists } from "../lib/claudeSessions";
+import { claudeSessionExists, listClaudeSessions } from "../lib/claudeSessions";
 import { openEditorAt } from "../lib/editor";
 import { dictateIntoPane } from "../lib/voceClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
@@ -50,6 +50,7 @@ import {
   closePane,
   clearPaneCommand,
   setPaneSessionId,
+  adoptPaneCommand,
   reopenLastClosed,
   toggleZoom,
   toggleOverview,
@@ -168,6 +169,33 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // back to the launch command (covers the gap before the first /proc poll). Both are metadata,
   // never pane output (opacity-safe; see agents.ts + ADR-0001).
   const agent = () => detectAgent(foreground()) ?? detectAgent(spec()?.command);
+  // Adopt: an agent started *by hand* in this pane (foreground is an agent) whose launch command
+  // isn't already that agent → we can record it as the pane's command so it persists & resumes on
+  // restart (rather than coming back a plain shell). Null once the launch command already is it.
+  const adoptable = () => {
+    const fg = foreground();
+    const fgAgent = detectAgent(fg);
+    if (!fgAgent) return null;
+    if (detectAgent(spec()?.command)?.id === fgAgent.id) return null; // already launched as this agent
+    return { agent: fgAgent, command: fg! };
+  };
+  /** Record the hand-started agent as this pane's launch command. For a bare Claude invocation we
+   *  also capture the newest session in the pane's folder, so a restart resumes *that* conversation
+   *  (Claude stores it on disk; we read the store, never pane output — opacity-safe). */
+  async function adopt() {
+    const a = adoptable();
+    if (!a) return;
+    let sessionId: string | undefined;
+    if (a.agent.id === "claude" && !/--(resume|session-id|continue)\b|\s-[rc]\b/.test(a.command)) {
+      const dir = cwd() || spec()?.cwd || props.ws.cwd;
+      try {
+        // listClaudeSessions is newest-first, so the first match in this folder is the live one.
+        const s = (await listClaudeSessions()).find((s) => s.cwd === dir);
+        sessionId = s?.id;
+      } catch { /* best-effort — adopt the command even if the session lookup fails */ }
+    }
+    adoptPaneCommand(props.paneId, a.command, sessionId);
+  }
   const isFocused = () => props.ws.focused === props.paneId;
   /** Is the user actually looking at this pane right now? (active workspace + focused) */
   const looking = () => appState.activeId === props.ws.id && isFocused();
@@ -767,6 +795,19 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           )}
         </Show>
         <span class="pane-name">{displayName()}</span>
+        {/* Adopt: this pane is running an agent you started by hand and isn't launched as one yet.
+            One click records it as the pane's command so it persists + resumes on restart. */}
+        <Show when={adoptable()}>
+          {(a) => (
+            <button
+              class="pane-adopt"
+              title={`Keep this as a ${a().agent.label} pane — persist it and resume on restart`}
+              onClick={(e) => { e.stopPropagation(); void adopt(); }}
+            >
+              📌 keep
+            </button>
+          )}
+        </Show>
         {/* Idle/stuck badge (AGENTIC §1b): a distinct, unmistakable marker for a silent agent —
             separate from the per-agent tint so it can't be confused with it. */}
         <Show when={act()?.stuck}>

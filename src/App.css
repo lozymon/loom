@@ -1676,6 +1676,29 @@ body,
 .pane.stuck:not(.focused) {
   animation: pane-stuck-pulse 1.6s ease-in-out infinite;
 }
+/* Adopt affordance — a subtle pill in the chip offering to keep a hand-started agent (persist +
+   resume). Uses the agent accent so it reads as "make this a real <agent> pane". */
+.pane-adopt {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--agent-color, var(--accent)) 55%, transparent);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--agent-color, var(--accent));
+  background: color-mix(in srgb, var(--agent-color, var(--accent)) 14%, transparent);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.pane-adopt:hover {
+  background: color-mix(in srgb, var(--agent-color, var(--accent)) 26%, transparent);
+  border-color: var(--agent-color, var(--accent));
+}
+
 /* The chip badge — a solid amber pill so the *which* pane is obvious from the identity chip. */
 .pane-stuck-badge {
   flex: 0 0 auto;
