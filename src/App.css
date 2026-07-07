@@ -1666,15 +1666,12 @@ body,
   pointer-events: none;
 }
 
-/* Idle/stuck (AGENTIC §1b): a silent agent pane. A *pulsing* needs-coloured ring — the motion is
-   what makes it unmistakable even on an agented pane that already carries a static tint ring. Wins
-   over the static state/tint box-shadow because it's an active animation; skipped when focused. */
-@keyframes pane-stuck-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(var(--state-needs-rgb), 0.45), var(--shadow-pane); }
-  50%      { box-shadow: 0 0 0 3px rgba(var(--state-needs-rgb), 0.9), var(--shadow-pane); }
-}
+/* Idle/stuck (AGENTIC §1b): a silent agent pane. A steady 2px needs-coloured ring — static (no
+   pulse) so it flags the pane without being noisy, and thicker/brighter than the agent tint so it
+   still reads distinctly on an agented pane. Skipped when focused. Wins over the state/tint
+   box-shadow by higher specificity (.pane.stuck:not(.focused)). */
 .pane.stuck:not(.focused) {
-  animation: pane-stuck-pulse 1.6s ease-in-out infinite;
+  box-shadow: 0 0 0 2px rgba(var(--state-needs-rgb), 0.85), var(--shadow-pane);
 }
 /* Adopt affordance — a subtle pill in the chip offering to keep a hand-started agent (persist +
    resume). Uses the agent accent so it reads as "make this a real <agent> pane". */
@@ -1711,11 +1708,6 @@ body,
   white-space: nowrap;
   color: #1a1206;
   background: var(--state-needs);
-  animation: pane-stuck-badge-pulse 1.6s ease-in-out infinite;
-}
-@keyframes pane-stuck-badge-pulse {
-  0%, 100% { opacity: 0.72; }
-  50%      { opacity: 1; }
 }
 
 /* Secondary group-tint dot in the chip (5px), in the agent's colour. */
