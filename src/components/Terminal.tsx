@@ -118,6 +118,10 @@ function basename(dir: string): string {
 // commands previously on the UI thread, froze the app for 1-2s every cycle).
 const POLL_INTERVAL_MS = 2000;
 const GIT_REFRESH_EVERY = 5; // ~10s at a stable cwd
+// How long a hand-started agent must stay the foreground process before auto-adopt records it as
+// the pane's command — long enough that a one-off (`claude --help`) exits first, short enough to be
+// invisible (the live agent tint already appears within a poll).
+const AUTO_ADOPT_MS = 4000;
 const POLL_STAGGER_SLOTS = 8;
 
 export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI }) {
@@ -138,6 +142,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // dead pane. Gates the drop-to-shell to fire once: when *this* shell later exits (the user
   // typed `exit`), we let the pane die normally rather than looping a fresh shell forever.
   let currentIsShellDrop = false;
+  // Auto-adopt dwell tracking: which agent id has been the foreground process, since when, and a
+  // guard so the async adopt fires once per detection (see the auto-adopt block in refreshLoc).
+  let adoptAgentId: string | null = null;
+  let adoptSince = 0;
+  let adopting = false;
   // git-branch poll throttle: the last cwd we ran `git` for, and a tick counter so the subprocess
   // only fires on a cwd change or a slow refresh (the branch is rarely what changes).
   let lastGitCwd: string | null = null;
@@ -177,6 +186,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     const fgAgent = detectAgent(fg);
     if (!fgAgent) return null;
     if (detectAgent(spec()?.command)?.id === fgAgent.id) return null; // already launched as this agent
+    if (/(^|\s)(-p|--print)\b/.test(fg!)) return null; // a one-shot print run, not a session to keep
     return { agent: fgAgent, command: fg! };
   };
   /** Record the hand-started agent as this pane's launch command. For a bare Claude invocation we
@@ -463,6 +473,21 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     setForeground(m.foreground);
     const dir = m.cwd;
     setCwd(dir);
+    // Auto-adopt: once a hand-started agent has been the foreground process for AUTO_ADOPT_MS (so a
+    // one-off like `claude --help` exits first), record it as the pane's command so it persists and
+    // resumes on restart — the same thing the "keep" button does, without the click.
+    if (settings.autoAdoptAgents) {
+      const a = adoptable();
+      if (!a) {
+        adoptAgentId = null;
+      } else if (adoptAgentId !== a.agent.id) {
+        adoptAgentId = a.agent.id; // newly seen — start the dwell clock
+        adoptSince = Date.now();
+      } else if (!adopting && Date.now() - adoptSince >= AUTO_ADOPT_MS) {
+        adopting = true;
+        void adopt().finally(() => { adopting = false; });
+      }
+    }
     if (!dir) { setBranch(null); lastGitCwd = null; return; }
     // Only spawn `git` when the cwd changed, or every GIT_REFRESH_EVERY ticks as a slow refresh to
     // catch an in-pane `git checkout`. Skips the per-tick subprocess for a pane sitting still.
@@ -796,8 +821,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         </Show>
         <span class="pane-name">{displayName()}</span>
         {/* Adopt: this pane is running an agent you started by hand and isn't launched as one yet.
-            One click records it as the pane's command so it persists + resumes on restart. */}
-        <Show when={adoptable()}>
+            One click records it as the pane's command so it persists + resumes on restart. Only
+            shown in manual mode — with auto-adopt on, refreshLoc records it for you. */}
+        <Show when={!settings.autoAdoptAgents && adoptable()}>
           {(a) => (
             <button
               class="pane-adopt"

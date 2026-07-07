@@ -66,6 +66,11 @@ export interface Settings {
   /** Flag an agent pane as "needs you" when it's been busy but silent this many seconds (likely
    *  wedged on a prompt; AGENTIC §1b, byte-flow timing only). 0 = off. */
   idleStuckSeconds: number;
+  // ---- Agent adoption ----
+  /** Auto-remember an agent you start *by hand* in a pane (e.g. typing `claude` in a shell) as that
+   *  pane's launch command, so it persists and resumes on restart instead of coming back a shell.
+   *  Off = you adopt manually with the "keep" chip button. See Terminal.tsx `adopt`. */
+  autoAdoptAgents: boolean;
   // ---- Window / tray ----
   /** Global hotkey that summons/hides the window from anywhere (Tauri accelerator; "" = off). */
   globalHotkey: string;
@@ -129,6 +134,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmExternalSpawn: true,
   notifyOnAttention: false,
   idleStuckSeconds: 45,
+  autoAdoptAgents: true,
   globalHotkey: "CommandOrControl+Alt+Backquote",
   closeToTray: false,
   docsPreview: true,

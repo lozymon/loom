@@ -434,6 +434,19 @@ export default function Settings(props: { onClose: () => void }) {
             <p class="settings-hint muted">An agent pane that's busy but has printed nothing for this long is likely waiting on a prompt — it joins the amber "needs you" count. Uses byte-flow timing only, never the pane's output.</p>
           </section>
 
+          {/* ---- Agent adoption ---- */}
+          <section class="settings-section">
+            <h3>Remember hand-started agents</h3>
+            <div class="settings-card">
+              <ToggleRow
+                label={<>Auto-keep agents you start by hand <span class="muted">— when you run an agent (e.g. type <code>claude</code>) in a pane, remember it as that pane's command so it persists and resumes on restart</span></>}
+                checked={settings.autoAdoptAgents}
+                onToggle={() => setSetting("autoAdoptAgents", !settings.autoAdoptAgents)}
+              />
+            </div>
+            <p class="settings-hint muted">On: the pane is recorded a few seconds after the agent starts (so a one-off like <code>claude --help</code> is skipped). Off: a "📌 keep" button appears in the pane's chip to adopt it manually. For Claude, the current conversation's session is captured so a restart resumes it.</p>
+          </section>
+
           {/* ---- Window & tray ---- */}
           <section class="settings-section">
             <h3>Window &amp; tray</h3>
