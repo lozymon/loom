@@ -6,6 +6,30 @@ versioning.
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-07-07
+
+Two fleet features — knowing when an agent is stuck, and remembering agents you start by hand —
+plus a platform fix that had been silently breaking live process detection on Linux.
+
+### Added
+- **Idle / stuck detection** — an agent pane that's been silent past a threshold (Settings → *Idle
+  agent detection*, default 45s, 0 = off) is flagged "needs you": a steady amber ring + a "💤 idle"
+  chip badge, and it joins the rail's attention count. Catches an agent (e.g. `claude`) that stays
+  the foreground process while quietly waiting on a prompt — the case the busy→idle signal misses.
+  Opacity-safe: byte-flow *timing* only (`lastOutputAt`), never output content.
+- **Agent adoption** — start an agent *by hand* (type `claude` in a shell pane) and Loom remembers
+  it as that pane's launch command, so it persists and **resumes on restart** instead of coming
+  back a plain shell. Automatic by default (Settings → *Remember hand-started agents*), with a short
+  dwell so a one-off `claude --help` isn't adopted; a manual "📌 keep" chip button when off. For
+  Claude, the current conversation's session is captured so the restart resumes it.
+
+### Fixed
+- **Live process detection on Linux** — the pane's process snapshot used sysinfo's plain
+  `refresh_processes`, which defaults to a minimal refresh that leaves argv *and* cwd empty. So the
+  foreground-command read (live agent detection) and the cwd (pane title) both silently returned
+  nothing: panes showed their pool name instead of the folder, and a hand-started agent was never
+  noticed. Now fetches both via `ProcessRefreshKind::everything()`.
+
 ## [1.6.0] — 2026-07-06
 
 Voice dictation goes multi-language: dictate in more than English, pick your Whisper model, and pin
