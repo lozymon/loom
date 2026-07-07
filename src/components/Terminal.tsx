@@ -416,13 +416,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       void notifyAttention(displayName() || `Pane ${props.paneId}`, props.ws.name);
     }
     setBusy(props.paneId, m.busy);
-    // Idle/stuck detection (AGENTIC §1b): a busy agent pane silent past the threshold is likely
-    // wedged on a prompt. Uses byte-flow *timing* + the kernel busy fact + our own agent tag —
-    // never output content. Gated on !looking() so the pane you're in never self-flags.
+    // Idle/stuck detection (AGENTIC §1b): an agent pane silent past the threshold is likely wedged
+    // on a prompt. We can't use `busy` — command panes exec the agent in place, so its pid is the
+    // pane's child pid and `busy` is always false for agents (see lib/idle.ts). Instead gate on a
+    // *running agent*: a detected agent (agent()), still alive, not dropped to a fallback shell
+    // after exiting (currentIsShellDrop). Timing (lastOutputAt) is the only stream-derived input.
+    // Gated on !looking() so the pane you're in never self-flags.
+    const runningAgent = !!agent() && dead() === null && !currentIsShellDrop;
     setStuck(
       props.paneId,
       !looking() && isPaneStuck(
-        { busy: m.busy, lastOutputAt: act()?.lastOutputAt ?? 0, isAgent: !!agent() },
+        { runningAgent, lastOutputAt: act()?.lastOutputAt ?? 0 },
         Date.now(),
         settings.idleStuckSeconds * 1000,
       ),
@@ -715,6 +719,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       classList={{
         focused: isFocused(),
         attention: !isFocused() && (act()?.attention || act()?.stuck || false),
+        stuck: !isFocused() && (act()?.stuck ?? false),
         agented: !!agent(),
         "drag-over": dragOver(),
       }}
@@ -762,6 +767,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           )}
         </Show>
         <span class="pane-name">{displayName()}</span>
+        {/* Idle/stuck badge (AGENTIC §1b): a distinct, unmistakable marker for a silent agent —
+            separate from the per-agent tint so it can't be confused with it. */}
+        <Show when={act()?.stuck}>
+          <span class="pane-stuck-badge" title={`No output for ${settings.idleStuckSeconds}s — this agent may be waiting on you`}>💤 idle</span>
+        </Show>
         <Show
           when={act()?.status}
           fallback={
