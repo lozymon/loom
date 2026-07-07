@@ -700,7 +700,15 @@ fn foreground_leader(_pane: &Pane) -> Option<i32> {
 fn snapshot(pids: &[u32]) -> sysinfo::System {
     let pids: Vec<sysinfo::Pid> = pids.iter().map(|&p| sysinfo::Pid::from_u32(p)).collect();
     let mut sys = sysinfo::System::new();
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&pids), true);
+    // Must use `_specifics` with an explicit kind: the plain `refresh_processes` defaults to a
+    // minimal ProcessRefreshKind that leaves argv *and* cwd empty, so `process_cmd`/`process_cwd`
+    // silently returned None — the foreground command (agent detection) and cwd (pane title) both
+    // failed, and a hand-started agent was never noticed. `everything()` populates both.
+    sys.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&pids),
+        true,
+        sysinfo::ProcessRefreshKind::everything(),
+    );
     sys
 }
 
