@@ -27,13 +27,14 @@ import { detachPaneToWindow, detachedHandle, forgetDetached } from "../lib/detac
 import { gitBranch } from "../lib/gitClient";
 import { captureRegion } from "../lib/capture";
 import { sessionLogPath } from "../lib/sessionLog";
-import { claudeSessionExists } from "../lib/claudeSessions";
+import { claudeSessionExists, listClaudeSessions } from "../lib/claudeSessions";
 import { openEditorAt } from "../lib/editor";
 import { dictateIntoPane } from "../lib/voceClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
-import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
+import { activity, noteUnseen, noteBell, noteOutput, setBusy, setStuck, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
+import { isPaneStuck } from "../lib/idle";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, appChord, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
@@ -49,6 +50,7 @@ import {
   closePane,
   clearPaneCommand,
   setPaneSessionId,
+  adoptPaneCommand,
   reopenLastClosed,
   toggleZoom,
   toggleOverview,
@@ -116,6 +118,10 @@ function basename(dir: string): string {
 // commands previously on the UI thread, froze the app for 1-2s every cycle).
 const POLL_INTERVAL_MS = 2000;
 const GIT_REFRESH_EVERY = 5; // ~10s at a stable cwd
+// How long a hand-started agent must stay the foreground process before auto-adopt records it as
+// the pane's command — long enough that a one-off (`claude --help`) exits first, short enough to be
+// invisible (the live agent tint already appears within a poll).
+const AUTO_ADOPT_MS = 4000;
 const POLL_STAGGER_SLOTS = 8;
 
 export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI }) {
@@ -136,6 +142,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // dead pane. Gates the drop-to-shell to fire once: when *this* shell later exits (the user
   // typed `exit`), we let the pane die normally rather than looping a fresh shell forever.
   let currentIsShellDrop = false;
+  // Auto-adopt dwell tracking: which agent id has been the foreground process, since when, and a
+  // guard so the async adopt fires once per detection (see the auto-adopt block in refreshLoc).
+  let adoptAgentId: string | null = null;
+  let adoptSince = 0;
+  let adopting = false;
   // git-branch poll throttle: the last cwd we ran `git` for, and a tick counter so the subprocess
   // only fires on a cwd change or a slow refresh (the branch is rarely what changes).
   let lastGitCwd: string | null = null;
@@ -167,6 +178,34 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // back to the launch command (covers the gap before the first /proc poll). Both are metadata,
   // never pane output (opacity-safe; see agents.ts + ADR-0001).
   const agent = () => detectAgent(foreground()) ?? detectAgent(spec()?.command);
+  // Adopt: an agent started *by hand* in this pane (foreground is an agent) whose launch command
+  // isn't already that agent → we can record it as the pane's command so it persists & resumes on
+  // restart (rather than coming back a plain shell). Null once the launch command already is it.
+  const adoptable = () => {
+    const fg = foreground();
+    const fgAgent = detectAgent(fg);
+    if (!fgAgent) return null;
+    if (detectAgent(spec()?.command)?.id === fgAgent.id) return null; // already launched as this agent
+    if (/(^|\s)(-p|--print)\b/.test(fg!)) return null; // a one-shot print run, not a session to keep
+    return { agent: fgAgent, command: fg! };
+  };
+  /** Record the hand-started agent as this pane's launch command. For a bare Claude invocation we
+   *  also capture the newest session in the pane's folder, so a restart resumes *that* conversation
+   *  (Claude stores it on disk; we read the store, never pane output — opacity-safe). */
+  async function adopt() {
+    const a = adoptable();
+    if (!a) return;
+    let sessionId: string | undefined;
+    if (a.agent.id === "claude" && !/--(resume|session-id|continue)\b|\s-[rc]\b/.test(a.command)) {
+      const dir = cwd() || spec()?.cwd || props.ws.cwd;
+      try {
+        // listClaudeSessions is newest-first, so the first match in this folder is the live one.
+        const s = (await listClaudeSessions()).find((s) => s.cwd === dir);
+        sessionId = s?.id;
+      } catch { /* best-effort — adopt the command even if the session lookup fails */ }
+    }
+    adoptPaneCommand(props.paneId, a.command, sessionId);
+  }
   const isFocused = () => props.ws.focused === props.paneId;
   /** Is the user actually looking at this pane right now? (active workspace + focused) */
   const looking = () => appState.activeId === props.ws.id && isFocused();
@@ -180,7 +219,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // is a live foreground command; everything else is `idle`.
   const paneState = (): "working" | "idle" | "needs" | "dead" => {
     if (dead() !== null) return "dead";
-    if (act()?.attention) return "needs";
+    if (act()?.attention || act()?.stuck) return "needs"; // stuck = idle/wedged agent (AGENTIC §1b)
     if (act()?.busy === true) return "working";
     return "idle";
   };
@@ -198,11 +237,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // we react to the *fact* of output, never its content). Shared by spawn + re-dock binding.
   const onOutput = (bytes: Uint8Array) => {
     term.write(bytes);
+    noteOutput(props.paneId); // timestamp the byte-flow (timing only) for idle/stuck detection
     if (!looking()) noteUnseen(props.paneId);
   };
   const onExit = (code: number) => {
     handle = null;
     setBusy(props.paneId, null);
+    setStuck(props.paneId, false); // a dead pane isn't "stuck"
     setForeground(null);
     // The process that held this pane's file claims (§2c) just died — free them so a crashed or
     // finished agent can't leave a lock blocking the fleet. If it drops to a shell below, that
@@ -397,7 +438,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
-    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); lastGitCwd = null; return; }
+    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); setStuck(props.paneId, false); lastGitCwd = null; return; }
     pollTick++;
     // One batched read — busy-state + foreground command + cwd — instead of three IPC round-trips
     // (see metaPty / pty::meta). A whole-call failure leaves every last value untouched, matching
@@ -413,10 +454,40 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       void notifyAttention(displayName() || `Pane ${props.paneId}`, props.ws.name);
     }
     setBusy(props.paneId, m.busy);
+    // Idle/stuck detection (AGENTIC §1b): an agent pane silent past the threshold is likely wedged
+    // on a prompt. We can't use `busy` — command panes exec the agent in place, so its pid is the
+    // pane's child pid and `busy` is always false for agents (see lib/idle.ts). Instead gate on a
+    // *running agent*: a detected agent (agent()), still alive, not dropped to a fallback shell
+    // after exiting (currentIsShellDrop). Timing (lastOutputAt) is the only stream-derived input.
+    // Gated on !looking() so the pane you're in never self-flags.
+    const runningAgent = !!agent() && dead() === null && !currentIsShellDrop;
+    setStuck(
+      props.paneId,
+      !looking() && isPaneStuck(
+        { runningAgent, lastOutputAt: act()?.lastOutputAt ?? 0 },
+        Date.now(),
+        settings.idleStuckSeconds * 1000,
+      ),
+    );
     // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.
     setForeground(m.foreground);
     const dir = m.cwd;
     setCwd(dir);
+    // Auto-adopt: once a hand-started agent has been the foreground process for AUTO_ADOPT_MS (so a
+    // one-off like `claude --help` exits first), record it as the pane's command so it persists and
+    // resumes on restart — the same thing the "keep" button does, without the click.
+    if (settings.autoAdoptAgents) {
+      const a = adoptable();
+      if (!a) {
+        adoptAgentId = null;
+      } else if (adoptAgentId !== a.agent.id) {
+        adoptAgentId = a.agent.id; // newly seen — start the dwell clock
+        adoptSince = Date.now();
+      } else if (!adopting && Date.now() - adoptSince >= AUTO_ADOPT_MS) {
+        adopting = true;
+        void adopt().finally(() => { adopting = false; });
+      }
+    }
     if (!dir) { setBranch(null); lastGitCwd = null; return; }
     // Only spawn `git` when the cwd changed, or every GIT_REFRESH_EVERY ticks as a slow refresh to
     // catch an in-pane `git checkout`. Skips the per-tick subprocess for a pane sitting still.
@@ -700,7 +771,8 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       data-state={paneState()}
       classList={{
         focused: isFocused(),
-        attention: !isFocused() && (act()?.attention ?? false),
+        attention: !isFocused() && (act()?.attention || act()?.stuck || false),
+        stuck: !isFocused() && (act()?.stuck ?? false),
         agented: !!agent(),
         "drag-over": dragOver(),
       }}
@@ -748,6 +820,25 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           )}
         </Show>
         <span class="pane-name">{displayName()}</span>
+        {/* Adopt: this pane is running an agent you started by hand and isn't launched as one yet.
+            One click records it as the pane's command so it persists + resumes on restart. Only
+            shown in manual mode — with auto-adopt on, refreshLoc records it for you. */}
+        <Show when={!settings.autoAdoptAgents && adoptable()}>
+          {(a) => (
+            <button
+              class="pane-adopt"
+              title={`Keep this as a ${a().agent.label} pane — persist it and resume on restart`}
+              onClick={(e) => { e.stopPropagation(); void adopt(); }}
+            >
+              📌 keep
+            </button>
+          )}
+        </Show>
+        {/* Idle/stuck badge (AGENTIC §1b): a distinct, unmistakable marker for a silent agent —
+            separate from the per-agent tint so it can't be confused with it. */}
+        <Show when={act()?.stuck}>
+          <span class="pane-stuck-badge" title={`No output for ${settings.idleStuckSeconds}s — this agent may be waiting on you`}>💤 idle</span>
+        </Show>
         <Show
           when={act()?.status}
           fallback={

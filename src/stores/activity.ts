@@ -42,9 +42,18 @@ export interface PaneActivity {
   // the listening overlay so the one-time fetch reads as progress, not a hang.
   downloadingModel: string;
   downloadedBytes: number;
+  // Epoch-ms of this pane's most recent PTY output (0 = none yet). Updated from byte-flow *timing*
+  // only — we timestamp that bytes arrived, never look at them (ADR-0001) — and feeds idle/stuck
+  // detection (lib/idle.ts). Throttled to ~2 writes/s so a flood doesn't churn the store.
+  lastOutputAt: number;
+  // Derived "idle/stuck" flag (AGENTIC §1b): a busy agent pane that's gone silent past the
+  // configured threshold — probably wedged on a prompt. Recomputed each metadata poll in
+  // Terminal.tsx (setStuck); counts toward "needs you" like `attention`. Not sticky (it clears
+  // when output resumes, the pane goes idle, or you look at it).
+  stuck: boolean;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "", listening: false, downloadingModel: "", downloadedBytes: 0 };
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "", listening: false, downloadingModel: "", downloadedBytes: 0, lastOutputAt: 0, stuck: false };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -71,6 +80,21 @@ export function noteBell(id: PaneId) {
 export function setBusy(id: PaneId, busy: boolean | null) {
   ensure(id);
   if (activity[id].busy !== busy) setActivity(id, "busy", busy);
+}
+
+/** Timestamp that output just arrived in a pane (byte-flow timing only, never content — ADR-0001).
+ *  Throttled to ~2 writes/s so a flood doesn't churn the store; the 0.5s granularity is far finer
+ *  than the idle threshold that consumes it. */
+export function noteOutput(id: PaneId) {
+  ensure(id);
+  const now = Date.now();
+  if (now - activity[id].lastOutputAt >= 500) setActivity(id, "lastOutputAt", now);
+}
+
+/** Set a pane's derived idle/stuck flag (recomputed each metadata poll; see lib/idle.ts). */
+export function setStuck(id: PaneId, stuck: boolean) {
+  ensure(id);
+  if (activity[id].stuck !== stuck) setActivity(id, "stuck", stuck);
 }
 
 /** Raise a pane's sticky attention flag (busy→idle transition, or `loom attention`). Returns true
@@ -136,12 +160,14 @@ export function clearDownloading(id: PaneId) {
   if (activity[id]?.downloadedBytes) setActivity(id, "downloadedBytes", 0);
 }
 
-/** The user looked at the pane — clear its sticky unseen/bell/attention signals. */
+/** The user looked at the pane — clear its sticky unseen/bell/attention signals (and the live
+ *  stuck flag, so focusing a wedged pane drops it immediately rather than at the next poll). */
 export function seePane(id: PaneId) {
   if (!activity[id]) return;
   if (activity[id].unseen) setActivity(id, "unseen", false);
   if (activity[id].bell) setActivity(id, "bell", false);
   if (activity[id].attention) setActivity(id, "attention", false);
+  if (activity[id].stuck) setActivity(id, "stuck", false);
 }
 
 /** Drop a pane's state entirely (on unmount/close). */
@@ -159,23 +185,23 @@ export function anyAttention(ids: Iterable<PaneId>): boolean {
   return false;
 }
 
-/** Does any pane in `ids` have the strict "needs you" attention flag (busy→idle finish or
- *  `loom attention`)? Drives the rail's amber border — not raised by mere background output. */
+/** Does any pane in `ids` "need you" — the sticky attention flag (busy→idle finish or
+ *  `loom attention`) or the derived idle/stuck flag? Drives the rail's amber border. */
 export function anyNeedsAttention(ids: Iterable<PaneId>): boolean {
   for (const id of ids) {
     const a = activity[id];
-    if (a && a.attention) return true;
+    if (a && (a.attention || a.stuck)) return true;
   }
   return false;
 }
 
-/** How many panes in `ids` are raising the strict "needs you" flag. Drives the rail's amber
- *  count pill — the group tells you *how many* want you, not just that one does. 0 = quiet. */
+/** How many panes in `ids` are raising a "needs you" signal (attention or idle/stuck). Drives the
+ *  rail's amber count pill — the group tells you *how many* want you, not just that one does. */
 export function countNeedsAttention(ids: Iterable<PaneId>): number {
   let n = 0;
   for (const id of ids) {
     const a = activity[id];
-    if (a && a.attention) n++;
+    if (a && (a.attention || a.stuck)) n++;
   }
   return n;
 }
