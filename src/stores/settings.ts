@@ -62,6 +62,10 @@ export interface Settings {
   // ---- Notifications ----
   /** Pop a desktop notification when a pane raises attention while Loom is unfocused. */
   notifyOnAttention: boolean;
+  // ---- Fleet observability ----
+  /** Flag an agent pane as "needs you" when it's been busy but silent this many seconds (likely
+   *  wedged on a prompt; AGENTIC §1b, byte-flow timing only). 0 = off. */
+  idleStuckSeconds: number;
   // ---- Window / tray ----
   /** Global hotkey that summons/hides the window from anywhere (Tauri accelerator; "" = off). */
   globalHotkey: string;
@@ -124,6 +128,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmClose: true,
   confirmExternalSpawn: true,
   notifyOnAttention: false,
+  idleStuckSeconds: 45,
   globalHotkey: "CommandOrControl+Alt+Backquote",
   closeToTray: false,
   docsPreview: true,

@@ -33,7 +33,8 @@ import { dictateIntoPane } from "../lib/voceClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
-import { activity, noteUnseen, noteBell, setBusy, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
+import { activity, noteUnseen, noteBell, noteOutput, setBusy, setStuck, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
+import { isPaneStuck } from "../lib/idle";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, appChord, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
@@ -180,7 +181,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // is a live foreground command; everything else is `idle`.
   const paneState = (): "working" | "idle" | "needs" | "dead" => {
     if (dead() !== null) return "dead";
-    if (act()?.attention) return "needs";
+    if (act()?.attention || act()?.stuck) return "needs"; // stuck = idle/wedged agent (AGENTIC §1b)
     if (act()?.busy === true) return "working";
     return "idle";
   };
@@ -198,11 +199,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // we react to the *fact* of output, never its content). Shared by spawn + re-dock binding.
   const onOutput = (bytes: Uint8Array) => {
     term.write(bytes);
+    noteOutput(props.paneId); // timestamp the byte-flow (timing only) for idle/stuck detection
     if (!looking()) noteUnseen(props.paneId);
   };
   const onExit = (code: number) => {
     handle = null;
     setBusy(props.paneId, null);
+    setStuck(props.paneId, false); // a dead pane isn't "stuck"
     setForeground(null);
     // The process that held this pane's file claims (§2c) just died — free them so a crashed or
     // finished agent can't leave a lock blocking the fleet. If it drops to a shell below, that
@@ -397,7 +400,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
-    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); lastGitCwd = null; return; }
+    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); setStuck(props.paneId, false); lastGitCwd = null; return; }
     pollTick++;
     // One batched read — busy-state + foreground command + cwd — instead of three IPC round-trips
     // (see metaPty / pty::meta). A whole-call failure leaves every last value untouched, matching
@@ -413,6 +416,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       void notifyAttention(displayName() || `Pane ${props.paneId}`, props.ws.name);
     }
     setBusy(props.paneId, m.busy);
+    // Idle/stuck detection (AGENTIC §1b): a busy agent pane silent past the threshold is likely
+    // wedged on a prompt. Uses byte-flow *timing* + the kernel busy fact + our own agent tag —
+    // never output content. Gated on !looking() so the pane you're in never self-flags.
+    setStuck(
+      props.paneId,
+      !looking() && isPaneStuck(
+        { busy: m.busy, lastOutputAt: act()?.lastOutputAt ?? 0, isAgent: !!agent() },
+        Date.now(),
+        settings.idleStuckSeconds * 1000,
+      ),
+    );
     // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.
     setForeground(m.foreground);
     const dir = m.cwd;
@@ -700,7 +714,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       data-state={paneState()}
       classList={{
         focused: isFocused(),
-        attention: !isFocused() && (act()?.attention ?? false),
+        attention: !isFocused() && (act()?.attention || act()?.stuck || false),
         agented: !!agent(),
         "drag-over": dragOver(),
       }}

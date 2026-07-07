@@ -414,6 +414,26 @@ export default function Settings(props: { onClose: () => void }) {
             <p class="settings-hint muted">Only fires when the Loom window isn't focused — when it's up front the amber pane border is enough. Your OS may ask permission the first time.</p>
           </section>
 
+          {/* ---- Fleet observability ---- */}
+          <section class="settings-section">
+            <h3>Idle agent detection</h3>
+            <div class="settings-card">
+              <label class="settings-row">
+                <span class="settings-label">Flag a silent agent after <span class="muted">— seconds (0 = off)</span></span>
+                <input
+                  class="settings-input narrow"
+                  type="number"
+                  min="0"
+                  max="3600"
+                  step="5"
+                  value={settings.idleStuckSeconds}
+                  onChange={(e) => setSetting("idleStuckSeconds", Math.max(0, Math.floor(e.currentTarget.valueAsNumber || 0)))}
+                />
+              </label>
+            </div>
+            <p class="settings-hint muted">An agent pane that's busy but has printed nothing for this long is likely waiting on a prompt — it joins the amber "needs you" count. Uses byte-flow timing only, never the pane's output.</p>
+          </section>
+
           {/* ---- Window & tray ---- */}
           <section class="settings-section">
             <h3>Window &amp; tray</h3>
