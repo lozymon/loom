@@ -3182,6 +3182,29 @@ body,
   background: var(--well);
 }
 
+/* Usage HUD (AGENTIC §1c) — per-pane Claude token spend + estimated cost. */
+.fleet-est {
+  font: 500 10px var(--font-mono);
+  color: var(--text-faint);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+.fleet-usage-total {
+  font: 600 11px var(--font-mono);
+  color: var(--text-dim);
+  padding: 1px 6px;
+  border-radius: 7px;
+  background: var(--well);
+  white-space: nowrap;
+}
+.fleet-usage-cost {
+  flex: 0 0 auto;
+  font: 600 11px var(--font-mono);
+  color: var(--state-needs, var(--accent-text));
+  white-space: nowrap;
+}
+
 /* Drag the left edge to widen the docked Source Control panel (mirrors .preview-resizer). */
 .git-resizer {
   position: absolute;
