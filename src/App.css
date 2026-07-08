@@ -489,9 +489,22 @@ body,
   z-index: 5;
 }
 
-.rail-resizer:hover {
+/* Same treatment as .gutter: 6px grab strip, thin centred line on hover. */
+.rail-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-1px);
   background: var(--accent);
-  opacity: 0.4;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.rail-resizer:hover::after {
+  opacity: 0.55;
 }
 
 /* Rail header: section label + a New-workspace button. */
@@ -2272,8 +2285,34 @@ body,
   cursor: row-resize;
 }
 
-.gutter:hover {
+/* Keep the 6px grab area, but paint only a thin centred line on hover so the
+   feedback reads as a hairline seam, not a fat bar. */
+.gutter::after {
+  content: "";
+  position: absolute;
   background: var(--gutter-hover);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.gutter-row::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-1px);
+}
+
+.gutter-col::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-1px);
+}
+
+.gutter:hover::after {
+  opacity: 1;
 }
 
 /* Shown when a pane's child has exited; offers a respawn (and, for a missing command, a
