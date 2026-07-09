@@ -117,6 +117,12 @@ export interface Settings {
   fleetWidth: number;
   /** Width (px) of the docked Task board panel; drag its left edge to resize. */
   boardWidth: number;
+  /** Last size (px) of the floating card edit/new dialog — restored when it reopens. */
+  boardDialogWidth: number;
+  boardDialogHeight: number;
+  /** Last on-screen position (px) of that dialog; -1 = unset (center on first open). */
+  boardDialogX: number;
+  boardDialogY: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -154,6 +160,10 @@ export const DEFAULT_SETTINGS: Settings = {
   docsListHeight: 180,
   fleetWidth: 340,
   boardWidth: 380,
+  boardDialogWidth: 460,
+  boardDialogHeight: 420,
+  boardDialogX: -1,
+  boardDialogY: -1,
 };
 
 const [settings, setStore] = createStore<Settings>({ ...DEFAULT_SETTINGS });

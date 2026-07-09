@@ -111,6 +111,21 @@ export function addCard(dir: string, input: { title: string; prompt?: string; co
 
 const cardIdx = (dir: string, id: string) => (board[dir] ?? []).findIndex((c) => c.id === id);
 
+/** Edit a card's fields (title/prompt/command) in place. A blank title is ignored (keeps the old).
+ *  Only affects a future dispatch — it doesn't touch a card that's already running in a pane. */
+export function updateCard(dir: string, id: string, patch: { title?: string; prompt?: string; command?: string }): boolean {
+  const i = cardIdx(dir, id);
+  if (i < 0) return false;
+  setBoard(dir, i, (c) => ({
+    ...c,
+    title: patch.title?.trim() || c.title,
+    prompt: patch.prompt !== undefined ? patch.prompt.trim() : c.prompt,
+    command: patch.command?.trim() || c.command,
+  }));
+  scheduleSave(dir);
+  return true;
+}
+
 /** Remove a card. Returns false if it wasn't found. */
 export function removeCard(dir: string, id: string): boolean {
   const list = board[dir];
@@ -125,6 +140,24 @@ export function setCardStatus(dir: string, id: string, status: BoardCard["status
   const i = cardIdx(dir, id);
   if (i < 0) return false;
   setBoard(dir, i, "status", status);
+  scheduleSave(dir);
+  return true;
+}
+
+/** Reorder `id` to sit just before/after `targetId` in the project's card array (drag-and-drop).
+ *  Lanes are filtered views of this one array, so moving relative to a same-lane neighbour reorders
+ *  within that lane. Returns false if either card is missing or they're the same. */
+export function reorderCard(dir: string, id: string, targetId: string, place: "before" | "after"): boolean {
+  const list = board[dir];
+  if (!list || id === targetId) return false;
+  const from = list.findIndex((c) => c.id === id);
+  if (from < 0 || !list.some((c) => c.id === targetId)) return false;
+  const next = list.slice();
+  const [moved] = next.splice(from, 1);
+  let insert = next.findIndex((c) => c.id === targetId);
+  if (place === "after") insert += 1;
+  next.splice(insert, 0, moved);
+  setBoard(dir, next);
   scheduleSave(dir);
   return true;
 }

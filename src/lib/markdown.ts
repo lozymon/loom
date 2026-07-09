@@ -53,6 +53,13 @@ md.renderer.rules.image = (tokens, idx) => escapeAttr(tokens[idx].content ?? "")
  * contained token (a fence, hr, code block). We render each run on its own and read the source
  * range off the opening token's `.map`.
  */
+/** Render a whole Markdown document to HTML with the same safe renderer as the Docs preview
+ *  (`html: false`, links stripped of their href). For trusted-enough previews (a card description a
+ *  user typed) mounted via innerHTML. */
+export function renderMarkdown(text: string): string {
+  return md.render(text);
+}
+
 export function parseMarkdownBlocks(text: string): MdBlock[] {
   const tokens = md.parse(text, {});
   const blocks: MdBlock[] = [];
