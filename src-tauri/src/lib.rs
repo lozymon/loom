@@ -152,6 +152,7 @@ pub fn run() {
             logs::read_log_tail,
             claude::list_claude_sessions,
             claude::claude_session_exists,
+            claude::claude_usage,
             workspace::state_save,
             workspace::state_load,
             workspace::session_log_path,

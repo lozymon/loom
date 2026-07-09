@@ -94,6 +94,102 @@ fn extract(path: &PathBuf) -> (Option<String>, Option<String>) {
     (cwd, title)
 }
 
+/// Token totals for one model within a session (summed across its assistant messages). Cost is
+/// derived on the frontend from these + a pricing table (lib/claudeUsage.ts), so the Rust side stays
+/// pricing-agnostic — it only counts tokens (from Claude's own transcript, never pane output).
+#[derive(Serialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ModelUsage {
+    model: String,
+    input: u64,
+    output: u64,
+    cache_read: u64,
+    cache_write_5m: u64,
+    cache_write_1h: u64,
+}
+
+/// One session's usage, broken down by model (a session usually has one, but can switch).
+#[derive(Serialize)]
+pub struct SessionUsage {
+    id: String,
+    models: Vec<ModelUsage>,
+}
+
+/// Locate the transcript file for a session id under any `~/.claude/projects/*` folder.
+fn find_session_file(session_id: &str) -> Option<PathBuf> {
+    let home = home_dir()?;
+    let root = PathBuf::from(home).join(".claude").join("projects");
+    let target = format!("{session_id}.jsonl");
+    for project in fs::read_dir(&root).ok()?.flatten() {
+        let p = project.path().join(&target);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Sum token usage per model for each of `session_ids`, reading the on-disk transcripts. Missing
+/// sessions are skipped (a pane whose Claude never conversed just has no entry). Used by the Fleet
+/// panel's usage HUD. Opacity-safe: reads Claude's own session store, not pane output (ADR-0001).
+#[tauri::command]
+pub fn claude_usage(session_ids: Vec<String>) -> Result<Vec<SessionUsage>, String> {
+    let mut out: Vec<SessionUsage> = Vec::new();
+    for id in session_ids {
+        let Some(path) = find_session_file(&id) else {
+            continue;
+        };
+        let Ok(file) = File::open(&path) else {
+            continue;
+        };
+        let mut by_model: std::collections::HashMap<String, ModelUsage> =
+            std::collections::HashMap::new();
+        for line in BufReader::new(file).lines().map_while(Result::ok) {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            let Some(usage) = v.get("message").and_then(|m| m.get("usage")) else {
+                continue;
+            };
+            let model = v
+                .get("message")
+                .and_then(|m| m.get("model"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("");
+            if model.is_empty() || model == "<synthetic>" {
+                continue;
+            }
+            let g = |k: &str| usage.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
+            let e = by_model
+                .entry(model.to_string())
+                .or_insert_with(|| ModelUsage {
+                    model: model.to_string(),
+                    ..Default::default()
+                });
+            e.input += g("input_tokens");
+            e.output += g("output_tokens");
+            e.cache_read += g("cache_read_input_tokens");
+            // Prefer the 5m/1h split (different cache-write prices); fall back to the flat total.
+            if let Some(cc) = usage.get("cache_creation") {
+                e.cache_write_5m += cc
+                    .get("ephemeral_5m_input_tokens")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or(0);
+                e.cache_write_1h += cc
+                    .get("ephemeral_1h_input_tokens")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or(0);
+            } else {
+                e.cache_write_5m += g("cache_creation_input_tokens");
+            }
+        }
+        let mut models: Vec<ModelUsage> = by_model.into_values().collect();
+        models.sort_by_key(|m| std::cmp::Reverse(m.output));
+        out.push(SessionUsage { id, models });
+    }
+    Ok(out)
+}
+
 /// Whether a Claude conversation transcript exists on disk for `session_id` (any project folder).
 /// Lets the launcher pick `--resume` only when there's really something to resume — a session that
 /// was pinned via `--session-id` but never conversed in (e.g. blocked at the trust dialog) has no
