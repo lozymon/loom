@@ -278,6 +278,19 @@ fn tools() -> Value {
             }
         },
         {
+            "name": "card_drain",
+            "description": "Arm or disarm the board's auto-drainer: while on, Loom keeps dispatching the top To-do cards into new panes until the In-progress lane reaches the cap, then refills a slot each time a card finishes. Session-only (not persisted). Use to launch the swarm on a queue of cards you've added.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "on": { "type": "boolean", "description": "true = arm the drainer, false = disarm." },
+                    "cap": { "type": "integer", "minimum": 1, "description": "Max panes running at once (default: keep current, 3 first time)." },
+                    "workspace": { "type": "string", "description": "Workspace name (default: your pane's workspace)." }
+                },
+                "required": ["on"]
+            }
+        },
+        {
             "name": "claim_file",
             "description": "Take a cooperative advisory lock on a file path so no other pane edits it at the same time. Fails if another pane already holds it (check before editing shared files).",
             "inputSchema": {
@@ -439,6 +452,17 @@ fn build_request(name: &str, args: &Value, pane: Option<&str>) -> Result<Value, 
             args,
             pane,
         ),
+        "card_drain" => {
+            let on = args
+                .get("on")
+                .and_then(Value::as_bool)
+                .ok_or("card_drain needs a boolean 'on'")?;
+            let mut o = json!({ "op": "card.drain", "on": on });
+            if let Some(cap) = args.get("cap").and_then(Value::as_i64) {
+                o["cap"] = json!(cap);
+            }
+            with_scope(o, args, pane)
+        }
         "claim_file" => with_scope(
             json!({ "op": "claim", "path": arg_str(args, "path")? }),
             args,

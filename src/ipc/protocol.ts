@@ -146,6 +146,9 @@ export type ControlRequest =
   | { op: "card.add"; title: string; prompt?: string; command?: string; pane?: string; workspace?: string }
   | { op: "card.list"; pane?: string; workspace?: string }
   | { op: "card.move"; id: string; status: "todo" | "done" | "failed"; pane?: string; workspace?: string }
+  // Arm/disarm the auto-drainer: keep dispatching top To-do cards until "In progress" hits `cap`.
+  // Session-only (never persisted). Lets a lead agent start the swarm itself, not just the operator.
+  | { op: "card.drain"; on: boolean; cap?: number; pane?: string; workspace?: string }
   // ---- Ask/reply RPC (docs/AGENTIC-ENHANCEMENTS.md §2a) ----
   // Turns the fire-and-forget bus into request/response: `ask` types a question into `target`
   // (with reply instructions carrying the correlation id) and returns the id immediately; the

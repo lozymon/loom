@@ -3281,6 +3281,53 @@ body,
 
 .board-body { overflow-y: auto; flex: 1 1 auto; padding: 4px 0 12px; }
 .board-col { padding: 8px 12px 2px; }
+
+/* Auto-drainer control in the To-do lane header (BoardPanel). */
+.board-drain {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding: 1px 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--well);
+}
+.board-drain.on {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: var(--accent-fill);
+}
+.board-drain-btn {
+  padding: 1px 6px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  font: 600 10px var(--font-ui);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+.board-drain.on .board-drain-btn { color: var(--accent-text); }
+.board-drain-btn:hover { color: var(--text); }
+.board-drain-step {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font: 600 11px var(--font-mono);
+  line-height: 1;
+  cursor: pointer;
+}
+.board-drain-step:hover { background: rgba(var(--accent-rgb), 0.16); color: var(--text); }
+.board-drain-cap {
+  min-width: 12px;
+  text-align: center;
+  font: 600 10px var(--font-mono);
+  color: var(--text-dim);
+}
 .board-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .board-empty { padding: 2px 0 4px; opacity: 0.5; }
 

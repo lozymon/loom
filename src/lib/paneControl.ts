@@ -22,7 +22,7 @@ import {
 } from "../stores/workspace";
 import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
 import { claimFile, releaseFile, listClaims } from "../stores/claims";
-import { addCard, cards, setCardStatus, ensureBoardLoaded } from "../stores/board";
+import { addCard, cards, setCardStatus, ensureBoardLoaded, setDrain, drainState } from "../stores/board";
 import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
 import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
 import {
@@ -224,6 +224,14 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       const ok = setCardStatus(scope.ws.cwd, req.id, req.status);
       if (!ok) return { ok: false, error: `no card "${req.id}"` };
       return { ok: true, data: { id: req.id, status: req.status } };
+    }
+    case "card.drain": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      await ensureBoardLoaded(scope.ws.cwd);
+      setDrain(scope.ws.cwd, req.on, req.cap);
+      const cfg = drainState(scope.ws.cwd);
+      return { ok: true, data: { workspace: scope.ws.name, draining: cfg.on, cap: cfg.cap } };
     }
 
     // ---- Ask/reply RPC (§2a) — `ask` injects the question + reply instructions into the callee

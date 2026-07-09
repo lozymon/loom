@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { cards, addCard, updateCard, removeCard, setCardStatus, reorderCard, reopenCard, board } from "./board";
+import { cards, addCard, updateCard, removeCard, setCardStatus, reorderCard, reopenCard, board, drainCandidates, setDrain, drainState, type BoardCard } from "./board";
+
+const mk = (status: BoardCard["status"], i: number): BoardCard => ({ id: `c${i}`, title: `T${i}`, prompt: "", command: "claude", status });
 
 // Exercises the pure card CRUD (dispatch is side-effectful and covered manually). Each test uses a
 // unique workspace id so they don't interfere via the shared module store.
@@ -66,5 +68,44 @@ describe("board store", () => {
     expect(cards("ws-d")).toHaveLength(1);
     expect(cards("ws-e")).toHaveLength(0);
     expect(board["ws-d"]).toBeDefined();
+  });
+});
+
+describe("auto-drainer", () => {
+  it("picks the top To-do cards to fill open slots up to the cap", () => {
+    const list = [mk("todo", 1), mk("todo", 2), mk("todo", 3), mk("todo", 4)];
+    expect(drainCandidates(list, 2).map((c) => c.id)).toEqual(["c1", "c2"]);
+  });
+
+  it("counts dispatched cards as occupying slots (hold the slot)", () => {
+    const list = [mk("dispatched", 1), mk("todo", 2), mk("todo", 3)];
+    expect(drainCandidates(list, 2).map((c) => c.id)).toEqual(["c2"]); // 1 slot free
+  });
+
+  it("dispatches nothing when the lane is already full", () => {
+    const list = [mk("dispatched", 1), mk("dispatched", 2), mk("todo", 3)];
+    expect(drainCandidates(list, 2)).toEqual([]);
+  });
+
+  it("ignores done/failed cards — only To-do is pulled", () => {
+    const list = [mk("done", 1), mk("failed", 2), mk("todo", 3)];
+    expect(drainCandidates(list, 3).map((c) => c.id)).toEqual(["c3"]);
+  });
+
+  it("arms/disarms drain and clamps the cap to at least 1", () => {
+    expect(drainState("ws-drain").on).toBe(false);
+    expect(drainState("ws-drain").cap).toBe(3); // default
+    setDrain("ws-drain", true, 5);
+    expect(drainState("ws-drain")).toMatchObject({ on: true, cap: 5 });
+    setDrain("ws-drain", true, 0); // clamps up
+    expect(drainState("ws-drain").cap).toBe(1);
+    setDrain("ws-drain", false); // keeps the cap when omitted
+    expect(drainState("ws-drain")).toMatchObject({ on: false, cap: 1 });
+  });
+
+  it("arms drain for a folderless (in-memory) workspace too, like cards do", () => {
+    setDrain("", true, 4);
+    expect(drainState("")).toMatchObject({ on: true, cap: 4 });
+    setDrain("", false); // reset the shared "" key so other tests aren't affected
   });
 });

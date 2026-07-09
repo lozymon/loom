@@ -316,14 +316,16 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             // loom card add <title...>  [--prompt <text>] [--command <cmd>]  — add a To-do card (§1)
             // loom card list                                                 — list cards (id/title/status)
             // loom card move <id> <todo|done|failed>                         — move a card between lanes
+            // loom card drain <on|off> [--cap <n>]                           — arm/disarm the auto-drainer
             // Scoped to the caller pane's workspace ($LOOM_PANE), or --workspace <name>.
             if args.len() < 2 {
-                return Err("card needs a subcommand: add | list | move".to_string());
+                return Err("card needs a subcommand: add | list | move | drain".to_string());
             }
             let action = args[1].clone();
             let mut workspace: Option<String> = None;
             let mut prompt: Option<String> = None;
             let mut command: Option<String> = None;
+            let mut cap: Option<i64> = None;
             let mut rest: Vec<String> = Vec::new();
             let mut i = 2;
             while i < args.len() {
@@ -339,6 +341,15 @@ fn build_request(args: &[String]) -> Result<Value, String> {
                     "--command" | "-c" => {
                         i += 1;
                         command = Some(args.get(i).ok_or("--command needs a value")?.clone());
+                    }
+                    "--cap" => {
+                        i += 1;
+                        cap = Some(
+                            args.get(i)
+                                .ok_or("--cap needs a number")?
+                                .parse()
+                                .map_err(|_| "--cap must be a number")?,
+                        );
                     }
                     "--" => {
                         rest.extend_from_slice(&args[i + 1..]);
@@ -375,8 +386,22 @@ fn build_request(args: &[String]) -> Result<Value, String> {
                     }
                     json!({ "op": "card.move", "id": rest[0].clone(), "status": status })
                 }
+                "drain" => {
+                    let on = match rest.first().map(String::as_str) {
+                        Some("on") | Some("start") => true,
+                        Some("off") | Some("stop") => false,
+                        _ => return Err("card drain needs: loom card drain <on|off> [--cap <n>]".to_string()),
+                    };
+                    let mut o = json!({ "op": "card.drain", "on": on });
+                    if let Some(c) = cap {
+                        o["cap"] = json!(c);
+                    }
+                    o
+                }
                 other => {
-                    return Err(format!("unknown card subcommand '{other}' (add | list | move)"))
+                    return Err(format!(
+                        "unknown card subcommand '{other}' (add | list | move | drain)"
+                    ))
                 }
             };
             if let Ok(pane) = env::var("LOOM_PANE") {
@@ -674,6 +699,19 @@ fn handle_response(op: &str, resp: &Value) {
                 for c in list {
                     let get = |k| c.get(k).and_then(Value::as_str).unwrap_or("?");
                     println!("{:<10} {:<8} {}", get("id"), get("status"), get("title"));
+                }
+            } else if let Some(draining) = data
+                .and_then(|d| d.get("draining"))
+                .and_then(Value::as_bool)
+            {
+                let cap = data
+                    .and_then(|d| d.get("cap"))
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                if draining {
+                    println!("auto-drain on (cap {cap})");
+                } else {
+                    println!("auto-drain off");
                 }
             } else if let Some(status) = data.and_then(|d| d.get("status")).and_then(Value::as_str)
             {

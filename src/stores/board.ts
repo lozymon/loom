@@ -10,8 +10,10 @@
 // agents over the control bus (`loom card …`, ADR-0007) — see lib/paneControl.ts.
 
 import { createStore } from "solid-js/store";
+import { batch, createEffect, createRoot } from "solid-js";
 import { projectStateLoad, projectStateSave } from "../lib/persist";
 import { spawnPane } from "./workspace";
+import { paneActiveTask } from "./sessions";
 import { writeToPanes } from "../lib/paneRegistry";
 import type { PaneId } from "../ipc/protocol";
 
@@ -35,6 +37,31 @@ const [board, setBoard] = createStore<Record<string, BoardCard[]>>({});
 /** Reactive read-only view — read `board[dir]` for a project folder's cards. */
 export { board };
 
+/** Auto-drain config, keyed by project folder (same key as `board`). When `on`, the drainer keeps
+ *  the "In progress" lane filled to `cap` by pulling the top To-do cards — see the drain loop below.
+ *  Session-only / in-memory: deliberately NOT persisted to `.loom/board.json`, so a repo can't ship
+ *  "auto-drain ON" and spawn a fleet the moment a teammate opens it. */
+export interface DrainConfig { on: boolean; cap: number }
+const DEFAULT_CAP = 3;
+const [drain, setDrainStore] = createStore<Record<string, DrainConfig>>({});
+
+/** Reactive read-only view of drain config. Read `drainState(dir)` for a folder's current setting. */
+export { drain };
+
+/** A folder's drain config (defaults to off). */
+export function drainState(dir: string): DrainConfig {
+  return drain[dir] ?? { on: false, cap: DEFAULT_CAP };
+}
+
+/** Arm/disarm auto-drain for a project folder, optionally setting the concurrency cap (min 1).
+ *  Turning it on (or bumping the cap) immediately fills open slots via the reactive drain loop.
+ *  Works on the folderless ("") board too — same in-memory key the default workspace's cards use. */
+export function setDrain(dir: string, on: boolean, cap?: number): void {
+  const prev = drainState(dir);
+  const next: DrainConfig = { on, cap: Math.max(1, Math.round(cap ?? prev.cap)) };
+  setDrainStore(dir, next);
+}
+
 let cardSeq = 0;
 const nextCardId = (): string => `card${++cardSeq}`;
 
@@ -45,6 +72,18 @@ const DISPATCH_PROMPT_DELAY_MS = 1500;
 /** A project folder's cards (the raw array; the panel splits them into lanes). */
 export function cards(dir: string): BoardCard[] {
   return board[dir] ?? [];
+}
+
+/** Pure slot arithmetic for the auto-drainer: given a folder's cards and a concurrency cap, return
+ *  the top To-do cards that should be dispatched *now* to fill open In-progress slots. Occupancy is
+ *  counted by status — a dispatched card holds its slot until it leaves the lane ("hold the slot"),
+ *  which is what makes the drain effect converge (each dispatch shrinks the free slots). Exported so
+ *  the convergence logic is unit-testable without spawning real panes. */
+export function drainCandidates(list: BoardCard[], cap: number): BoardCard[] {
+  const occupied = list.filter((c) => c.status === "dispatched").length;
+  const slots = cap - occupied;
+  if (slots <= 0) return [];
+  return list.filter((c) => c.status === "todo").slice(0, slots);
 }
 
 // ---- Project-scoped persistence (`<dir>/.loom/board.json`) ---------------------------
@@ -197,3 +236,39 @@ export function dispatchCard(dir: string, id: string): void {
     setTimeout(() => writeToPanes([r.paneId], card.prompt + "\r"), DISPATCH_PROMPT_DELAY_MS);
   }
 }
+
+// ---- Headless board loops -----------------------------------------------------------
+// These run at module scope (not in a component) so the board keeps flowing even when the panel is
+// closed — the swarm should drain whether or not you're looking at it. Both are purely reactive off
+// the stores (no polling): a store change re-runs them. In a non-Tauri env (tests) the boards start
+// empty and drain stays off, so they no-op.
+
+createRoot(() => {
+  // Auto-move: when a dispatched card's pinned pane reports its Task done/failed (ADR-0008), drive
+  // the card to its lane. Best-effort — only agents that push signals report a Task; a plain shell
+  // or a non-reporting agent stays "In progress" (holding its drain slot) until marked done by hand.
+  createEffect(() => {
+    for (const dir of Object.keys(board)) {
+      for (const c of board[dir] ?? []) {
+        if (c.status !== "dispatched" || c.paneId == null) continue;
+        const t = paneActiveTask(c.paneId);
+        if (t?.state === "done") setCardStatus(dir, c.id, "done");
+        else if (t?.state === "failed") setCardStatus(dir, c.id, "failed");
+      }
+    }
+  });
+
+  // Auto-drainer: for each folder with drain armed, keep the "In progress" lane filled to `cap` by
+  // dispatching the top To-do cards. The slot count is by *status* (a dispatched card always occupies
+  // a slot until it leaves the lane — "hold the slot") so the loop converges: each dispatch flips a
+  // card todo→dispatched, shrinking the free slots, and the effect re-runs off that same store write.
+  // When the auto-move effect above frees a slot (→ done/failed), a slot opens and the next card goes.
+  createEffect(() => {
+    for (const dir of Object.keys(drain)) {
+      const cfg = drain[dir];
+      if (!cfg?.on) continue;
+      const next = drainCandidates(board[dir] ?? [], cfg.cap);
+      if (next.length) batch(() => next.forEach((c) => dispatchCard(dir, c.id)));
+    }
+  });
+});

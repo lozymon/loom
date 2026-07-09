@@ -7,7 +7,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import MarkdownEditor from "./MarkdownEditor";
 import { activeWorkspace, revealPane, paneExists, closePane } from "../stores/workspace";
-import { board, cards, addCard, updateCard, removeCard, dispatchCard, setCardStatus, reorderCard, reopenCard, redispatchCard, ensureBoardLoaded, type BoardCard } from "../stores/board";
+import { board, cards, addCard, updateCard, removeCard, dispatchCard, setCardStatus, reorderCard, reopenCard, redispatchCard, ensureBoardLoaded, drainState, setDrain, type BoardCard } from "../stores/board";
 import { mdToPlainText } from "../lib/markdown";
 import { paneActiveTask } from "../stores/sessions";
 import { activity } from "../stores/activity";
@@ -43,17 +43,8 @@ export default function BoardPanel(props: { onClose: () => void }) {
     return "idle";
   };
 
-  // Auto-move: when a dispatched card's Task ends, drive the card to its lane (the "state flows back
-  // to the card" idea). Best-effort — only agents that push ADR-0008 signals report a Task; others
-  // stay dispatched until you mark them done.
-  createEffect(() => {
-    for (const c of wsCards()) {
-      if (c.status !== "dispatched" || c.paneId == null) continue;
-      const t = paneActiveTask(c.paneId);
-      if (t?.state === "done") setCardStatus(dir(), c.id, "done");
-      else if (t?.state === "failed") setCardStatus(dir(), c.id, "failed");
-    }
-  });
+  // (Auto-move of a dispatched card → its lane when the pane's Task ends now lives headless in
+  // stores/board.ts, so it runs even when this panel is closed — see the drain loops there.)
 
   // ---- Card form — a floating, movable, resizable, NON-modal dialog (no backdrop) so you can keep
   // working in the terminal behind it. `formMode` is null (closed), { editId: null } (new), or
@@ -296,6 +287,20 @@ export default function BoardPanel(props: { onClose: () => void }) {
     <section class="board-col" data-lane={lane} classList={{ "board-col-droptarget": isLaneDrop(lane) }}>
       <div class="fleet-section-head">
         <span class="fleet-section-title">{label}</span>
+        <Show when={lane === "todo"}>
+          {/* Auto-drainer: keep the In-progress lane filled to `cap` by dispatching the top To-do
+              cards. Session-only (never persisted). ▶ = armed. */}
+          <span class="board-drain" classList={{ on: drainState(dir()).on }}>
+            <button
+              class="board-drain-btn"
+              title="Auto-drain — keep dispatching To-do cards until In progress hits the cap"
+              onClick={(e) => { e.stopPropagation(); setDrain(dir(), !drainState(dir()).on); }}
+            >{drainState(dir()).on ? "▶ Auto" : "Auto"}</button>
+            <button class="board-drain-step" title="Fewer parallel panes" onClick={(e) => { e.stopPropagation(); setDrain(dir(), drainState(dir()).on, drainState(dir()).cap - 1); }}>−</button>
+            <span class="board-drain-cap" title="Concurrency cap — max panes running at once">{drainState(dir()).cap}</span>
+            <button class="board-drain-step" title="More parallel panes" onClick={(e) => { e.stopPropagation(); setDrain(dir(), drainState(dir()).on, drainState(dir()).cap + 1); }}>＋</button>
+          </span>
+        </Show>
         <span class="fleet-count">{list().length}</span>
       </div>
       <Show when={list().length > 0} fallback={<div class="fleet-empty board-empty">—</div>}>
