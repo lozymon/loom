@@ -18,7 +18,7 @@ import { forgetClaims, releaseClaimsBy } from "./claims";
 import { settings } from "./settings";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
-export type DockedPanelKind = "git" | "docs" | "fleet";
+export type DockedPanelKind = "git" | "docs" | "fleet" | "board";
 
 /**
  * Per-workspace state for the docked side panel. Lets each workspace carry its own Source
@@ -454,7 +454,7 @@ export function revealPaneByName(name: string): { name: string } | { error: stri
  * (same mutation the UI's split does, so the result is an ordinary persisted pane). Returns
  * the pane's final name — the requested one if free, else a freshly allocated pool name.
  */
-export function spawnPane(opts: { title?: string; command: string; cwd?: string }): { name: string } | { error: string } {
+export function spawnPane(opts: { title?: string; command: string; cwd?: string }): { name: string; paneId: PaneId } | { error: string } {
   const i = wsIdxById(app.activeId);
   if (i < 0) return { error: "no active workspace" };
   const ws = app.workspaces[i];
@@ -473,7 +473,7 @@ export function spawnPane(opts: { title?: string; command: string; cwd?: string 
     setApp("workspaces", i, "focused", newId);
     setApp("workspaces", i, "zoomed", null);
   });
-  return { name: title };
+  return { name: title, paneId: newId };
 }
 
 /** Open a past Claude conversation in a new pane in the active workspace, resuming it via

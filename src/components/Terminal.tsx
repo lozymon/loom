@@ -685,6 +685,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "source-control": () => window.dispatchEvent(new CustomEvent("loom:source-control")),
       "docs": () => window.dispatchEvent(new CustomEvent("loom:docs")),
       "fleet": () => window.dispatchEvent(new CustomEvent("loom:fleet")),
+      "board": () => window.dispatchEvent(new CustomEvent("loom:board")),
       "settings": () => window.dispatchEvent(new CustomEvent("loom:settings")),
       "overview": () => toggleOverview(),
       "shortcuts": () => window.dispatchEvent(new CustomEvent("loom:shortcuts")),

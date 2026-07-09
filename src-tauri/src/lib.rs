@@ -155,6 +155,8 @@ pub fn run() {
             claude::claude_usage,
             workspace::state_save,
             workspace::state_load,
+            workspace::project_state_save,
+            workspace::project_state_load,
             workspace::session_log_path,
             sessionlog::session_log_save_session,
             sessionlog::session_log_save_task,

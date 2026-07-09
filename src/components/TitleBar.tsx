@@ -18,6 +18,8 @@ import loomMark from '../assets/loom-mark.svg';
 // Line-style 16px icons (stroke = currentColor) so they inherit the button's text color and
 // the active/hover states. Trusted static markup → innerHTML is safe here.
 const ICONS: Record<string, string> = {
+  board:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.5" width="3.4" height="11" rx="1"/><rect x="6.3" y="2.5" width="3.4" height="7.5" rx="1"/><rect x="10.6" y="2.5" width="3.4" height="4.5" rx="1"/></svg>',
   overview:
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>',
   palette:
@@ -47,12 +49,14 @@ export default function TitleBar(props: {
   onGit: () => void;
   onDocs: () => void;
   onFleet: () => void;
+  onBoard: () => void;
   onShortcuts: () => void;
   onHistory: () => void;
   onReopen: () => void;
   gitOn: () => boolean;
   docsOn: () => boolean;
   fleetOn: () => boolean;
+  boardOn: () => boolean;
   settingsOn: () => boolean;
   paletteOn: () => boolean;
   historyOn: () => boolean;
@@ -106,6 +110,15 @@ export default function TitleBar(props: {
             title={`Docs reader — mark a passage → send to a pane (${MOD_NAMESPACE}+R)`}
             onClick={() => props.onDocs()}
             innerHTML={ICONS.docs}
+          />
+        </Show>
+        <Show when={settings.navVisible.board}>
+          <button
+            class="tb-icon"
+            classList={{ on: props.boardOn() }}
+            title={`Task board — dispatch work into panes (${MOD_NAMESPACE}+B)`}
+            onClick={() => props.onBoard()}
+            innerHTML={ICONS.board}
           />
         </Show>
         <Show when={settings.navVisible.fleet}>

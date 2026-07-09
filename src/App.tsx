@@ -18,6 +18,7 @@ import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
 import DocsPanel from "./components/DocsPanel";
 import FleetPanel from "./components/FleetPanel";
+import BoardPanel from "./components/BoardPanel";
 import ShortcutsOverlay from "./components/ShortcutsOverlay";
 import SessionLogViewer from "./components/SessionLogViewer";
 import HistorySearch from "./components/HistorySearch";
@@ -51,6 +52,7 @@ export default function App() {
   const gitOpen = () => activePanel() === "git";
   const docsOpen = () => activePanel() === "docs";
   const fleetOpen = () => activePanel() === "fleet";
+  const boardOpen = () => activePanel() === "board";
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const [logsOpen, setLogsOpen] = createSignal(false);
   const [logPreselect, setLogPreselect] = createSignal<string | null>(null);
@@ -126,6 +128,9 @@ export default function App() {
   const openFleet = () => togglePanel("fleet");
   window.addEventListener("loom:fleet", openFleet);
   onCleanup(() => window.removeEventListener("loom:fleet", openFleet));
+  const openBoard = () => togglePanel("board");
+  window.addEventListener("loom:board", openBoard);
+  onCleanup(() => window.removeEventListener("loom:board", openBoard));
 
   // Ctrl+Shift+? opens the keyboard cheat-sheet (toggle so a second press closes it).
   const openShortcuts = () => setShortcutsOpen((v) => !v);
@@ -178,6 +183,7 @@ export default function App() {
     "source-control": () => togglePanel("git"),
     "docs": () => togglePanel("docs"),
     "fleet": () => togglePanel("fleet"),
+    "board": () => togglePanel("board"),
     "command-palette": () => setPaletteOpen((v) => !v),
     "overview": () => toggleOverview(),
     "shortcuts": () => setShortcutsOpen((v) => !v),
@@ -258,12 +264,14 @@ export default function App() {
         onGit={() => togglePanel("git")}
         onDocs={() => togglePanel("docs")}
         onFleet={() => togglePanel("fleet")}
+        onBoard={() => togglePanel("board")}
         onShortcuts={() => setShortcutsOpen(true)}
         onHistory={() => setHistoryOpen((v) => !v)}
         onReopen={() => setReopenOpen((v) => !v)}
         gitOn={gitOpen}
         docsOn={docsOpen}
         fleetOn={fleetOpen}
+        boardOn={boardOpen}
         settingsOn={settingsOpen}
         paletteOn={paletteOpen}
         historyOn={historyOpen}
@@ -299,6 +307,9 @@ export default function App() {
       <Show when={fleetOpen() && activeWorkspace()} keyed>
         {(_ws) => <FleetPanel onClose={() => showPanel(null)} />}
       </Show>
+      <Show when={boardOpen() && activeWorkspace()} keyed>
+        {(_ws) => <BoardPanel onClose={() => showPanel(null)} />}
+      </Show>
       </div>
       <Show when={wizardOpen()}>
         <NewWorkspaceWizard onClose={() => setWizardOpen(false)} />
@@ -326,6 +337,7 @@ export default function App() {
           onGit={() => showPanel("git")}
           onDocs={() => showPanel("docs")}
           onFleet={() => showPanel("fleet")}
+          onBoard={() => showPanel("board")}
           onShortcuts={() => setShortcutsOpen(true)}
           onLogs={() => { setLogPreselect(null); setLogsOpen(true); }}
           onHistory={() => setHistoryOpen(true)}

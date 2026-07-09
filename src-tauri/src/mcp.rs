@@ -241,6 +241,43 @@ fn tools() -> Value {
             }
         },
         {
+            "name": "card_add",
+            "description": "Add a task card to the project's task board (stored in .loom/board.json). Use to hand a unit of work to the fleet: a title, an optional prompt to run, and the agent command. Returns the new card id.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "description": "Short task title." },
+                    "prompt": { "type": "string", "description": "The instruction to run when the card is dispatched (optional)." },
+                    "command": { "type": "string", "description": "Agent command to launch, e.g. \"claude\" (default: claude)." },
+                    "workspace": { "type": "string", "description": "Workspace name (default: your pane's workspace)." }
+                },
+                "required": ["title"]
+            }
+        },
+        {
+            "name": "card_list",
+            "description": "List the project's task-board cards (id, title, status: todo|dispatched|done|failed).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspace": { "type": "string", "description": "Workspace name (default: your pane's workspace)." }
+                }
+            }
+        },
+        {
+            "name": "card_move",
+            "description": "Move a task-board card between lanes — e.g. mark your own card done when finished. Status is one of todo | done | failed.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "Card id (from card_list/card_add)." },
+                    "status": { "type": "string", "enum": ["todo", "done", "failed"], "description": "Target lane." },
+                    "workspace": { "type": "string", "description": "Workspace name (default: your pane's workspace)." }
+                },
+                "required": ["id", "status"]
+            }
+        },
+        {
             "name": "claim_file",
             "description": "Take a cooperative advisory lock on a file path so no other pane edits it at the same time. Fails if another pane already holds it (check before editing shared files).",
             "inputSchema": {
@@ -382,6 +419,23 @@ fn build_request(name: &str, args: &Value, pane: Option<&str>) -> Result<Value, 
         "board_list" => with_scope(json!({ "op": "note.list" }), args, pane),
         "board_del" => with_scope(
             json!({ "op": "note.del", "key": arg_str(args, "key")? }),
+            args,
+            pane,
+        ),
+        // ---- Task board (§1) ----
+        "card_add" => {
+            let mut o = json!({ "op": "card.add", "title": arg_str(args, "title")? });
+            if let Some(p) = args.get("prompt").and_then(Value::as_str) {
+                o["prompt"] = json!(p);
+            }
+            if let Some(c) = args.get("command").and_then(Value::as_str) {
+                o["command"] = json!(c);
+            }
+            with_scope(o, args, pane)
+        }
+        "card_list" => with_scope(json!({ "op": "card.list" }), args, pane),
+        "card_move" => with_scope(
+            json!({ "op": "card.move", "id": arg_str(args, "id")?, "status": arg_str(args, "status")? }),
             args,
             pane,
         ),

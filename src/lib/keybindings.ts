@@ -38,6 +38,7 @@ export type ActionId =
   | "source-control"
   | "docs"
   | "fleet"
+  | "board"
   | "settings"
   | "overview"
   | "shortcuts"
@@ -97,6 +98,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "source-control", label: "Open source control", group: "Git", defaultKey: "g" },
   { id: "docs", label: "Open docs reader", group: "General", defaultKey: "r" },
   { id: "fleet", label: "Open fleet panel (blackboard & claims)", group: "General", defaultKey: "k" },
+  { id: "board", label: "Open task board", group: "General", defaultKey: "b" },
   { id: "reopen", label: "Open reopen panel (closed panes & Claude sessions)", group: "General", defaultKey: "y" },
   { id: "history", label: "Search agent history", group: "General", defaultKey: "h" },
   // Ctrl+Shift+= reports key "+", and Ctrl+Shift+- reports "_" (shift transforms the key); the

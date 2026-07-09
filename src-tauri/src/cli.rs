@@ -50,6 +50,7 @@ pub fn is_command(cmd: &str) -> bool {
             | "attention"
             | "status"
             | "note"
+            | "card"
             | "claim"
             | "release"
             | "claims"
@@ -309,6 +310,82 @@ fn build_request(args: &[String]) -> Result<Value, String> {
                 (t, positional.join(" "))
             };
             Ok(json!({ "op": "status", "target": target, "text": text }))
+        }
+
+        "card" => {
+            // loom card add <title...>  [--prompt <text>] [--command <cmd>]  — add a To-do card (§1)
+            // loom card list                                                 — list cards (id/title/status)
+            // loom card move <id> <todo|done|failed>                         — move a card between lanes
+            // Scoped to the caller pane's workspace ($LOOM_PANE), or --workspace <name>.
+            if args.len() < 2 {
+                return Err("card needs a subcommand: add | list | move".to_string());
+            }
+            let action = args[1].clone();
+            let mut workspace: Option<String> = None;
+            let mut prompt: Option<String> = None;
+            let mut command: Option<String> = None;
+            let mut rest: Vec<String> = Vec::new();
+            let mut i = 2;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--workspace" | "-w" => {
+                        i += 1;
+                        workspace = Some(args.get(i).ok_or("--workspace needs a name")?.clone());
+                    }
+                    "--prompt" | "-p" => {
+                        i += 1;
+                        prompt = Some(args.get(i).ok_or("--prompt needs text")?.clone());
+                    }
+                    "--command" | "-c" => {
+                        i += 1;
+                        command = Some(args.get(i).ok_or("--command needs a value")?.clone());
+                    }
+                    "--" => {
+                        rest.extend_from_slice(&args[i + 1..]);
+                        break;
+                    }
+                    _ => rest.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            let mut obj = match action.as_str() {
+                "add" => {
+                    if rest.is_empty() {
+                        return Err("card add needs a title: loom card add <title>".to_string());
+                    }
+                    let mut o = json!({ "op": "card.add", "title": rest.join(" ") });
+                    if let Some(p) = prompt {
+                        o["prompt"] = json!(p);
+                    }
+                    if let Some(c) = command {
+                        o["command"] = json!(c);
+                    }
+                    o
+                }
+                "list" | "ls" => json!({ "op": "card.list" }),
+                "move" | "mv" => {
+                    if rest.len() < 2 {
+                        return Err(
+                            "card move needs: loom card move <id> <todo|done|failed>".to_string()
+                        );
+                    }
+                    let status = rest[1].clone();
+                    if !matches!(status.as_str(), "todo" | "done" | "failed") {
+                        return Err("card move status must be todo | done | failed".to_string());
+                    }
+                    json!({ "op": "card.move", "id": rest[0].clone(), "status": status })
+                }
+                other => {
+                    return Err(format!("unknown card subcommand '{other}' (add | list | move)"))
+                }
+            };
+            if let Ok(pane) = env::var("LOOM_PANE") {
+                obj["pane"] = json!(pane);
+            }
+            if let Some(w) = workspace {
+                obj["workspace"] = json!(w);
+            }
+            Ok(obj)
         }
 
         "note" => {
@@ -587,6 +664,35 @@ fn handle_response(op: &str, resp: &Value) {
                 .and_then(Value::as_str)
                 .unwrap_or("?");
             println!("released '{path}'");
+        }
+        "card" => {
+            // card.add → { id, title }; card.list → { cards: [{id,title,status}] }; card.move → { id, status }
+            if let Some(list) = data.and_then(|d| d.get("cards")).and_then(Value::as_array) {
+                if list.is_empty() {
+                    println!("(no cards)");
+                }
+                for c in list {
+                    let get = |k| c.get(k).and_then(Value::as_str).unwrap_or("?");
+                    println!("{:<10} {:<8} {}", get("id"), get("status"), get("title"));
+                }
+            } else if let Some(status) = data.and_then(|d| d.get("status")).and_then(Value::as_str)
+            {
+                let id = data
+                    .and_then(|d| d.get("id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("?");
+                println!("moved {id} → {status}");
+            } else {
+                let id = data
+                    .and_then(|d| d.get("id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("?");
+                let title = data
+                    .and_then(|d| d.get("title"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                println!("added {id}: {title}");
+            }
         }
         "claims" => print_claims(data),
         "reply" => {
