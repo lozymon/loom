@@ -27,7 +27,7 @@ export const VOICE_LANGUAGES: { code: string; label: string }[] = [
 
 /** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
  *  so this config stays reachable). */
-export type NavItemId = "overview" | "palette" | "git" | "docs" | "fleet" | "history" | "reopen";
+export type NavItemId = "overview" | "palette" | "git" | "docs" | "fleet" | "board" | "history" | "reopen";
 
 export interface Settings {
   // ---- Appearance (terminal text) ----
@@ -115,6 +115,14 @@ export interface Settings {
   docsListHeight: number;
   /** Width (px) of the docked Fleet (coordination) panel; drag its left edge to resize. */
   fleetWidth: number;
+  /** Width (px) of the docked Task board panel; drag its left edge to resize. */
+  boardWidth: number;
+  /** Last size (px) of the floating card edit/new dialog — restored when it reopens. */
+  boardDialogWidth: number;
+  boardDialogHeight: number;
+  /** Last on-screen position (px) of that dialog; -1 = unset (center on first open). */
+  boardDialogX: number;
+  boardDialogY: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -143,7 +151,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceModel: "small-q5_1",
   voiceLanguage: "",
   keybindings: { ...DEFAULT_KEYBINDINGS },
-  navVisible: { overview: true, palette: true, git: true, docs: true, fleet: true, history: true, reopen: true },
+  navVisible: { overview: true, palette: true, git: true, docs: true, fleet: true, board: true, history: true, reopen: true },
   railWidth: 212,
   railCollapsed: false,
   gitWidth: 440,
@@ -151,6 +159,11 @@ export const DEFAULT_SETTINGS: Settings = {
   docsWidth: 480,
   docsListHeight: 180,
   fleetWidth: 340,
+  boardWidth: 380,
+  boardDialogWidth: 460,
+  boardDialogHeight: 420,
+  boardDialogX: -1,
+  boardDialogY: -1,
 };
 
 const [settings, setStore] = createStore<Settings>({ ...DEFAULT_SETTINGS });

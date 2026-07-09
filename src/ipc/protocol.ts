@@ -139,6 +139,16 @@ export type ControlRequest =
   | { op: "claim"; path: string; pane?: string; workspace?: string }
   | { op: "release"; path: string; pane?: string; workspace?: string; force?: boolean }
   | { op: "claims"; pane?: string; workspace?: string }
+  // ---- Task board (docs/ORCHESTRATION-IDEAS.md §1) ----
+  // Cards live in the project's `.loom/board.json` (keyed by the workspace's folder). Agents can
+  // create/list/move them so a lead agent can build and hand out work, and a worker can close its
+  // own card. Dispatch (spawning a pane) stays operator-driven for now — agents use `spawn` for that.
+  | { op: "card.add"; title: string; prompt?: string; command?: string; pane?: string; workspace?: string }
+  | { op: "card.list"; pane?: string; workspace?: string }
+  | { op: "card.move"; id: string; status: "todo" | "done" | "failed"; pane?: string; workspace?: string }
+  // Arm/disarm the auto-drainer: keep dispatching top To-do cards until "In progress" hits `cap`.
+  // Session-only (never persisted). Lets a lead agent start the swarm itself, not just the operator.
+  | { op: "card.drain"; on: boolean; cap?: number; pane?: string; workspace?: string }
   // ---- Ask/reply RPC (docs/AGENTIC-ENHANCEMENTS.md §2a) ----
   // Turns the fire-and-forget bus into request/response: `ask` types a question into `target`
   // (with reply instructions carrying the correlation id) and returns the id immediately; the

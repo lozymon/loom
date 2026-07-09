@@ -53,6 +53,33 @@ md.renderer.rules.image = (tokens, idx) => escapeAttr(tokens[idx].content ?? "")
  * contained token (a fence, hr, code block). We render each run on its own and read the source
  * range off the opening token's `.map`.
  */
+/** Render a whole Markdown document to HTML with the same safe renderer as the Docs preview
+ *  (`html: false`, links stripped of their href). For trusted-enough previews (a card description a
+ *  user typed) mounted via innerHTML. */
+export function renderMarkdown(text: string): string {
+  return md.render(text);
+}
+
+/** Flatten Markdown to a one-line plain-text snippet for compact previews (a card's summary line).
+ *  Strips fences/inline code, images, link syntax (keeping the text), headings, list/quote markers
+ *  and emphasis, then collapses whitespace. Not a parser — a good-enough de-marker for a preview. */
+export function mdToPlainText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")          // fenced code blocks
+    .replace(/`([^`]+)`/g, "$1")               // inline code
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")      // images
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")    // links → their text
+    .replace(/^#{1,6}\s+/gm, "")                // ATX headings
+    .replace(/^\s{0,3}>\s?/gm, "")              // blockquotes
+    .replace(/^\s*[-*+]\s+/gm, "")              // bullet markers
+    .replace(/^\s*\d+\.\s+/gm, "")              // ordered markers
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")         // bold
+    .replace(/(\*|_)(.*?)\1/g, "$2")            // italic
+    .replace(/~~(.*?)~~/g, "$1")                // strikethrough
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function parseMarkdownBlocks(text: string): MdBlock[] {
   const tokens = md.parse(text, {});
   const blocks: MdBlock[] = [];

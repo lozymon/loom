@@ -1,6 +1,6 @@
 ---
 name: loom-commands
-description: Reference for driving Loom terminal panes from inside a pane — the `loom` inter-pane control CLI (list/send/spawn/read/broadcast/focus/attention/status) and the equivalent `loom mcp` agent tools. Use when an agent running inside a Loom pane needs to inspect, message, spawn, or coordinate other panes, or to flag its own status/attention.
+description: Reference for driving Loom terminal panes from inside a pane — the `loom` inter-pane control CLI (list/send/spawn/read/broadcast/focus/attention/status/card) and the equivalent `loom mcp` agent tools. Use when an agent running inside a Loom pane needs to inspect, message, spawn, or coordinate other panes, flag its own status/attention, or manage task-board cards.
 ---
 
 <what-this-is>
@@ -46,6 +46,9 @@ loom broadcast [--workspace W] [--no-enter] <text...>   # send to every live pan
 loom focus <pane>                           # switch to the pane's workspace and focus it
 loom attention [pane] [--clear]             # raise/drop a pane's amber "needs you" border
 loom status [pane] <text...> | [pane] --clear   # set/clear a pane's short status label
+loom card add <title...> [-p PROMPT] [-c CMD] [-w WS]   # add a To-do card to the task board
+loom card list [-w WS]                          # list cards: id, title, status
+loom card move <id> <todo|done|failed> [-w WS]  # move a card between lanes
 loom hooks [--print] | --install [--user|--project]   # Claude Code lifecycle → Loom Session/Task model
 ```
 
@@ -75,6 +78,17 @@ loom hooks [--print] | --install [--user|--project]   # Claude Code lifecycle �
   target pane, rest is the text. Lead with `--` if the status text starts with a dash
   (`loom status -- --resuming`). The attention border clears when the pane is focused.
 
+- **`card`** — the operator's task board (a docked Kanban; ORCHESTRATION §1). Each card is a
+  unit of work: a launch spec (`--command`, default `claude`) + an optional `--prompt`. Cards
+  are **project-scoped**, stored in the project's own `.loom/board.json` (keyed by the
+  workspace's folder) — so they travel with the repo and survive reopen. `card add` returns the
+  new card's `id`; `card move <id> done` is how a **worker closes its own card** when finished
+  (the swarm payoff). Scoped to your pane's workspace by default (`--workspace`/`-w` to target
+  another). Only the *operator* dispatches a card into a pane (from the UI); an agent can create,
+  list, and move cards but not spawn from one. A dispatched card also auto-moves to Done/failed
+  on its own when the pinned pane's Task ends (ADR-0008) — so `card move` is for the cases the
+  agent's own signals don't cover.
+
 - **`hooks`** — `loom hooks` prints the recommended Claude Code hooks profile;
   `loom hooks --install` merges it into `.claude/settings.json` (`--project`, default) or
   `~/.claude/settings.json` (`--user`). Idempotent. This bridges a Claude agent's lifecycle
@@ -99,8 +113,12 @@ Same ops as first-class tools (arguments in parens; `target` is a pane display n
 | `focus_pane` | `target` | Reveal & focus a pane, switching workspace. |
 | `flag_attention` | `target?`=self, `clear?`=false | Raise/drop a pane's amber border. |
 | `set_status` | `target?`=self, `text?` | Set a pane's status label (empty text clears). |
+| `card_add` | `title`, `prompt?`, `command?`=claude, `workspace?` | Add a To-do card; returns its id. |
+| `card_list` | `workspace?` | List cards (id, title, status: todo\|dispatched\|done\|failed). |
+| `card_move` | `id`, `status` (todo\|done\|failed), `workspace?` | Move a card between lanes. |
 
 `flag_attention` and `set_status` default to your own pane (`$LOOM_PANE`) when `target` is omitted.
+`card_*` default to your pane's workspace when `workspace` is omitted.
 
 </mcp-reference>
 
@@ -117,6 +135,8 @@ Same ops as first-class tools (arguments in parens; `target` is a pane display n
 - **Flag yourself blocked so the human notices:** `loom attention` (borders your pane), then
   `loom status "waiting on API key"`. Clear with `loom attention --clear` / `loom status --clear`.
 - **Report progress as you go:** `loom status "running tests (3/5)"`.
+- **Queue work on the board (lead agent):** `loom card add "Migrate auth to v2" -p "port src/auth to the v2 API and run the suite"` — the operator dispatches it into a pane when ready.
+- **Close your own card when done (worker):** `loom card list` to find your id, then `loom card move card3 done`.
 
 Keep it courteous: `send`/`broadcast` *type into* another terminal — don't spam, and prefer
 `--no-enter` if you want a human to review before it runs.

@@ -22,6 +22,7 @@ import {
 } from "../stores/workspace";
 import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
 import { claimFile, releaseFile, listClaims } from "../stores/claims";
+import { addCard, cards, setCardStatus, ensureBoardLoaded, setDrain, drainState } from "../stores/board";
 import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
 import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
 import {
@@ -196,6 +197,41 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       const scope = noteScope(req); // list needs only the workspace, no holder
       if ("error" in scope) return scope;
       return { ok: true, data: { action: "claims", workspace: scope.ws.name, entries: listClaims(scope.ws.id) } };
+    }
+
+    // ---- Task board (§1) — agents create/list/move cards in the project's .loom board. Load it
+    // first so an agent's write can't clobber existing cards a panel never opened. ----
+    case "card.add": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      const title = (req.title ?? "").trim();
+      if (!title) return { ok: false, error: "card add needs a title" };
+      await ensureBoardLoaded(scope.ws.cwd);
+      const id = addCard(scope.ws.cwd, { title, prompt: req.prompt, command: req.command });
+      return { ok: true, data: { id, title, workspace: scope.ws.name } };
+    }
+    case "card.list": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      await ensureBoardLoaded(scope.ws.cwd);
+      const list = cards(scope.ws.cwd).map((c) => ({ id: c.id, title: c.title, status: c.status }));
+      return { ok: true, data: { workspace: scope.ws.name, cards: list } };
+    }
+    case "card.move": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      await ensureBoardLoaded(scope.ws.cwd);
+      const ok = setCardStatus(scope.ws.cwd, req.id, req.status);
+      if (!ok) return { ok: false, error: `no card "${req.id}"` };
+      return { ok: true, data: { id: req.id, status: req.status } };
+    }
+    case "card.drain": {
+      const scope = noteScope(req);
+      if ("error" in scope) return scope;
+      await ensureBoardLoaded(scope.ws.cwd);
+      setDrain(scope.ws.cwd, req.on, req.cap);
+      const cfg = drainState(scope.ws.cwd);
+      return { ok: true, data: { workspace: scope.ws.name, draining: cfg.on, cap: cfg.cap } };
     }
 
     // ---- Ask/reply RPC (§2a) — `ask` injects the question + reply instructions into the callee

@@ -9,6 +9,10 @@ dist
 # Local machine-only Claude Code settings
 .claude/settings.local.json
 
+# Loom's own task board (per-project operator state, like .vscode/) — a user's board
+# can be committed in their repo, but Loom's repo shouldn't track its dev cards.
+.loom/
+
 # OS / editor cruft
 .DS_Store
 *.log

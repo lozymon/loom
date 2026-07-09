@@ -8,3 +8,11 @@ export const saveState = (key: string, json: string): Promise<void> =>
 
 export const loadState = (key: string): Promise<string | null> =>
   invoke<string | null>("state_load", { key });
+
+// Project-scoped store: `<dir>/.loom/<key>.json`, alongside the project (like `.vscode/`) rather
+// than in Loom's global config — for data that belongs with the repo (the task board).
+export const projectStateSave = (dir: string, key: string, json: string): Promise<void> =>
+  invoke("project_state_save", { dir, key, json });
+
+export const projectStateLoad = (dir: string, key: string): Promise<string | null> =>
+  invoke<string | null>("project_state_load", { dir, key });

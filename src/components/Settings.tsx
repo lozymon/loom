@@ -31,6 +31,7 @@ const NAV_ITEMS: { id: NavItemId; label: string; hint: string }[] = [
   { id: "git", label: "Git", hint: "source control" },
   { id: "docs", label: "Docs", hint: "markdown reader" },
   { id: "fleet", label: "Fleet", hint: "blackboard & file claims" },
+  { id: "board", label: "Board", hint: "task board" },
   { id: "history", label: "History", hint: "agent session search" },
   { id: "reopen", label: "Reopen", hint: "closed panes & Claude sessions" },
 ];

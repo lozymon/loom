@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMarkdownBlocks } from "./markdown";
+import { parseMarkdownBlocks, mdToPlainText } from "./markdown";
 
 // The DocsPanel preview relies on each block's [lo, hi] source-line range to reconstruct the RAW
 // markdown for sending — so these tests focus on the range mapping as much as the rendered HTML.
@@ -112,5 +112,15 @@ describe("parseMarkdownBlocks", () => {
     const html = md('<img src=x onerror="alert(1)">')[0].html;
     expect(html).not.toContain("<img");
     expect(html).toContain("&lt;img");
+  });
+});
+
+describe("mdToPlainText", () => {
+  it("strips markers and collapses whitespace into a one-line preview", () => {
+    expect(mdToPlainText("# Fix bug\n\nMake **copy paste** work")).toBe("Fix bug Make copy paste work");
+    expect(mdToPlainText("- a\n- b\n- c")).toBe("a b c");
+    expect(mdToPlainText("see [docs](https://x.test) and `code`")).toBe("see docs and code");
+    expect(mdToPlainText("> quote\n1. first")).toBe("quote first");
+    expect(mdToPlainText("```\ncode block\n```\ntext")).toBe("text");
   });
 });
