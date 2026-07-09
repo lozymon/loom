@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cards, addCard, updateCard, removeCard, setCardStatus, reorderCard, board } from "./board";
+import { cards, addCard, updateCard, removeCard, setCardStatus, reorderCard, reopenCard, board } from "./board";
 
 // Exercises the pure card CRUD (dispatch is side-effectful and covered manually). Each test uses a
 // unique workspace id so they don't interfere via the shared module store.
@@ -49,6 +49,16 @@ describe("board store", () => {
     reorderCard("ws-order", c, "B", "after"); // no-op: target id "B" isn't a real id
     expect(cards("ws-order").map((x) => x.title)).toEqual(["C", "A", "B"]);
     expect(reorderCard("ws-order", c, c, "before")).toBe(false); // can't reorder onto itself
+  });
+
+  it("reopens a done/failed card back to To-do and drops its pane pin", () => {
+    addCard("ws-reopen", { title: "R" });
+    const id = cards("ws-reopen")[0].id;
+    setCardStatus("ws-reopen", id, "failed");
+    reopenCard("ws-reopen", id);
+    expect(cards("ws-reopen")[0].status).toBe("todo");
+    expect(cards("ws-reopen")[0].paneId).toBeUndefined();
+    expect(reopenCard("ws-reopen", "nope")).toBe(false);
   });
 
   it("scopes cards per workspace", () => {

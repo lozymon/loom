@@ -144,6 +144,21 @@ export function setCardStatus(dir: string, id: string, status: BoardCard["status
   return true;
 }
 
+/** Send a card back to To-do (reopen a done/failed card, or clear a dead dispatch). Drops its pane
+ *  pin — a future dispatch spawns a fresh pane. */
+export function reopenCard(dir: string, id: string): boolean {
+  const i = cardIdx(dir, id);
+  if (i < 0) return false;
+  setBoard(dir, i, (c) => ({ ...c, status: "todo", paneId: undefined }));
+  scheduleSave(dir);
+  return true;
+}
+
+/** Retry a card: reopen it to To-do and immediately dispatch a fresh pane from its spec. */
+export function redispatchCard(dir: string, id: string): void {
+  if (reopenCard(dir, id)) dispatchCard(dir, id);
+}
+
 /** Reorder `id` to sit just before/after `targetId` in the project's card array (drag-and-drop).
  *  Lanes are filtered views of this one array, so moving relative to a same-lane neighbour reorders
  *  within that lane. Returns false if either card is missing or they're the same. */

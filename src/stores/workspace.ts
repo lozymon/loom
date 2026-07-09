@@ -301,14 +301,18 @@ function recordClosed(item: Omit<ClosedItem, "id" | "closedAt">) {
   setApp("closed", [entry, ...app.closed].slice(0, CLOSED_MAX));
 }
 
-export function closePane(paneId: PaneId) {
+/** Does this pane still exist (live in some workspace)? Reactive — reads the workspace store. */
+export const paneExists = (paneId: PaneId): boolean => app.workspaces.some((w) => paneId in w.panes);
+
+export function closePane(paneId: PaneId, opts?: { skipConfirm?: boolean }) {
   const i = wsIdxByPane(paneId);
   if (i < 0) return;
   const ws = app.workspaces[i];
   const next = removeLeaf(ws.tree, paneId);
   if (next === null) return; // never leave a workspace with zero panes
-  // Guard against closing a pane whose process is still alive (Settings → confirm close).
-  if (settings.confirmClose && countLive([paneId]) > 0) {
+  // Guard against closing a pane whose process is still alive (Settings → confirm close). The
+  // caller can skip this when it has already confirmed (e.g. deleting a board card + its pane).
+  if (!opts?.skipConfirm && settings.confirmClose && countLive([paneId]) > 0) {
     if (!window.confirm(`Close "${ws.panes[paneId]?.title}"? Its process is still running.`)) return;
   }
   // Capture the spec (incl. any Claude sessionId) so the pane — and its conversation — can be reopened.

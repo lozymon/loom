@@ -6,8 +6,9 @@
 
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import MarkdownEditor from "./MarkdownEditor";
-import { activeWorkspace, revealPane } from "../stores/workspace";
-import { board, cards, addCard, updateCard, removeCard, dispatchCard, setCardStatus, reorderCard, ensureBoardLoaded, type BoardCard } from "../stores/board";
+import { activeWorkspace, revealPane, paneExists, closePane } from "../stores/workspace";
+import { board, cards, addCard, updateCard, removeCard, dispatchCard, setCardStatus, reorderCard, reopenCard, redispatchCard, ensureBoardLoaded, type BoardCard } from "../stores/board";
+import { mdToPlainText } from "../lib/markdown";
 import { paneActiveTask } from "../stores/sessions";
 import { activity } from "../stores/activity";
 import { settings, setSetting } from "../stores/settings";
@@ -31,6 +32,7 @@ export default function BoardPanel(props: { onClose: () => void }) {
   // kernel/attention floor (activity). Never reads pane output.
   const liveState = (paneId?: PaneId): LiveState => {
     if (paneId == null) return "idle";
+    if (!paneExists(paneId)) return "dead"; // its pane was closed/killed — the card is orphaned
     const t = paneActiveTask(paneId);
     if (t?.state === "blocked") return "needs";
     if (t?.state === "failed") return "dead";
@@ -137,8 +139,12 @@ export default function BoardPanel(props: { onClose: () => void }) {
   // ---- Pointer-based drag-to-reorder within a lane. (HTML5 drag-and-drop is unreliable in
   // WebKitGTK — drop events often never fire — so we track pointer moves ourselves, the same way the
   // dialog-drag and panel-resizer do.) ----
+  type Lane = "todo" | "dispatched" | "done";
+  // A drop is either a reorder next to a same-lane card, or a status change into another lane.
+  type Drop = { kind: "card"; id: string; place: "before" | "after" } | { kind: "lane"; lane: Lane };
   const [dragId, setDragId] = createSignal<string | null>(null);
-  const [dropTarget, setDropTarget] = createSignal<{ id: string; place: "before" | "after" } | null>(null);
+  const [dropTarget, setDropTarget] = createSignal<Drop | null>(null);
+  const [ghost, setGhost] = createSignal<{ title: string; x: number; y: number } | null>(null);
   let draggedThisPress = false; // set when a press turned into a real drag, to suppress the click
 
   function onCardPointerDown(e: PointerEvent, c: BoardCard) {
@@ -151,22 +157,40 @@ export default function BoardPanel(props: { onClose: () => void }) {
         if (Math.abs(ev.clientY - startY) < 5 && Math.abs(ev.clientX - startX) < 5) return;
         dragging = true;
         setDragId(c.id);
+        document.body.style.userSelect = "none"; // stop the drag from marking text
+        window.getSelection()?.removeAllRanges();
       }
-      // Which card is the pointer over? Resolve via the DOM (each <li> carries data-card-id).
-      const li = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".board-card") as HTMLElement | null;
-      const tid = li?.dataset.cardId;
-      const target = tid ? wsCards().find((x) => x.id === tid) : undefined;
-      if (!target || target.id === c.id || target.status !== c.status) { setDropTarget(null); return; }
-      const r = li!.getBoundingClientRect();
-      setDropTarget({ id: target.id, place: ev.clientY < r.top + r.height / 2 ? "before" : "after" });
+      setGhost({ title: c.title, x: ev.clientX, y: ev.clientY }); // floating label under the cursor
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const li = el?.closest(".board-card") as HTMLElement | null;
+      const target = li?.dataset.cardId ? wsCards().find((x) => x.id === li!.dataset.cardId) : undefined;
+      if (target && target.id !== c.id && target.status === c.status) {
+        // Over another card in the same lane → reorder next to it.
+        const r = li!.getBoundingClientRect();
+        setDropTarget({ kind: "card", id: target.id, place: ev.clientY < r.top + r.height / 2 ? "before" : "after" });
+        return;
+      }
+      // Otherwise fall back to the column under the pointer for a status change into that lane.
+      const lane = (el?.closest(".board-col") as HTMLElement | null)?.dataset.lane as Lane | undefined;
+      if (lane && lane !== c.status) setDropTarget({ kind: "lane", lane });
+      else setDropTarget(null);
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      document.body.style.userSelect = "";
       const d = dragId(), t = dropTarget();
-      if (dragging && d && t) reorderCard(dir(), d, t.id, t.place);
+      if (dragging && d && t) {
+        if (t.kind === "card") reorderCard(dir(), d, t.id, t.place);
+        else if (t.lane === "todo") reopenCard(dir(), d);            // → To do: back to backlog
+        else if (t.lane === "done") setCardStatus(dir(), d, "done"); // → Done: mark done
+        else if (t.lane === "dispatched") {                          // → In progress: (re)dispatch a pane
+          const card = wsCards().find((x) => x.id === d);
+          if (card?.status === "todo") dispatchCard(dir(), d); else redispatchCard(dir(), d);
+        }
+      }
       draggedThisPress = dragging; // a real drag just happened → the trailing click must not open edit
-      setDragId(null); setDropTarget(null);
+      setDragId(null); setDropTarget(null); setGhost(null);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -175,6 +199,27 @@ export default function BoardPanel(props: { onClose: () => void }) {
   function onCardClick(c: BoardCard) {
     if (draggedThisPress) { draggedThisPress = false; return; } // that click was the end of a drag
     openEdit(c);
+  }
+
+  // Drop-indicator predicates (a local var lets TS narrow the Drop union).
+  const isCardDrop = (id: string, place: "before" | "after") => {
+    const t = dropTarget();
+    return t?.kind === "card" && t.id === id && t.place === place;
+  };
+  const isLaneDrop = (lane: Lane) => {
+    const t = dropTarget();
+    return t?.kind === "lane" && t.lane === lane;
+  };
+
+  // Delete a card; if it's dispatched into a still-running pane, offer to close that pane too so we
+  // don't silently orphan the agent process.
+  function deleteCard(c: BoardCard) {
+    const live = c.status === "dispatched" && c.paneId != null && paneExists(c.paneId);
+    if (live) {
+      if (!window.confirm(`Delete "${c.title}" and close its running pane?`)) return;
+      closePane(c.paneId!, { skipConfirm: true });
+    }
+    removeCard(dir(), c.id);
   }
 
   function onResizeDown(e: PointerEvent) {
@@ -206,10 +251,10 @@ export default function BoardPanel(props: { onClose: () => void }) {
       data-card-id={c.id}
       classList={{
         "board-card-dragging": dragId() === c.id,
-        "board-drop-before": dropTarget()?.id === c.id && dropTarget()?.place === "before",
-        "board-drop-after": dropTarget()?.id === c.id && dropTarget()?.place === "after",
+        "board-drop-before": isCardDrop(c.id, "before"),
+        "board-drop-after": isCardDrop(c.id, "after"),
       }}
-      title="Click to edit · drag to reorder"
+      title="Click to edit · drag to reorder or between lanes"
       onPointerDown={(e) => onCardPointerDown(e, c)}
       onClick={() => onCardClick(c)}
     >
@@ -225,23 +270,30 @@ export default function BoardPanel(props: { onClose: () => void }) {
             <button class="board-btn" title="Dispatch — spawn a pane and run this" onClick={(e) => { e.stopPropagation(); dispatchCard(dir(), c.id); }}>▷</button>
           </Show>
           <Show when={c.status === "dispatched"}>
+            <Show when={liveState(c.paneId) === "dead"}>
+              <button class="board-btn" title="Pane closed — re-dispatch a fresh one" onClick={(e) => { e.stopPropagation(); redispatchCard(dir(), c.id); }}>↻</button>
+            </Show>
             <button class="board-btn" title="Mark done" onClick={(e) => { e.stopPropagation(); setCardStatus(dir(), c.id, "done"); }}>✓</button>
           </Show>
-          <button class="board-btn board-btn-del" title="Delete card" onClick={(e) => { e.stopPropagation(); removeCard(dir(), c.id); }}>✕</button>
+          <Show when={c.status === "done" || c.status === "failed"}>
+            <button class="board-btn" title={c.status === "failed" ? "Retry — reopen and re-run" : "Reopen to To do"} onClick={(e) => { e.stopPropagation(); c.status === "failed" ? redispatchCard(dir(), c.id) : reopenCard(dir(), c.id); }}>↻</button>
+          </Show>
+          <button class="board-btn board-btn-del" title="Delete card" onClick={(e) => { e.stopPropagation(); deleteCard(c); }}>✕</button>
         </span>
       </div>
       <Show when={c.prompt}>
-        <div class="board-card-prompt" title={c.prompt}>{c.prompt}</div>
+        <div class="board-card-prompt" title={c.prompt}>{mdToPlainText(c.prompt)}</div>
       </Show>
       <div class="board-card-meta">
         <span class="board-card-cmd">{c.command}</span>
         <Show when={c.status === "failed"}><span class="board-card-fail">failed</span></Show>
+        <Show when={c.status === "dispatched" && liveState(c.paneId) === "dead"}><span class="board-card-fail">pane closed</span></Show>
       </div>
     </li>
   );
 
-  const column = (label: string, list: () => BoardCard[]) => (
-    <section class="board-col">
+  const column = (label: string, lane: Lane, list: () => BoardCard[]) => (
+    <section class="board-col" data-lane={lane} classList={{ "board-col-droptarget": isLaneDrop(lane) }}>
       <div class="fleet-section-head">
         <span class="fleet-section-title">{label}</span>
         <span class="fleet-count">{list().length}</span>
@@ -265,9 +317,9 @@ export default function BoardPanel(props: { onClose: () => void }) {
       <button class="board-new" onClick={() => openNew()}>＋ New task</button>
 
       <div class="board-body">
-        {column("To do", todo)}
-        {column("In progress", active)}
-        {column("Done", done)}
+        {column("To do", "todo", todo)}
+        {column("In progress", "dispatched", active)}
+        {column("Done", "done", done)}
       </div>
 
       {/* Create / edit dialog — a floating, movable, resizable, NON-modal panel (no backdrop): drag
@@ -292,6 +344,11 @@ export default function BoardPanel(props: { onClose: () => void }) {
             </div>
           </form>
         )}
+      </Show>
+
+      {/* Floating drag label — follows the cursor so you can see what you're moving. */}
+      <Show when={ghost()}>
+        {(g) => <div class="board-drag-ghost" style={{ left: `${g().x + 12}px`, top: `${g().y + 12}px` }}>{g().title}</div>}
       </Show>
     </aside>
   );

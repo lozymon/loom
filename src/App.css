@@ -3434,10 +3434,33 @@ body,
 .board-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 
 /* Drag-to-reorder affordances. */
-.board-card { cursor: pointer; user-select: none; touch-action: none; }
-.board-card-dragging { opacity: 0.4; }
+.board-card { cursor: grab; user-select: none; touch-action: none; }
+.board-card:active { cursor: grabbing; }
+.board-card-dragging { opacity: 0.35; outline: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: -2px; }
+.board-drag-ghost {
+  position: fixed;
+  z-index: 300;
+  pointer-events: none;
+  max-width: 240px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font: 600 12px var(--font-ui, system-ui);
+  color: var(--text-bright);
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .board-drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
 .board-drop-after { box-shadow: inset 0 -2px 0 0 var(--accent); }
+.board-col-droptarget {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -3px;
+  border-radius: 8px;
+}
 .board-dot-btn {
   display: inline-flex;
   align-items: center;
