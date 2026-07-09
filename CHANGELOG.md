@@ -6,6 +6,22 @@ versioning.
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-07-08
+
+A token/cost usage HUD for the Fleet panel, plus a small UI refinement to the resize seams.
+
+### Added
+- **Fleet usage HUD** — the Fleet panel now surfaces per-agent **token and estimated cost** totals.
+  Usage is read from Claude's own on-disk session transcripts via the Rust `claude_usage` command
+  (summing input / output / cache-read / cache-write tokens per model) — never from pane output
+  (ADR-0001) — and priced with a small per-model $/MTok table. Cost is an *estimate*: rates are
+  cached from the claude-api reference and can drift.
+
+### Changed
+- **Thinner resize seams** — the pane split gutters and the rail↔grid strip now paint a 2px centred
+  hairline on hover instead of lighting up their full 6px grab width, with a soft fade. The 6px grab
+  area is unchanged and seams stay invisible at rest.
+
 ## [1.7.0] — 2026-07-07
 
 Two fleet features — knowing when an agent is stuck, and remembering agents you start by hand —
