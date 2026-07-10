@@ -159,9 +159,17 @@ cmd/cwd (`NewWorkspaceWizard.tsx`), so a fleet of "builder + reviewer + …", ea
 one click. Verified end-to-end: a saved preset relaunched two panes with their `builder`/`reviewer`
 badges and their seed prompts already run.
 
-### 3b. Session replay / transcript export 🟡
+### 3b. Session replay / transcript export 🟡 ✅ shipped
 The session-log viewer (`logs.rs` / `SessionLogViewer.tsx`) already tails logs — add export-to-
 markdown so a fleet run becomes a shareable artifact.
+
+**✅ Built as:** two export actions in the selected-log header (`SessionLogViewer.tsx`). **⧉ Copy MD**
+copies the transcript to the clipboard as Markdown (titled header + size line + a fenced `text`
+block, via `logToMarkdown` in `logsClient.ts`, ANSI already stripped) — a paste-anywhere export.
+**⭳ Export…** opens a native save dialog (`@tauri-apps/plugin-dialog`) and writes the file through a
+new `export_markdown` Rust command (`logs.rs`) — the shareable artifact on disk. Embedded ``` fences
+in the log are neutralised so they can't break out of the block. Verified: Copy MD lands the
+formatted transcript on the clipboard.
 
 ## 4. Safety rails
 

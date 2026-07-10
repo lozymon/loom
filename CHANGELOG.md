@@ -7,6 +7,10 @@ versioning.
 ## [Unreleased]
 
 ### Added
+- **Session transcript export** (AGENTIC-ENHANCEMENTS §3b) — the session-log viewer can turn a pane's
+  transcript into a shareable Markdown artifact: **⧉ Copy MD** copies it to the clipboard (titled
+  header + a fenced code block, ANSI stripped), and **⭳ Export…** saves it to a `.md` file via a
+  native save dialog. Paste a fleet run straight into a PR, issue, or doc.
 - **Durable, project-scoped blackboard** (ORCHESTRATION-IDEAS §4) — the shared blackboard
   (`loom note`) is now keyed by the project folder and persisted to `<repo>/.loom/notes.json` (like
   the task board), instead of being per-workspace and ephemeral. So a fleet's notes — who owns what,
