@@ -46,6 +46,13 @@ sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 # Windows-only: the inter-pane control bus (M7.5) uses named pipes via raw Win32 FFI in
 # `control_transport.rs`. Target-gated, so the Linux build pulls nothing new and stays
 # byte-identical. Used by the app lib's control relay and its `cli`/`mcp` faces alike.
+# GTK clipboard (Linux). arboard (used by tauri-plugin-clipboard-manager) writes the X11 CLIPBOARD
+# in a way that doesn't serve external apps reliably inside a WebKitGTK app, so copy→other-app comes
+# back empty. GTK's own clipboard (what the webview stack uses) exports correctly. Version pinned to
+# the one Tauri already resolves, so no new build cost.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",

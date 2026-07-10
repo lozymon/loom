@@ -11,7 +11,8 @@ import { CanvasAddon } from "@xterm/addon-canvas";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeClipboard } from "../lib/clipboard";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -86,7 +87,7 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
       const k = e.key.toLowerCase();
       if (k === "c") {
         const sel = term.getSelection();
-        if (sel) { void writeText(sel); e.preventDefault(); return false; }
+        if (sel) { void writeClipboard(sel); e.preventDefault(); return false; }
       }
       if (k === "v") {
         e.preventDefault();

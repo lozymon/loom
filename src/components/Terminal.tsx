@@ -15,7 +15,8 @@ import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeClipboard } from "../lib/clipboard";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { homeDir } from "@tauri-apps/api/path";
 import { listen } from "@tauri-apps/api/event";
@@ -385,7 +386,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     const sel = term.getSelection() || lastSelection;
     if (!sel) return false;
     try {
-      await writeText(sel);
+      await writeClipboard(sel);
     } catch (e) {
       console.error("clipboard write failed", e);
       return false;
@@ -658,7 +659,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       const sel = term.getSelection();
       if (!sel) return;
       lastSelection = sel;
-      if (settings.copyOnSelect) void writeText(sel).catch((e) => console.error("clipboard write failed", e));
+      if (settings.copyOnSelect) void writeClipboard(sel).catch((e) => console.error("clipboard write failed", e));
     });
 
     // Middle-click paste (optional, classic X11 behaviour) — paste into the PTY.

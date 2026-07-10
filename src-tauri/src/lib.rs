@@ -58,6 +58,29 @@ fn pty_kill(mgr: State<PtyManager>, id: u32) -> Result<(), String> {
     pty::kill(&mgr, id)
 }
 
+/// Write the OS clipboard so a copy is readable by *other* applications.
+///
+/// tauri-plugin-clipboard-manager uses arboard, which — inside this WebKitGTK app on X11 — owns the
+/// CLIPBOARD selection in a way that doesn't serve external requestors, so "copy in Loom → paste in
+/// a browser" came back empty. On Linux we instead write through GTK's own clipboard (the toolkit
+/// the webview already runs on), which exports correctly; other platforms keep the plugin path.
+#[tauri::command]
+fn clipboard_set_text(app: AppHandle, text: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        // GTK clipboard calls must run on the GTK main thread; the closure captures only the String.
+        app.run_on_main_thread(move || {
+            gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD).set_text(text.as_str());
+        })
+        .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        app.clipboard().write_text(text).map_err(|e| e.to_string())
+    }
+}
+
 // Polled per visible pane every ~2s (Terminal.tsx refreshLoc). `async` so Tauri runs these on
 // its worker pool instead of the main (WebKitGTK UI) thread — a synchronous command blocks the
 // render thread, and 12 panes each doing a /proc read + git spawn at once froze the UI for 1-2s.
@@ -133,6 +156,7 @@ pub fn run() {
             pty_foreground,
             pty_meta,
             pty_check_command,
+            clipboard_set_text,
             wsl_distros,
             control::pane_cmd_reply,
             editor::open_editor,
