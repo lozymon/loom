@@ -6,6 +6,30 @@ versioning.
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-07-09
+
+A task board for driving a fleet — dispatch work cards into panes and let the board auto-drain a
+queue — plus copy/paste that finally works inside the Claude Code CLI.
+
+### Added
+- **Task board** — a docked Kanban (Ctrl+Shift+B) that turns work into cards you *dispatch* into
+  panes: each card is a launch spec + prompt, project-scoped in `.loom/board.json` (so it travels
+  with the repo), with a floating Markdown editor and pointer drag-reorder. A dispatched card's live
+  Session/Task state (ADR-0008) drives it back to Done on its own. Agents can create/list/move cards
+  over the control bus (`loom card …` / the `card_*` MCP tools).
+- **Board auto-drainer** — arm it and Loom keeps the In-progress lane filled to a concurrency cap by
+  dispatching the top To-do cards, refilling a slot as each one finishes — the board becomes an
+  autonomous work queue. Session-only (never persisted, so a repo can't ship it on), with a header
+  toggle + a `loom card drain on --cap N` bus verb so a lead agent can start the swarm itself.
+
+### Fixed
+- **Copy/paste in the Claude Code CLI** — three separate bugs. Pastes now go through bracketed-paste
+  mode, so multi-line text lands in claude's prompt as one block instead of submitting line-by-line.
+  Copy writes through GTK's clipboard on Linux, so it reaches *other* apps (arboard, used by the
+  clipboard plugin, doesn't export to external apps inside WebKitGTK). And Loom now honours **OSC
+  52** — the escape sequence claude uses to copy — which was previously ignored, so claude's copies
+  silently vanished (write-only; clipboard *reads* stay declined for privacy).
+
 ## [1.8.0] — 2026-07-08
 
 A token/cost usage HUD for the Fleet panel, plus a small UI refinement to the resize seams.
