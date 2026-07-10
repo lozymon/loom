@@ -7,6 +7,12 @@ versioning.
 ## [Unreleased]
 
 ### Added
+- **Durable, project-scoped blackboard** (ORCHESTRATION-IDEAS §4) — the shared blackboard
+  (`loom note`) is now keyed by the project folder and persisted to `<repo>/.loom/notes.json` (like
+  the task board), instead of being per-workspace and ephemeral. So a fleet's notes — who owns what,
+  a discovered gotcha, a handed-off decision — travel with the repo, survive close/reopen, are shared
+  by every workspace on that folder, and a **new session inherits what earlier ones learned**. Still
+  agent-pushed, never scraped from output. Folderless workspaces stay in-memory.
 - **Workspace templates with roles + seed prompts** (AGENTIC-ENHANCEMENTS §3a) — a saved fleet now
   reconstitutes a whole agent team in one click. Each pane carries a per-pane **seed prompt** (a new
   `seed` field in the New-workspace wizard, alongside cmd/cwd) that's typed in once on launch, and

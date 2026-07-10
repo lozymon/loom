@@ -102,7 +102,7 @@ shows a **gated** badge + a **release** button (`FleetPanel.tsx`).
 
 ## Tier 2 — plausible but larger / against the grain
 
-### 4. Durable, project-scoped blackboard (cross-session memory)  🟡 ✅ *(defer — but cheaper than before)*
+### 4. Durable, project-scoped blackboard (cross-session memory)  🟡 ✅ *shipped*
 **The flow:** a context store panes read and write *across* sessions, so a new agent inherits what
 earlier ones learned instead of starting cold.
 
@@ -113,6 +113,15 @@ tree. So this is no longer "a new store" — it's *persisting/scoping the existi
 project, a much smaller step. **Still defer** until #1–#3 prove the orchestration surface gets used,
 and keep it explicit and agent-addressed — never an implicit scrape of pane output (ADR-0008/0011:
 scraped facts are labeled guesses, never durable ground truth).
+
+**✅ Built as:** exactly that small step — the existing blackboard (`stores/blackboard.ts`), re-keyed
+from workspace-id to the project **folder** and persisted to `<dir>/.loom/notes.json`, the same
+project-store the task board uses (`ensureNotesLoaded` / debounced save mirroring `board.ts`). So
+`loom note` entries now travel with the repo, survive close/reopen, are shared by every workspace on
+that folder, and a *new* session inherits them — while staying agent-pushed, never scraped (kept the
+SQLite `sessions.db` out of it; a per-project JSON file is lighter and repo-visible). A folderless
+workspace ("") stays in-memory. The Fleet panel reads by folder; a workspace close no longer drops
+the board (it's shared + on disk). Verified: two notes set, Loom restarted, both reload from disk.
 
 ---
 

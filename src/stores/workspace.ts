@@ -13,7 +13,6 @@ import { allocName, buildBalancedTree } from "../lib/grid";
 import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
 import { countLive, writeToPanes } from "../lib/paneRegistry";
-import { forgetBoard } from "./blackboard";
 import { forgetClaims, releaseClaimsBy } from "./claims";
 import { settings } from "./settings";
 
@@ -630,8 +629,10 @@ export function closeWorkspace(id: string) {
   const closing = app.workspaces[i];
   recordClosed({ kind: "workspace", title: closing.name, cwd: closing.cwd, tree: snapshotValue(closing.tree), panes: snapshotValue(closing.panes) });
   const remaining = app.workspaces.filter((w) => w.id !== id);
-  forgetBoard(id); // drop the closed workspace's blackboard (§2b) — it's scoped to this ws
-  forgetClaims(id); // and its file claims (§2c)
+  // The blackboard (§2b) is now project-scoped + persisted (.loom/notes.json, §4) — deliberately NOT
+  // dropped on close, so a repo's shared notes survive and another workspace on the same folder keeps
+  // them. Only the ephemeral file claims (§2c) are cleared with the workspace.
+  forgetClaims(id);
   batch(() => {
     setApp("workspaces", remaining);
     if (app.activeId === id) setApp("activeId", remaining[Math.min(i, remaining.length - 1)].id);
