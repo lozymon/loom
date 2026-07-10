@@ -7,6 +7,12 @@ versioning.
 ## [Unreleased]
 
 ### Added
+- **Git-aware guardrails** (AGENTIC-ENHANCEMENTS §4b) — when one agent `loom broadcast`s a
+  *destructive* command (`git reset --hard`, `git clean -f`, a force-push, a rebase, `rm -rf`, …) to
+  several panes, Loom now asks the operator to confirm first — and flags any folder those panes share
+  (the case that runs it repeatedly on one worktree). Declining blocks the fan-out. On by default
+  (Settings → Safety → *Confirm a destructive broadcast*). A heuristic on a command Loom originates,
+  never a read of pane output.
 - **Session transcript export** (AGENTIC-ENHANCEMENTS §3b) — the session-log viewer can turn a pane's
   transcript into a shareable Markdown artifact: **⧉ Copy MD** copies it to the clipboard (titled
   header + a fenced code block, ANSI stripped), and **⭳ Export…** saves it to a `.md` file via a

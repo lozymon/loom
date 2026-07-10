@@ -44,12 +44,13 @@ const h = vi.hoisted(() => ({
   awaitAsk: vi.fn(),
   replyAsk: vi.fn(),
   cancelAsk: vi.fn(),
-  settings: { confirmExternalSpawn: false },
+  paneCwd: vi.fn((): Promise<string | null> => Promise.resolve(null)),
+  settings: { confirmExternalSpawn: false, confirmDestructiveBroadcast: false },
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: h.listen }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke }));
-vi.mock("./paneRegistry", () => ({ countLive: h.countLive, readPane: h.readPane, writeToPanes: h.writeToPanes }));
+vi.mock("./paneRegistry", () => ({ countLive: h.countLive, readPane: h.readPane, writeToPanes: h.writeToPanes, paneCwd: h.paneCwd }));
 vi.mock("../stores/workspace", () => ({
   activeWorkspace: h.activeWorkspace,
   broadcastTargets: h.broadcastTargets,
@@ -76,6 +77,7 @@ const {
   countLive,
   readPane,
   writeToPanes,
+  paneCwd,
   activeWorkspace,
   broadcastTargets,
   listPanes,
@@ -124,6 +126,7 @@ async function call(request: ControlRequest | string, reqId = 1): Promise<Contro
 beforeEach(async () => {
   vi.clearAllMocks();
   settings.confirmExternalSpawn = false;
+  settings.confirmDestructiveBroadcast = false;
   vi.stubGlobal("window", { confirm: vi.fn(() => true) });
   listen.mockImplementation((_event: string, cb: typeof handler) => {
     handler = cb;
@@ -353,6 +356,45 @@ describe("broadcast", () => {
     expect(writeToPanes).not.toHaveBeenCalled();
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/no workspace named/);
+  });
+
+  // §4b git-aware guardrail: a destructive fan-out prompts the operator.
+  it("blocks a destructive broadcast when the operator declines", async () => {
+    settings.confirmDestructiveBroadcast = true;
+    activeWorkspace.mockReturnValue({ id: "w1" });
+    broadcastTargets.mockReturnValue([1, 2, 3]);
+    paneCwd.mockResolvedValue("/repo");
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("window", { confirm });
+    const res = await call({ op: "broadcast", text: "git reset --hard origin/main" });
+    expect(confirm).toHaveBeenCalled();
+    expect(writeToPanes).not.toHaveBeenCalled();
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/declined/);
+  });
+
+  it("sends a destructive broadcast when the operator confirms", async () => {
+    settings.confirmDestructiveBroadcast = true;
+    activeWorkspace.mockReturnValue({ id: "w1" });
+    broadcastTargets.mockReturnValue([1, 2]);
+    writeToPanes.mockReturnValue(2);
+    paneCwd.mockResolvedValue("/repo");
+    vi.stubGlobal("window", { confirm: vi.fn(() => true) });
+    const res = await call({ op: "broadcast", text: "rm -rf build" });
+    expect(writeToPanes).toHaveBeenCalledWith([1, 2], "rm -rf build\r");
+    expect(res).toEqual({ ok: true, data: { count: 2 } });
+  });
+
+  it("does not prompt for a safe broadcast", async () => {
+    settings.confirmDestructiveBroadcast = true;
+    activeWorkspace.mockReturnValue({ id: "w1" });
+    broadcastTargets.mockReturnValue([1, 2]);
+    writeToPanes.mockReturnValue(2);
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("window", { confirm });
+    await call({ op: "broadcast", text: "git pull" });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(writeToPanes).toHaveBeenCalledWith([1, 2], "git pull\r");
   });
 });
 
