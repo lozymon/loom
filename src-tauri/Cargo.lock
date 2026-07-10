@@ -2145,6 +2145,7 @@ name = "loom"
 version = "1.8.0"
 dependencies = [
  "base64 0.22.1",
+ "gtk",
  "portable-pty",
  "rusqlite",
  "serde",

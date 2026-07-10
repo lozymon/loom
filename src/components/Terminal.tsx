@@ -15,7 +15,8 @@ import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeClipboard } from "../lib/clipboard";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { homeDir } from "@tauri-apps/api/path";
 import { listen } from "@tauri-apps/api/event";
@@ -385,7 +386,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     const sel = term.getSelection() || lastSelection;
     if (!sel) return false;
     try {
-      await writeText(sel);
+      await writeClipboard(sel);
     } catch (e) {
       console.error("clipboard write failed", e);
       return false;
@@ -396,7 +397,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   async function pasteClipboard() {
     try {
       const text = await readText();
-      if (text && handle !== null) void writePty(handle, text);
+      // Route through xterm's paste(), not a raw writePty: it wraps the text in bracketed-paste
+      // markers (ESC[200~ … ESC[201~) when the focused app has enabled DECSET ?2004 — which claude,
+      // vim, fzf, psql, and most TUIs do. With raw bytes those apps read every embedded newline as
+      // Enter, so a multi-line paste submits/executes line-by-line (this is why pasting into a
+      // Claude Code prompt "didn't work"). paste() → onData → our writePty, so a dead pane is still
+      // guarded by the handle check there.
+      if (text) term.paste(text);
     } catch (e) {
       console.error("clipboard read failed", e);
     }
@@ -652,7 +659,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       const sel = term.getSelection();
       if (!sel) return;
       lastSelection = sel;
-      if (settings.copyOnSelect) void writeText(sel).catch((e) => console.error("clipboard write failed", e));
+      if (settings.copyOnSelect) void writeClipboard(sel).catch((e) => console.error("clipboard write failed", e));
     });
 
     // Middle-click paste (optional, classic X11 behaviour) — paste into the PTY.
@@ -718,6 +725,29 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     term.onData((data) => {
       if (handle !== null) void writePty(handle, data);
     });
+
+    // OSC 52 clipboard writes from the PTY. This is how claude (and other TUIs) copy: they emit
+    // `ESC ] 52 ; c ; <base64> BEL` to hand text to the terminal's clipboard. xterm.js ships no OSC
+    // 52 handler, so those copies silently vanished — the real "copy doesn't work in claude" bug.
+    // Write-only on purpose: we honour a process *setting* the clipboard (route through
+    // writeClipboard so it exports via GTK on Linux) but decline read/query requests (`c;?`), which
+    // would let any pane exfiltrate the clipboard — and user-initiated paste already works via
+    // bracketed paste. `data` is the OSC payload after "52;", e.g. "c;<base64>".
+    term.parser.registerOscHandler(52, (data) => {
+      const semi = data.indexOf(";");
+      if (semi < 0) return false;
+      const b64 = data.slice(semi + 1);
+      if (b64 === "?" || b64 === "") return false; // read/clear request — declined
+      try {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const text = new TextDecoder().decode(bytes);
+        if (text) void writeClipboard(text);
+      } catch {
+        return false; // malformed base64 → let other handlers try
+      }
+      return true;
+    });
+
     term.textarea?.addEventListener("focus", () => focusPane(props.paneId));
 
     // Publish this pane to the broadcast router. `handle` reflects live/dead via closure,
