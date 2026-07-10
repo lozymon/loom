@@ -12,7 +12,7 @@ import type { LayoutNode, PaneId, PaneSpec, Workspace } from "../ipc/protocol";
 import { allocName, buildBalancedTree } from "../lib/grid";
 import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
-import { countLive } from "../lib/paneRegistry";
+import { countLive, writeToPanes } from "../lib/paneRegistry";
 import { forgetBoard } from "./blackboard";
 import { forgetClaims, releaseClaimsBy } from "./claims";
 import { settings } from "./settings";
@@ -128,6 +128,8 @@ export interface NewWorkspaceOpts {
   cwds?: (string | undefined)[];
   /** Per-pane shell overrides (row-major), e.g. `wsl.exe -d Ubuntu`; omitted/empty = global default. */
   shells?: (string | undefined)[];
+  /** Per-pane seed prompts (row-major) — typed into each pane once after launch (AGENTIC §3a). */
+  prompts?: (string | undefined)[];
   /** A saved layout to rebuild verbatim (preset relaunch / duplicate) instead of a balanced grid.
    *  When set with `panes`, the tree shape + gutter ratios are preserved and each leaf is remapped
    *  to a fresh PaneId; `paneCount`/`commands`/`cwds` are then ignored. */
@@ -184,10 +186,12 @@ function buildWorkspace(opts: NewWorkspaceOpts): WorkspaceUI {
     const command = opts.commands?.[i]?.trim();
     const cwd = opts.cwds?.[i]?.trim();
     const shell = opts.shells?.[i]?.trim();
+    const prompt = opts.prompts?.[i]?.trim();
     const spec: PaneSpec = { title };
     if (command) spec.command = command;
     if (cwd) spec.cwd = cwd;
     if (shell) spec.shell = shell;
+    if (prompt) spec.prompt = prompt;
     panes[paneId] = spec;
     i++;
     return { kind: "leaf", paneId };
@@ -530,7 +534,28 @@ export function createWorkspace(opts: NewWorkspaceOpts): string {
     setApp("activeId", ws.id);
     recordRecent(opts.cwd, opts.paneCount);
   });
+  // Seed prompts (AGENTIC §3a): a fresh team's panes each get their initial prompt typed in once.
+  // Only on a genuine *creation* (wizard / preset launch / duplicate) — restart restores workspaces
+  // without calling createWorkspace, and a resume (keepSession) shouldn't re-brief a live agent.
+  if (!opts.keepSession) deliverSeedPrompts(ws);
   return ws.id;
+}
+
+/** How long to wait before typing a seed prompt — long enough for the pane's Terminal to mount,
+ *  register, and boot its agent UI (the same heuristic the task board uses). */
+const SEED_PROMPT_DELAY_MS = 1500;
+
+/** Type each pane's seed prompt in once, after a boot delay (panes mount + register when the new
+ *  workspace activates). Best-effort: a pane that never becomes live is simply skipped. Fired via
+ *  the same `loom send` path so it works for any agent, not just Claude. */
+function deliverSeedPrompts(ws: WorkspaceUI): void {
+  const seeds = leafIds(ws.tree)
+    .map((id) => ({ id, prompt: ws.panes[id]?.prompt }))
+    .filter((s): s is { id: PaneId; prompt: string } => !!s.prompt);
+  if (!seeds.length) return;
+  setTimeout(() => {
+    for (const s of seeds) writeToPanes([s.id], s.prompt + "\r");
+  }, SEED_PROMPT_DELAY_MS);
 }
 
 export function switchWorkspace(id: string) {

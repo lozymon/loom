@@ -7,6 +7,12 @@ versioning.
 ## [Unreleased]
 
 ### Added
+- **Workspace templates with roles + seed prompts** (AGENTIC-ENHANCEMENTS §3a) — a saved fleet now
+  reconstitutes a whole agent team in one click. Each pane carries a per-pane **seed prompt** (a new
+  `seed` field in the New-workspace wizard, alongside cmd/cwd) that's typed in once on launch, and
+  its **role** (which already rides on the pane spec, so presets capture it automatically). Seeds
+  fire only on a genuine creation — never on restart or a session-resume — so an agent is briefed
+  exactly once. Launch "planner + 3 implementers + reviewer", each pre-briefed, from a single preset.
 - **Approval gate + bus-command audit timeline** (ORCHESTRATION-IDEAS §3) — two operator surfaces on
   the coordination bus. **Hold/gate:** `loom hold <path>` marks a path *held* so an agent's `claim`
   on it blocks until you release it (a lightweight approval gate reusing file claims); the Fleet

@@ -62,6 +62,8 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
   const [count, setCount] = createSignal(4);
   const [commands, setCommands] = createSignal<string[]>([]);
   const [cwds, setCwds] = createSignal<string[]>([]);
+  // Per-pane seed prompt (row-major); typed into the pane once on launch (AGENTIC §3a).
+  const [prompts, setPrompts] = createSignal<string[]>([]);
   // Per-pane shell override (row-major); "" = global default (PowerShell on Windows). Windows-only.
   const [shells, setShells] = createSignal<string[]>([]);
   // Installed WSL distros, loaded once on Windows; each becomes a `wsl.exe -d <distro>` shell option.
@@ -123,6 +125,8 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     setCwds((c) => { const n = [...c]; n[i] = dir; return n; });
   const setShellAt = (i: number, sh: string) =>
     setShells((c) => { const n = [...c]; n[i] = sh; return n; });
+  const setPromptAt = (i: number, p: string) =>
+    setPrompts((c) => { const n = [...c]; n[i] = p; return n; });
   const fillAll = (cmd: string) => setCommands(Array.from({ length: count() }, () => cmd));
   const fillAllShells = (sh: string) => setShells(Array.from({ length: count() }, () => sh));
 
@@ -146,6 +150,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
     const cmds = commands().slice(0, count());
     const dirs = cwds().slice(0, count());
     const shs = shells().slice(0, count());
+    const seeds = prompts().slice(0, count());
     const wsName = name().trim() || (folder ? autoName(folder) : `Workspace ${recents().length + 1}`);
     createWorkspace({
       name: wsName,
@@ -154,6 +159,7 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
       commands: cmds.some((c) => c?.trim()) ? cmds : undefined,
       cwds: dirs.some((c) => c?.trim()) ? dirs : undefined,
       shells: shs.some((s) => s?.trim()) ? shs : undefined,
+      prompts: seeds.some((s) => s?.trim()) ? seeds : undefined,
     });
     props.onClose();
   }
@@ -399,6 +405,14 @@ export default function NewWorkspaceWizard(props: { onClose: () => void }) {
                         onInput={(e) => setCwdAt(i(), e.currentTarget.value)}
                       />
                       <button onClick={() => browseCwdAt(i())}>Browse…</button>
+                    </div>
+                    <div class="wizard-row">
+                      <span class="muted" style={{ width: "5ch" }} title="Typed into the pane once on launch">seed</span>
+                      <input
+                        class="wizard-input" placeholder="Initial prompt (optional) — briefs the agent on launch"
+                        value={prompts()[i()] ?? ""}
+                        onInput={(e) => setPromptAt(i(), e.currentTarget.value)}
+                      />
                     </div>
                     <Show when={IS_WINDOWS}>
                       <div class="wizard-row">
