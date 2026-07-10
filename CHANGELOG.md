@@ -6,6 +6,13 @@ versioning.
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-07-10
+
+A coordination-and-safety sprint: six features that turn the fleet into a real orchestration surface —
+addressable roles, an approval gate with an auditable command timeline, a durable cross-session
+blackboard, one-click agent-team templates, shareable transcripts, and a guardrail on destructive
+broadcasts. (Plus, in the same cycle, the earlier fixes for copy/paste inside the Claude Code CLI.)
+
 ### Added
 - **Git-aware guardrails** (AGENTIC-ENHANCEMENTS §4b) — when one agent `loom broadcast`s a
   *destructive* command (`git reset --hard`, `git clean -f`, a force-push, a rebase, `rm -rf`, …) to
