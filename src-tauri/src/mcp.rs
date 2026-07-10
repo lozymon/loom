@@ -328,8 +328,20 @@ fn tools() -> Value {
             }
         },
         {
+            "name": "hold_file",
+            "description": "Gate a path for approval: mark it held so any agent's claim_file on it blocks until an operator releases it (release_file). A lightweight approval gate reusing the claim mechanism.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "File path to hold, e.g. \"src/auth.ts\"." },
+                    "workspace": { "type": "string", "description": "Workspace name (default: your pane's workspace)." }
+                },
+                "required": ["path"]
+            }
+        },
+        {
             "name": "list_claims",
-            "description": "List every file claim in a workspace and which pane holds each.",
+            "description": "List every file claim in a workspace and which pane holds each (held=true means it's gated for approval).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -482,6 +494,11 @@ fn build_request(name: &str, args: &Value, pane: Option<&str>) -> Result<Value, 
         }
         "claim_file" => with_scope(
             json!({ "op": "claim", "path": arg_str(args, "path")? }),
+            args,
+            pane,
+        ),
+        "hold_file" => with_scope(
+            json!({ "op": "hold", "path": arg_str(args, "path")? }),
             args,
             pane,
         ),
@@ -683,11 +700,13 @@ mod tests {
             ("focus_pane", json!({ "target": "Cleo" })),
             ("flag_attention", json!({ "target": "Cleo" })),
             ("set_status", json!({ "target": "Cleo", "text": "busy" })),
+            ("set_role", json!({ "target": "Cleo", "role": "reviewer" })),
             ("board_set", json!({ "key": "k", "value": "v" })),
             ("board_get", json!({ "key": "k" })),
             ("board_list", json!({})),
             ("board_del", json!({ "key": "k" })),
             ("claim_file", json!({ "path": "a.ts" })),
+            ("hold_file", json!({ "path": "a.ts" })),
             ("release_file", json!({ "path": "a.ts" })),
             ("list_claims", json!({})),
             ("reply_ask", json!({ "id": 3, "answer": "yes" })),

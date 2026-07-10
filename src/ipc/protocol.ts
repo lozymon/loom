@@ -149,6 +149,9 @@ export type ControlRequest =
   | { op: "claim"; path: string; pane?: string; workspace?: string }
   | { op: "release"; path: string; pane?: string; workspace?: string; force?: boolean }
   | { op: "claims"; pane?: string; workspace?: string }
+  // Gate a path (docs/ORCHESTRATION-IDEAS.md §3): mark it *held* so an agent's `claim` on it blocks
+  // until an operator `release`s it — a lightweight approval gate reusing the claim mechanism.
+  | { op: "hold"; path: string; pane?: string; workspace?: string }
   // ---- Task board (docs/ORCHESTRATION-IDEAS.md §1) ----
   // Cards live in the project's `.loom/board.json` (keyed by the workspace's folder). Agents can
   // create/list/move them so a lead agent can build and hand out work, and a worker can close its

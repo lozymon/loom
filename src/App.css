@@ -3238,6 +3238,28 @@ body,
   background: var(--well);
 }
 
+/* Gated (held-for-approval) claim (§3) — a warm badge + a release button. */
+.fleet-row.fleet-gated .fleet-path { color: var(--danger); }
+.fleet-gate-badge {
+  flex: 0 0 auto;
+  font: 600 10px var(--font-ui);
+  color: var(--danger);
+  padding: 1px 6px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+.fleet-release {
+  flex: 0 0 auto;
+  font: 600 10px var(--font-ui);
+  color: var(--text-dim);
+  padding: 1px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+}
+.fleet-release:hover { color: var(--text-bright); border-color: var(--border-strong); background: var(--well); }
+
 /* Usage HUD (AGENTIC §1c) — per-pane Claude token spend + estimated cost. */
 .fleet-est {
   font: 500 10px var(--font-mono);
@@ -4262,6 +4284,54 @@ body,
   flex: 1 1 auto;
   min-height: 0;
 }
+
+/* Session-log viewer tab toggle (Logs | Bus activity). */
+.log-tabs {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 14px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--well);
+}
+.log-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font: 600 11.5px var(--font-ui);
+  cursor: pointer;
+}
+.log-tab:hover { color: var(--text); }
+.log-tab.on { color: var(--accent-text); background: var(--accent-fill); }
+
+/* Bus-command audit timeline (§3) — a compact monospace feed, newest first. */
+.bus-timeline {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 0;
+}
+.bus-row {
+  display: grid;
+  grid-template-columns: 68px 92px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 16px;
+  font: 11.5px var(--font-mono);
+  border-left: 2px solid transparent;
+}
+.bus-row:hover { background: var(--well); }
+.bus-row.bus-fail { border-left-color: var(--danger); }
+.bus-time { color: var(--text-faint); }
+.bus-op { color: var(--accent-text); font-weight: 600; }
+.bus-target { color: var(--text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bus-outcome { color: var(--text-dim); justify-self: end; }
+.bus-row.bus-fail .bus-outcome { color: var(--danger); }
 
 /* Raw/Preview toggle in the docs panel's path header. */
 .docs-path-right {

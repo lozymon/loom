@@ -7,6 +7,14 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { listLogs, readLogTail, type LogEntry } from "../lib/logsClient";
 import { stripAnsi } from "../lib/ansi";
+import { audit, clearAudit } from "../stores/audit";
+
+/** hh:mm:ss for the bus timeline (epoch-ms → local wall-clock). */
+function fmtClock(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 
 /** How much of a (possibly huge) log to pull from the tail. */
 const TAIL_BYTES = 256 * 1024;
@@ -30,6 +38,8 @@ export default function SessionLogViewer(props: { onClose: () => void; preselect
   const [tail, setTail] = createSignal("");
   const [truncated, setTruncated] = createSignal(false);
   const [readErr, setReadErr] = createSignal<string | null>(null);
+  // Which tab: the durable per-pane logs, or the live bus-command audit timeline (§3).
+  const [mode, setMode] = createSignal<"logs" | "bus">("logs");
   let view: HTMLPreElement | undefined;
 
   const selectedEntry = createMemo(() => logs().find((l) => l.path === selected()) ?? null);
@@ -100,13 +110,40 @@ export default function SessionLogViewer(props: { onClose: () => void; preselect
     <div class="settings-backdrop" onClick={() => props.onClose()}>
       <div class="dialog log-dialog" onClick={(e) => e.stopPropagation()}>
         <header class="dialog-head">
-          <span class="dialog-title">≣ Session logs</span>
+          <span class="dialog-title">≣ {mode() === "logs" ? "Session logs" : "Bus activity"}</span>
+          <span class="log-tabs">
+            <button class="log-tab" classList={{ on: mode() === "logs" }} onClick={() => setMode("logs")}>Logs</button>
+            <button class="log-tab" classList={{ on: mode() === "bus" }} onClick={() => setMode("bus")}>
+              Bus activity<Show when={audit.entries.length > 0}><span class="git-count">{audit.entries.length}</span></Show>
+            </button>
+          </span>
           <span class="git-head-actions">
-            <button class="settings-btn" title="Refresh" onClick={() => void refresh()}>⟳ Refresh</button>
+            <Show when={mode() === "logs"} fallback={<button class="settings-btn" title="Clear the timeline" onClick={() => clearAudit()}>⌫ Clear</button>}>
+              <button class="settings-btn" title="Refresh" onClick={() => void refresh()}>⟳ Refresh</button>
+            </Show>
             <button class="settings-x" title="Close (Esc)" onClick={() => props.onClose()}>✕</button>
           </span>
         </header>
 
+        {/* Bus-command audit timeline (§3): every inter-pane control request, newest last. */}
+        <Show when={mode() === "bus"}>
+          <div class="bus-timeline">
+            <Show when={audit.entries.length > 0} fallback={<div class="git-empty">No bus commands yet.<div class="git-empty-sub">Cross-pane commands (loom send / spawn / broadcast / role …) show here as they run.</div></div>}>
+              <For each={[...audit.entries].reverse()}>
+                {(e) => (
+                  <div class="bus-row" classList={{ "bus-fail": !e.ok }}>
+                    <span class="bus-time">{fmtClock(e.ts)}</span>
+                    <span class="bus-op">{e.op}</span>
+                    <span class="bus-target">{e.target ?? ""}</span>
+                    <span class="bus-outcome" title={e.detail ?? ""}>{e.ok ? "✓" : `✗ ${e.detail ?? "failed"}`}</span>
+                  </div>
+                )}
+              </For>
+            </Show>
+          </div>
+        </Show>
+
+        <Show when={mode() === "logs"}>
         <div class="git-body">
           <aside class="git-files">
             <Show
@@ -146,6 +183,7 @@ export default function SessionLogViewer(props: { onClose: () => void; preselect
             </Show>
           </section>
         </div>
+        </Show>
       </div>
     </div>
   );

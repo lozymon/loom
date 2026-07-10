@@ -10,7 +10,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { activeWorkspace } from "../stores/workspace";
 import { board, noteList } from "../stores/blackboard";
-import { claims, listClaims } from "../stores/claims";
+import { claims, listClaims, releaseFile } from "../stores/claims";
 import { settings, setSetting } from "../stores/settings";
 import { claudeUsage, sessionCost, sessionTokens, fmtTokens, fmtUsd, type SessionUsage } from "../lib/claudeUsage";
 
@@ -145,9 +145,12 @@ export default function FleetPanel(props: { onClose: () => void }) {
             <ul class="fleet-list">
               <For each={held()}>
                 {(c) => (
-                  <li class="fleet-row">
+                  <li class="fleet-row" classList={{ "fleet-gated": c.held }}>
                     <span class="fleet-path" title={c.path}>{c.path}</span>
-                    <span class="fleet-by" title="Held by">{c.by}</span>
+                    <Show when={c.held} fallback={<span class="fleet-by" title="Locked by">{c.by}</span>}>
+                      <span class="fleet-gate-badge" title="Gated for approval — an agent's claim on this path is blocked until released">⛔ gated</span>
+                      <button class="fleet-release" title="Release the gate — let the agent proceed" onClick={() => releaseFile(wsId(), c.path, c.by, true)}>release</button>
+                    </Show>
                   </li>
                 )}
               </For>

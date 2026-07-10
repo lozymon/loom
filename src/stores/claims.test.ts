@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { claims, claimFile, releaseFile, listClaims, releaseClaimsBy, forgetClaims } from "./claims";
+import { claims, claimFile, holdClaim, releaseFile, listClaims, releaseClaimsBy, forgetClaims } from "./claims";
 
 // The claims store is the pure test-and-set behind `loom claim/release/claims` (§2c). Tests pin
 // the lock semantics directly; the bus routing onto these calls lives in paneControl.test.ts.
@@ -59,6 +59,27 @@ describe("claims", () => {
     claimFile("w1", "a.ts", "Faye");
     expect(releaseFile("w1", "a.ts", "Cleo", true)).toEqual({ ok: true });
     expect(claims.w1?.["a.ts"]).toBeUndefined();
+  });
+
+  it("holds (gates) a path so a later claim blocks (§3)", () => {
+    expect(holdClaim("w1", "a.ts", "op")).toEqual({ ok: true, fresh: true });
+    expect(claims.w1["a.ts"]).toEqual({ by: "op", at: 1000, held: true });
+    // an agent's claim on the held path is refused as gated
+    expect(claimFile("w1", "a.ts", "Faye")).toEqual({ ok: false, held: true, by: "op" });
+  });
+
+  it("release clears a gate, then the path can be claimed", () => {
+    holdClaim("w1", "a.ts", "op");
+    expect(releaseFile("w1", "a.ts", "op")).toEqual({ ok: true });
+    expect(claimFile("w1", "a.ts", "Faye")).toEqual({ ok: true, fresh: true });
+  });
+
+  it("holding an existing claim flips it to held (idempotent)", () => {
+    claimFile("w1", "a.ts", "Faye");
+    expect(holdClaim("w1", "a.ts", "op")).toEqual({ ok: true, fresh: true });
+    expect(claims.w1["a.ts"]).toMatchObject({ by: "Faye", held: true });
+    expect(holdClaim("w1", "a.ts", "op")).toEqual({ ok: true, fresh: false }); // already held
+    expect(listClaims("w1")).toEqual([{ path: "a.ts", by: "Faye", at: 1000, held: true }]);
   });
 
   it("lists claims path-sorted, per workspace", () => {
