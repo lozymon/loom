@@ -7,6 +7,13 @@ versioning.
 ## [Unreleased]
 
 ### Added
+- **Approval gate + bus-command audit timeline** (ORCHESTRATION-IDEAS §3) — two operator surfaces on
+  the coordination bus. **Hold/gate:** `loom hold <path>` marks a path *held* so an agent's `claim`
+  on it blocks until you release it (a lightweight approval gate reusing file claims); the Fleet
+  panel shows a gated badge + a release button, and `hold_file` is an MCP tool. **Bus activity:** a
+  new tab in the session-log viewer shows every cross-pane command (op · target · outcome) newest-
+  first, with failures flagged — an auditable timeline of who drove whom. Opacity-safe: it records
+  the commands Loom relays, never pane output.
 - **Roles as a resolvable bus target** (ORCHESTRATION-IDEAS §2) — tag a pane with a role
   (`loom role reviewer`, or `loom role Cleo builder`) so a driving agent can address *the reviewer*
   instead of remembering pane names. Roles persist on the `PaneSpec` (survive restart), show as an

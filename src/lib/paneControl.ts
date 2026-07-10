@@ -24,10 +24,11 @@ import {
   type WorkspaceUI,
 } from "../stores/workspace";
 import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
-import { claimFile, releaseFile, listClaims } from "../stores/claims";
+import { claimFile, holdClaim, releaseFile, listClaims } from "../stores/claims";
 import { addCard, cards, setCardStatus, ensureBoardLoaded, setDrain, drainState } from "../stores/board";
 import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
 import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
+import { recordAudit } from "../stores/audit";
 import {
   sessionStart,
   sessionEnd,
@@ -46,12 +47,17 @@ import { settings } from "../stores/settings";
 export async function initPaneControl(): Promise<() => void> {
   return listen<ControlEvent>(PANE_CMD_EVENT, async (event) => {
     const { reqId, request } = event.payload;
+    let parsed: ControlRequest | null = null;
     let response: ControlResponse;
     try {
-      response = await dispatch(JSON.parse(request) as ControlRequest);
+      parsed = JSON.parse(request) as ControlRequest;
+      response = await dispatch(parsed);
     } catch (err) {
       response = { ok: false, error: `bad request: ${String(err)}` };
     }
+    // Record every relayed command on the audit timeline (ORCHESTRATION-IDEAS §3). Opacity-safe:
+    // this logs the command, never pane output. A malformed request (no `parsed`) is skipped.
+    if (parsed) recordAudit(parsed, response.ok, response.ok ? undefined : response.error);
     void invoke(Cmd.paneCmdReply, { reqId, response: JSON.stringify(response) });
   });
 }
@@ -212,8 +218,21 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       const path = (req.path ?? "").trim();
       if (!path) return { ok: false, error: "claim needs a path" };
       const r = claimFile(ctx.ws.id, path, ctx.by);
-      if (!r.ok) return { ok: false, error: `"${path}" is held by ${r.by}` };
+      if (!r.ok) {
+        return "held" in r
+          ? { ok: false, error: `"${path}" is gated (held) — waiting on release` }
+          : { ok: false, error: `"${path}" is held by ${r.by}` };
+      }
       return { ok: true, data: { action: "claim", path, by: ctx.by, fresh: r.fresh } };
+    }
+
+    case "hold": {
+      const ctx = claimContext(req);
+      if ("error" in ctx) return ctx;
+      const path = (req.path ?? "").trim();
+      if (!path) return { ok: false, error: "hold needs a path" };
+      const r = holdClaim(ctx.ws.id, path, ctx.by);
+      return { ok: true, data: { action: "hold", path, by: ctx.by, fresh: r.fresh } };
     }
 
     case "release": {

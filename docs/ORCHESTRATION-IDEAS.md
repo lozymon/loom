@@ -74,7 +74,7 @@ role [pane] <name>` / `loom send role:reviewer …` (`cli.rs`, with a role colum
 the `set_role` MCP tool (`mcp.rs`). Surfaced as an accent title-bar badge (`.pane-role`,
 `Terminal.tsx`). Not yet built: the Fleet-panel role roster/filter (a small follow-up).
 
-### 3. Approval gate + bus-command audit view  🟡 ✅ *(audit backend already shipped — gate is the delta)*
+### 3. Approval gate + bus-command audit view  🟡 ✅ *shipped*
 **The flow:** an operator can put a claim (or a card from #1) into a **held** state an agent must
 not proceed past until released — a lightweight approval gate — and can see every cross-pane command
 on an auditable timeline.
@@ -88,6 +88,15 @@ tab in `SessionLogViewer.tsx`), and **(b)** the *hold/gate* action itself, which
 mechanism (`stores/claims.ts`, §2c): add a `held` status alongside `claimed` plus a release action.
 This is the concrete, primitives-first take on the planned AGENTIC-ENHANCEMENTS §4a ("per-pane
 approval gating / dry-run"). Keep Rust a pure relay — gate/hold logic stays in TS.
+
+**✅ Built as:** both deltas, TS-side (Rust stays a pure relay). **(a)** a bounded in-memory ring
+`stores/audit.ts` (`recordAudit`) that `paneControl.initPaneControl` appends to after every relayed
+request — op, target, ok, error — surfaced as a **Bus activity** tab in `SessionLogViewer.tsx`
+(newest-first, failures flagged red). Opacity-safe: it records the *commands* Loom relays, never pane
+output. **(b)** a `held?` flag on `Claim` (`stores/claims.ts`) with `holdClaim`; `claimFile` now
+refuses a held path so the agent blocks. Faces: a `hold` bus op (`loom hold <path>` in `cli.rs`,
+`hold_file` MCP tool), `release` clears it, and `loom claims` marks a gated path ⛔; the Fleet panel
+shows a **gated** badge + a **release** button (`FleetPanel.tsx`).
 
 ---
 

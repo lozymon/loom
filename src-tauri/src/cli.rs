@@ -58,6 +58,7 @@ pub fn is_command(cmd: &str) -> bool {
             | "claim"
             | "release"
             | "claims"
+            | "hold"
             | "ask"
             | "reply"
             | "hooks"
@@ -527,11 +528,12 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(obj)
         }
 
-        "claim" | "release" | "claims" => {
+        "claim" | "release" | "claims" | "hold" => {
             // loom claim <path> [--workspace W]                 — take an advisory lock (§2c)
             // loom release <path> [--force] [--workspace W]     — drop your lock (--force: any)
             // loom claims [--workspace W]                       — list the workspace's locks
-            // The caller pane ($LOOM_PANE) is the holder identity for claim/release.
+            // loom hold <path> [--workspace W]                  — gate a path (§3); release to clear
+            // The caller pane ($LOOM_PANE) is the holder identity for claim/release/hold.
             let op = args[0].as_str();
             let mut workspace: Option<String> = None;
             let mut force = false;
@@ -750,6 +752,23 @@ fn handle_response(op: &str, resp: &Value) {
                 .unwrap_or("?");
             println!("released '{path}'");
         }
+        "hold" => {
+            let path = data
+                .and_then(|d| d.get("path"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            let fresh = data
+                .and_then(|d| d.get("fresh"))
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            if fresh {
+                println!(
+                    "held '{path}' — an agent's claim on it will block until you `loom release` it"
+                );
+            } else {
+                println!("already held: '{path}'");
+            }
+        }
         "card" => {
             // card.add → { id, title }; card.list → { cards: [{id,title,status}] }; card.move → { id, status }
             if let Some(list) = data.and_then(|d| d.get("cards")).and_then(Value::as_array) {
@@ -819,7 +838,12 @@ fn print_claims(data: Option<&Value>) {
     for e in arr {
         let path = e.get("path").and_then(Value::as_str).unwrap_or("?");
         let by = e.get("by").and_then(Value::as_str).unwrap_or("");
-        println!("{path:<32} (held by {by})");
+        let gated = e.get("held").and_then(Value::as_bool).unwrap_or(false);
+        if gated {
+            println!("{path:<32} ⛔ GATED (held for approval; release to clear)");
+        } else {
+            println!("{path:<32} (locked by {by})");
+        }
     }
 }
 
