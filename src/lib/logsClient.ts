@@ -25,3 +25,14 @@ export const listLogs = (): Promise<LogEntry[]> => invoke<LogEntry[]>("list_logs
 /** Read the last `maxBytes` of a log file (lossily decoded). */
 export const readLogTail = (path: string, maxBytes: number): Promise<LogTail> =>
   invoke<LogTail>("read_log_tail", { path, maxBytes });
+
+/** Write an exported markdown transcript to a user-chosen path (from the save dialog). */
+export const exportMarkdown = (path: string, content: string): Promise<void> =>
+  invoke("export_markdown", { path, content });
+
+/** Format a session log as a shareable markdown transcript (AGENTIC §3b): a titled header with the
+ *  pane/size, then the (ANSI-stripped) output in a fenced block so it pastes cleanly into a PR/doc. */
+export function logToMarkdown(entry: { name: string; size: number }, content: string): string {
+  const kb = entry.size < 1024 ? `${entry.size} B` : `${(entry.size / 1024).toFixed(1)} KB`;
+  return `# Session transcript — ${entry.name}\n\n_${kb} · exported from Loom_\n\n\`\`\`text\n${content.replace(/```/g, "ʼʼʼ")}\n\`\`\`\n`;
+}

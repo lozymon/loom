@@ -174,6 +174,7 @@ pub fn run() {
             docs::read_doc,
             logs::list_logs,
             logs::read_log_tail,
+            logs::export_markdown,
             claude::list_claude_sessions,
             claude::claude_session_exists,
             claude::claude_usage,

@@ -5,9 +5,11 @@
 // record, so this doesn't violate ADR-0001 (we never parse live pane output for product logic).
 
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { listLogs, readLogTail, type LogEntry } from "../lib/logsClient";
+import { listLogs, readLogTail, exportMarkdown, logToMarkdown, type LogEntry } from "../lib/logsClient";
 import { stripAnsi } from "../lib/ansi";
 import { audit, clearAudit } from "../stores/audit";
+import { writeClipboard } from "../lib/clipboard";
+import { save } from "@tauri-apps/plugin-dialog";
 
 /** hh:mm:ss for the bus timeline (epoch-ms → local wall-clock). */
 function fmtClock(ts: number): string {
@@ -40,9 +42,38 @@ export default function SessionLogViewer(props: { onClose: () => void; preselect
   const [readErr, setReadErr] = createSignal<string | null>(null);
   // Which tab: the durable per-pane logs, or the live bus-command audit timeline (§3).
   const [mode, setMode] = createSignal<"logs" | "bus">("logs");
+  // Transient export confirmation ("Copied" / "Saved …"), auto-cleared.
+  const [exportMsg, setExportMsg] = createSignal("");
   let view: HTMLPreElement | undefined;
 
   const selectedEntry = createMemo(() => logs().find((l) => l.path === selected()) ?? null);
+
+  function flashExport(msg: string) {
+    setExportMsg(msg);
+    setTimeout(() => setExportMsg(""), 2600);
+  }
+
+  /** Copy the selected transcript to the clipboard as Markdown (a quick, paste-anywhere export). */
+  async function copyMarkdown() {
+    const e = selectedEntry();
+    if (!e) return;
+    await writeClipboard(logToMarkdown(e, tail()));
+    flashExport("Copied");
+  }
+
+  /** Save the selected transcript to a Markdown file the user picks — the shareable artifact (§3b). */
+  async function saveMarkdown() {
+    const e = selectedEntry();
+    if (!e) return;
+    try {
+      const path = await save({ defaultPath: `${e.name}.md`, filters: [{ name: "Markdown", extensions: ["md"] }] });
+      if (!path) return; // cancelled
+      await exportMarkdown(path, logToMarkdown(e, tail()));
+      flashExport("Saved");
+    } catch (err) {
+      flashExport(`Export failed: ${String(err)}`);
+    }
+  }
 
   async function read(path: string) {
     setReadErr(null);
@@ -172,6 +203,12 @@ export default function SessionLogViewer(props: { onClose: () => void; preselect
                 <span>{selectedEntry()?.name ?? selected()}</span>
                 <span class="git-diff-hint">
                   {selectedEntry() ? fmtSize(selectedEntry()!.size) : ""}{truncated() ? " · showing the last 256 KB" : ""}
+                </span>
+                {/* Export the transcript as a shareable markdown artifact (§3b). */}
+                <span class="log-export">
+                  <button class="settings-btn" title="Copy this transcript as Markdown" disabled={!!readErr()} onClick={() => void copyMarkdown()}>⧉ Copy MD</button>
+                  <button class="settings-btn" title="Save this transcript as a Markdown file" disabled={!!readErr()} onClick={() => void saveMarkdown()}>⭳ Export…</button>
+                  <Show when={exportMsg()}><span class="log-export-msg">{exportMsg()}</span></Show>
                 </span>
               </div>
               <Show when={readErr()}>

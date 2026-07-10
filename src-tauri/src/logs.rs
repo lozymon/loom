@@ -107,3 +107,11 @@ pub fn read_log_tail(app: AppHandle, path: String, max_bytes: u64) -> Result<Log
         size,
     })
 }
+
+/// Write an exported transcript (markdown) to a user-chosen `path` — the destination the save
+/// dialog returned. Unlike the read commands this isn't confined to the logs dir: the user
+/// explicitly picked where the artifact goes. Creates/overwrites the file.
+#[tauri::command]
+pub fn export_markdown(path: String, content: String) -> Result<(), String> {
+    fs::write(&path, content).map_err(|e| format!("cannot write {path}: {e}"))
+}

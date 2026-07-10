@@ -4294,6 +4294,18 @@ body,
   border-radius: 8px;
   background: var(--well);
 }
+
+/* Transcript export controls in the selected-log header (§3b). */
+.log-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.log-export-msg {
+  font: 500 11px var(--font-ui);
+  color: var(--accent-text);
+}
 .log-tab {
   display: inline-flex;
   align-items: center;
