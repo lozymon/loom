@@ -725,6 +725,29 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     term.onData((data) => {
       if (handle !== null) void writePty(handle, data);
     });
+
+    // OSC 52 clipboard writes from the PTY. This is how claude (and other TUIs) copy: they emit
+    // `ESC ] 52 ; c ; <base64> BEL` to hand text to the terminal's clipboard. xterm.js ships no OSC
+    // 52 handler, so those copies silently vanished — the real "copy doesn't work in claude" bug.
+    // Write-only on purpose: we honour a process *setting* the clipboard (route through
+    // writeClipboard so it exports via GTK on Linux) but decline read/query requests (`c;?`), which
+    // would let any pane exfiltrate the clipboard — and user-initiated paste already works via
+    // bracketed paste. `data` is the OSC payload after "52;", e.g. "c;<base64>".
+    term.parser.registerOscHandler(52, (data) => {
+      const semi = data.indexOf(";");
+      if (semi < 0) return false;
+      const b64 = data.slice(semi + 1);
+      if (b64 === "?" || b64 === "") return false; // read/clear request — declined
+      try {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const text = new TextDecoder().decode(bytes);
+        if (text) void writeClipboard(text);
+      } catch {
+        return false; // malformed base64 → let other handlers try
+      }
+      return true;
+    });
+
     term.textarea?.addEventListener("focus", () => focusPane(props.paneId));
 
     // Publish this pane to the broadcast router. `handle` reflects live/dead via closure,
