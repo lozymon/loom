@@ -366,13 +366,14 @@ export interface PaneListing {
   name: string;
   workspace: string;
   focused: boolean;
+  role?: string;
 }
 
 export function listPanes(): PaneListing[] {
   const out: PaneListing[] = [];
   for (const w of app.workspaces) {
     for (const id of leafIds(w.tree)) {
-      out.push({ paneId: id, name: w.panes[id]?.title ?? `Pane ${id}`, workspace: w.name, focused: w.focused === id });
+      out.push({ paneId: id, name: w.panes[id]?.title ?? `Pane ${id}`, workspace: w.name, focused: w.focused === id, role: w.panes[id]?.role });
     }
   }
   return out;
@@ -393,6 +394,33 @@ export function resolvePaneByName(name: string): { paneId: PaneId } | { error: s
   if (matches.length === 1) return { paneId: matches[0] };
   if (matches.length === 0) return { error: `no pane named "${name}"` };
   return { error: `"${name}" is ambiguous (${matches.length} panes share it)` };
+}
+
+/** Set (or, with an empty string, clear) a pane's role — a persisted `PaneSpec` field so a
+ *  "reviewer" pane stays the reviewer across restart (ORCHESTRATION-IDEAS §2). Mirrors
+ *  `setPaneSessionId`'s persistence. */
+export function setPaneRole(paneId: PaneId, role: string) {
+  const i = wsIdxByPane(paneId);
+  if (i < 0) return;
+  const trimmed = role.trim();
+  setApp("workspaces", i, "panes", paneId, "role", trimmed || undefined);
+}
+
+/** Resolve a role name to the panes that carry it — the reverse of `resolvePaneByName` for the
+ *  `role:<name>` bus target. Prefers the active workspace's matches; falls back to matches across
+ *  all workspaces. Case-insensitive. Returns [] if none. A role is a *group* target (a role can be
+ *  held by several panes), so callers fan out to all returned ids. */
+export function resolvePanesByRole(role: string): PaneId[] {
+  const want = role.trim().toLowerCase();
+  if (!want) return [];
+  const active = activeWorkspace();
+  if (active) {
+    const here = leafIds(active.tree).filter((id) => active.panes[id]?.role?.toLowerCase() === want);
+    if (here.length) return here;
+  }
+  const out: PaneId[] = [];
+  for (const w of app.workspaces) for (const id of leafIds(w.tree)) if (w.panes[id]?.role?.toLowerCase() === want) out.push(id);
+  return out;
 }
 
 /** A pane's launch spec by id (searches all workspaces). Used to derive its Agent kind (ADR-0008). */

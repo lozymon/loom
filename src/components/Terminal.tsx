@@ -851,6 +851,10 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           )}
         </Show>
         <span class="pane-name">{displayName()}</span>
+        {/* Role badge — a resolvable bus target (ORCHESTRATION-IDEAS §2). Set via `loom role …`. */}
+        <Show when={spec()?.role}>
+          {(r) => <span class="pane-role" title={`Role: ${r()} — address it on the bus as role:${r()}`}>{r()}</span>}
+        </Show>
         {/* Adopt: this pane is running an agent you started by hand and isn't launched as one yet.
             One click records it as the pane's command so it persists + resumes on restart. Only
             shown in manual mode — with auto-adopt on, refreshLoc records it for you. */}

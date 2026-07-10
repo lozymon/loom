@@ -14,6 +14,9 @@
 //!   loom attention Cleo --clear        # drop pane Cleo's attention border
 //!   loom status "running tests"        # set this pane's status label (shown in its title/overview)
 //!   loom status Cleo --clear           # clear pane Cleo's status label
+//!   loom role reviewer                 # tag this pane's role (a resolvable bus target)
+//!   loom role Cleo builder             # tag pane Cleo as the builder; `loom role Cleo --clear` drops it
+//!   loom send role:reviewer "take a look"   # target by role — fans out to every reviewer pane
 //!   loom hooks --install               # wire a Claude Code agent's events to the Session/Task model
 //!   loom hooks                         # print the recommended hooks profile (no changes made)
 //!   loom hook <event>                  # internal: a hook pushes one lifecycle op (ADR-0008)
@@ -49,6 +52,7 @@ pub fn is_command(cmd: &str) -> bool {
             | "focus"
             | "attention"
             | "status"
+            | "role"
             | "note"
             | "card"
             | "claim"
@@ -310,6 +314,43 @@ fn build_request(args: &[String]) -> Result<Value, String> {
                 (t, positional.join(" "))
             };
             Ok(json!({ "op": "status", "target": target, "text": text }))
+        }
+
+        "role" => {
+            // loom role [pane] [name|--clear]   — set (or clear) a pane's role (ORCHESTRATION §2).
+            // No pane → the calling pane ($LOOM_PANE), so an agent can tag itself. Same self-vs-pane
+            // convention as `loom status`: one token + a caller pane → *this* pane's role; two+ →
+            // first is the target pane. Other commands then target it with `role:<name>`.
+            let mut clear = false;
+            let mut positional: Vec<String> = Vec::new();
+            for a in &args[1..] {
+                if a == "--clear" {
+                    clear = true;
+                } else {
+                    positional.push(a.clone());
+                }
+            }
+            let self_pane = env::var("LOOM_PANE").ok();
+            let no_pane = || {
+                "no pane given and LOOM_PANE not set — name a pane: loom role <pane> <role>"
+                    .to_string()
+            };
+            let (target, role) = if clear {
+                let t = if positional.is_empty() {
+                    self_pane.ok_or_else(no_pane)?
+                } else {
+                    positional.remove(0)
+                };
+                (t, String::new())
+            } else if positional.is_empty() {
+                (self_pane.ok_or_else(no_pane)?, String::new())
+            } else if let (1, Some(me)) = (positional.len(), self_pane) {
+                (me, positional.remove(0))
+            } else {
+                let t = positional.remove(0);
+                (t, positional.join(" "))
+            };
+            Ok(json!({ "op": "role.set", "target": target, "role": role }))
         }
 
         "card" => {
@@ -644,6 +685,25 @@ fn handle_response(op: &str, resp: &Value) {
                 println!("status of '{name}' → {text}");
             }
         }
+        "role" => {
+            let name = data
+                .and_then(|d| d.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            let cleared = data
+                .and_then(|d| d.get("cleared"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if cleared {
+                println!("role cleared on '{name}'");
+            } else {
+                let role = data
+                    .and_then(|d| d.get("role"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                println!("role of '{name}' → {role}");
+            }
+        }
         "note" => {
             let action = data
                 .and_then(|d| d.get("action"))
@@ -912,7 +972,13 @@ fn print_list(data: Option<&Value>) {
         let focused = p.get("focused").and_then(Value::as_bool).unwrap_or(false);
         let marker = if focused { "*" } else { " " };
         let status = if live { "live" } else { "dead" };
-        println!("{marker} {name:<12} {status:<5} {ws}");
+        let role = p.get("role").and_then(Value::as_str).unwrap_or("");
+        let rolecol = if role.is_empty() {
+            String::new()
+        } else {
+            format!("  [{role}]")
+        };
+        println!("{marker} {name:<12} {status:<5} {ws}{rolecol}");
     }
 }
 

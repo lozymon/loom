@@ -48,7 +48,7 @@ what ADR-0009 already added — pure TS/SolidJS, per no-product-logic-in-Rust.
 **Highest-leverage item in this doc.** It's a new panel, not an architecture change, and it's the
 piece that turns Loom's now-rich agent signals into a single operable surface.
 
-### 2. Role as a resolvable bus target  🟢 ✅ *(mailbox already shipped — only roles are open)*
+### 2. Role as a resolvable bus target  🟢 ✅ *shipped*
 **The flow:** tag a pane/agent with a role — `builder`, `reviewer`, `scout`, `coordinator` — so a
 driving agent can address "the reviewer" instead of remembering pane names.
 
@@ -64,6 +64,15 @@ a per-pane override), surfaced as a `role:` selector in `ControlRequest` target 
 (`paneControl.ts`) and a `--role` target on the `loom` CLI + `loom mcp`. Show it as a title-bar
 badge and a Fleet-panel filter. Pairs with #1 (a card can target a role instead of spawning fresh)
 and gives AGENTIC-ENHANCEMENTS §3a ("templates with roles") its runtime vocabulary.
+
+**✅ Built as:** a persisted `role?` field on `PaneSpec` (`protocol.ts`) — the per-pane override, so
+a "reviewer" pane stays the reviewer across restart (`setPaneRole` in `stores/workspace.ts`, written
+via a `role.set` bus op mirroring `status`). Targeting is a `role:<name>` prefix on any `target`:
+`resolveTargets` in `paneControl.ts` fans a `send` out to **every** pane holding the role (a role is
+a group), `focus` reveals the first, and `resolvePanesByRole` is the reverse lookup. Faces: `loom
+role [pane] <name>` / `loom send role:reviewer …` (`cli.rs`, with a role column in `loom list`) and
+the `set_role` MCP tool (`mcp.rs`). Surfaced as an accent title-bar badge (`.pane-role`,
+`Terminal.tsx`). Not yet built: the Fleet-panel role roster/filter (a small follow-up).
 
 ### 3. Approval gate + bus-command audit view  🟡 ✅ *(audit backend already shipped — gate is the delta)*
 **The flow:** an operator can put a claim (or a card from #1) into a **held** state an agent must

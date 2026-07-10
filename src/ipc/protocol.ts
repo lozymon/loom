@@ -34,6 +34,11 @@ export interface PaneSpec {
    *  so the conversation comes back (Claude persists it under ~/.claude — Loom never parses output;
    *  see lib/agents.ts `resumeClaudeCommand`). Absent for non-Claude panes or when resume is off. */
   sessionId?: string;
+  /** Operator/agent-assigned role for this pane — a resolvable bus target vocabulary
+   *  (`builder`, `reviewer`, `scout`, `coordinator`, …) so a driving agent can address
+   *  "the reviewer" instead of a pane name. Free-form; persisted with the spec. Resolved to
+   *  panes by `role:<name>` in a `ControlRequest` target (see lib/paneControl.ts). Absent = no role. */
+  role?: string;
   title: string;
 }
 
@@ -121,6 +126,11 @@ export type ControlRequest =
   // overview tile. Same opacity-safe category as `attention`: the agent *pushes* the label; we
   // never read it from output. Turns overview mode into a fleet dashboard (building/blocked/idle).
   | { op: "status"; target: string; text?: string }
+  // Set (or, with no/empty role, clear) a pane's role — a resolvable target vocabulary
+  // (docs/ORCHESTRATION-IDEAS.md §2). Unlike status/attention this is *persisted* on the PaneSpec
+  // (survives restart), since a "reviewer" pane stays the reviewer. `target` defaults to the caller
+  // pane, so an agent can tag itself. Other ops target a role with a `role:<name>` target string.
+  | { op: "role.set"; target: string; role?: string }
   // ---- Shared blackboard (docs/AGENTIC-ENHANCEMENTS.md §2b) ----
   // A workspace-scoped key/value board agents post plan state to and poll ("plan.api → Cleo",
   // discovered gotchas, who-owns-what). Pull-based coordination, opacity-safe: the value is agent-
@@ -177,6 +187,8 @@ export interface PaneInfo {
   workspace: string;
   focused: boolean;
   live: boolean;
+  /** The pane's role (docs/ORCHESTRATION-IDEAS.md §2), or absent if unset. */
+  role?: string;
 }
 
 /** Uniform reply shape. `data` is op-specific (PaneInfo[] for list, {count}/{name}…). */
