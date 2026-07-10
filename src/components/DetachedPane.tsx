@@ -90,7 +90,9 @@ export default function DetachedPane(props: { paneId: number; handle: number; ti
       }
       if (k === "v") {
         e.preventDefault();
-        void readText().then((t) => { if (t) void writePty(props.handle, t); });
+        // term.paste() brackets the text (ESC[200~ … ESC[201~) for apps in bracketed-paste mode
+        // (claude/vim/…), so a multi-line paste doesn't submit line-by-line. See Terminal.tsx.
+        void readText().then((t) => { if (t) term.paste(t); });
         return false;
       }
       return true;

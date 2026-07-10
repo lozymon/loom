@@ -396,7 +396,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   async function pasteClipboard() {
     try {
       const text = await readText();
-      if (text && handle !== null) void writePty(handle, text);
+      // Route through xterm's paste(), not a raw writePty: it wraps the text in bracketed-paste
+      // markers (ESC[200~ … ESC[201~) when the focused app has enabled DECSET ?2004 — which claude,
+      // vim, fzf, psql, and most TUIs do. With raw bytes those apps read every embedded newline as
+      // Enter, so a multi-line paste submits/executes line-by-line (this is why pasting into a
+      // Claude Code prompt "didn't work"). paste() → onData → our writePty, so a dead pane is still
+      // guarded by the handle check there.
+      if (text) term.paste(text);
     } catch (e) {
       console.error("clipboard read failed", e);
     }
