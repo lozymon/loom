@@ -7,7 +7,8 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Cmd, PANE_CMD_EVENT, type ControlEvent, type ControlRequest, type ControlResponse } from "../ipc/protocol";
-import { countLive, readPane, writeToPanes } from "./paneRegistry";
+import { countLive, readPane, writeToPanes, paneCwd } from "./paneRegistry";
+import { isDestructiveCommand, sharedFolders } from "./guardrails";
 import {
   activeWorkspace,
   broadcastTargets,
@@ -130,8 +131,18 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
     case "broadcast": {
       const ws = req.workspace ? workspaceByName(req.workspace) : activeWorkspace();
       if (!ws) return { ok: false, error: `no workspace named "${req.workspace}"` };
-      const text = (req.text ?? "") + (req.enter === false ? "" : "\r");
-      const n = writeToPanes(broadcastTargets(ws), text);
+      const raw = req.text ?? "";
+      const ids = broadcastTargets(ws);
+      // Git-aware guardrail (§4b): a destructive command fanning out to several panes runs N× on
+      // (or races) whatever they share. Warn the operator first — louder when panes share a folder.
+      if (settings.confirmDestructiveBroadcast && ids.length >= 2 && isDestructiveCommand(raw)) {
+        const cwds = await Promise.all(ids.map((id) => paneCwd(id).catch(() => null)));
+        if (!confirmDestructiveBroadcast(raw, ids.length, sharedFolders(cwds))) {
+          return { ok: false, error: "destructive broadcast declined by user" };
+        }
+      }
+      const text = raw + (req.enter === false ? "" : "\r");
+      const n = writeToPanes(ids, text);
       return { ok: true, data: { count: n } };
     }
 
@@ -448,5 +459,16 @@ function confirmExternalSpawn(command: string, cwd?: string): boolean {
   const where = cwd ? `\nin: ${cwd}` : "";
   return window.confirm(
     `Another pane wants to open a new terminal and run:\n\n${command}${where}\n\nAllow it?`,
+  );
+}
+
+/** Confirm before a destructive command fans out to many panes (§4b guardrail). Names the shared
+ *  folder(s) when panes overlap — that's the case that runs the command repeatedly on one worktree. */
+function confirmDestructiveBroadcast(command: string, count: number, shared: string[]): boolean {
+  const sharedNote = shared.length
+    ? `\n\n⚠ ${shared.length === 1 ? "These panes share the folder" : "Some panes share folders"}:\n${shared.join("\n")}\n(the command would run on the same worktree more than once).`
+    : "";
+  return window.confirm(
+    `A pane wants to broadcast a destructive command to all ${count} live panes:\n\n${command}${sharedNote}\n\nRun it in every pane?`,
   );
 }

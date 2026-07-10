@@ -177,9 +177,20 @@ formatted transcript on the clipboard.
 Pause a pane's input and require a human OK before a broadcast lands, so one bad `loom broadcast`
 can't nuke every repo at once.
 
-### 4b. Git-aware guardrails 🟡
+### 4b. Git-aware guardrails 🟡 ✅ shipped
 `git.rs`/`GitPanel` already know branch state — warn (or block broadcast) when panes share a
 branch/worktree and a destructive command is fanning out.
+
+**✅ Built as:** a confirm gate on `loom broadcast` (`paneControl.ts`), mirroring the `loom spawn`
+gate. When an agent fans a **destructive** command (`isDestructiveCommand` in `lib/guardrails.ts` —
+`git reset --hard`, `git clean -f`, a force-push, a rebase, `rm -rf`, …) to ≥2 live panes, the
+operator gets a `window.confirm` that names the command and — via `sharedFolders`, resolving each
+target's live cwd (`paneCwd`) — flags any **folder several panes share** (the case that runs the
+command repeatedly on one worktree). Declining blocks the broadcast. Gated by
+`settings.confirmDestructiveBroadcast` (default on; Settings → Safety). A heuristic, not a sandbox,
+and it inspects a command Loom *originates* (ADR-0007), never pane output (ADR-0001). Verified:
+`isDestructiveCommand`/`sharedFolders` and the decline-blocks / confirm-sends / safe-doesn't-prompt
+paths are unit-tested; the dialog is the same `window.confirm` the shipping spawn gate uses.
 
 ---
 

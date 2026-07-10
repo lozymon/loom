@@ -59,6 +59,9 @@ export interface Settings {
   /** Ask before another pane's `loom spawn` (ADR-0007 bus) opens a pane running its command —
    *  the one cross-pane op that runs an arbitrary command with no visible keystrokes. */
   confirmExternalSpawn: boolean;
+  /** Ask before a `loom broadcast` fans a *destructive* command (git reset --hard, rm -rf, a
+   *  force-push, …) to several panes — the git-aware guardrail (AGENTIC §4b). */
+  confirmDestructiveBroadcast: boolean;
   // ---- Notifications ----
   /** Pop a desktop notification when a pane raises attention while Loom is unfocused. */
   notifyOnAttention: boolean;
@@ -140,6 +143,7 @@ export const DEFAULT_SETTINGS: Settings = {
   editorCommand: "code",
   confirmClose: true,
   confirmExternalSpawn: true,
+  confirmDestructiveBroadcast: true,
   notifyOnAttention: false,
   idleStuckSeconds: 45,
   autoAdoptAgents: true,

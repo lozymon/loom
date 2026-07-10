@@ -399,6 +399,11 @@ export default function Settings(props: { onClose: () => void }) {
                 checked={settings.confirmExternalSpawn}
                 onToggle={() => setSetting("confirmExternalSpawn", !settings.confirmExternalSpawn)}
               />
+              <ToggleRow
+                label={<>Confirm a destructive broadcast <span class="muted">— warn before <code>loom broadcast</code> fans <code>git reset --hard</code>, <code>rm -rf</code>, a force-push … to many panes</span></>}
+                checked={settings.confirmDestructiveBroadcast}
+                onToggle={() => setSetting("confirmDestructiveBroadcast", !settings.confirmDestructiveBroadcast)}
+              />
             </div>
           </section>
 
