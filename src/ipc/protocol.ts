@@ -39,6 +39,11 @@ export interface PaneSpec {
    *  "the reviewer" instead of a pane name. Free-form; persisted with the spec. Resolved to
    *  panes by `role:<name>` in a `ControlRequest` target (see lib/paneControl.ts). Absent = no role. */
   role?: string;
+  /** A seed prompt typed into the pane once, when the workspace is *created* from a template/wizard
+   *  (AGENTIC-ENHANCEMENTS §3a) — so "1 planner + 3 implementers + 1 reviewer" reconstitutes with
+   *  each agent already briefed. Delivered by `createWorkspace` (not on restart/resume, which restore
+   *  panes without re-firing); persisted with the spec so a preset carries it. Absent = no seed. */
+  prompt?: string;
   title: string;
 }
 

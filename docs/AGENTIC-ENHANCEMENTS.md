@@ -143,10 +143,21 @@ Docs panel shell. *Follow-up:* open asks aren't shown yet (the ask registry isn'
 
 ## 3. Repeatability — capture a working setup and replay it
 
-### 3a. Workspace templates with roles 🟡
+### 3a. Workspace templates with roles 🟡 ✅ shipped
 Beyond grid presets: save a named fleet — "1 planner + 3 implementers + 1 reviewer" — each pane
 pre-seeded with a launch command **and** an initial prompt. One click reconstitutes an agent team.
 Extends the `Preset` snapshot (already carries `tree` + `panes`) with per-pane seed prompts.
+
+**✅ Built as:** a `prompt?` field on `PaneSpec` (`protocol.ts`) — a seed typed into the pane once,
+delivered by `createWorkspace` → `deliverSeedPrompts` (`stores/workspace.ts`) after a short boot
+delay, via the same `writeToPanes` path the task board uses. Fired only on a genuine *creation*
+(wizard / preset launch / duplicate), never on restart (which restores workspaces without calling
+`createWorkspace`) or a `keepSession` resume — so an agent is briefed exactly once. **Roles come for
+free:** they already live on `PaneSpec` (§2, ORCHESTRATION-IDEAS), so a preset that snapshots `panes`
+carries each pane's role too. The New-workspace wizard gained a per-pane **seed** input alongside
+cmd/cwd (`NewWorkspaceWizard.tsx`), so a fleet of "builder + reviewer + …", each briefed, launches in
+one click. Verified end-to-end: a saved preset relaunched two panes with their `builder`/`reviewer`
+badges and their seed prompts already run.
 
 ### 3b. Session replay / transcript export 🟡
 The session-log viewer (`logs.rs` / `SessionLogViewer.tsx`) already tails logs — add export-to-
