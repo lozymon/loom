@@ -9,25 +9,30 @@
 
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { activeWorkspace } from "../stores/workspace";
-import { board, noteList } from "../stores/blackboard";
+import { board, noteList, ensureNotesLoaded } from "../stores/blackboard";
 import { claims, listClaims, releaseFile } from "../stores/claims";
 import { settings, setSetting } from "../stores/settings";
 import { claudeUsage, sessionCost, sessionTokens, fmtTokens, fmtUsd, type SessionUsage } from "../lib/claudeUsage";
 
 export default function FleetPanel(props: { onClose: () => void }) {
   const wsId = () => activeWorkspace()?.id ?? "";
+  // The blackboard is now project-scoped (keyed by folder, persisted to .loom/notes.json), so notes
+  // read off the workspace's cwd; claims stay per-workspace (ephemeral).
+  const dir = () => activeWorkspace()?.cwd ?? "";
 
-  // Reactive views: reading board[wsId] / claims[wsId] inside the memo subscribes to that
-  // workspace's slice, so a note/claim from any pane re-renders the list. `board`/`claims` are
-  // referenced so the tracking is explicit even though noteList/listClaims read them internally.
+  // Reactive views: reading board[dir] / claims[wsId] inside the memo subscribes to that slice, so a
+  // note/claim from any pane re-renders the list. `board`/`claims` are referenced so the tracking is
+  // explicit even though noteList/listClaims read them internally.
   const notes = createMemo(() => {
-    void board[wsId()];
-    return noteList(wsId());
+    void board[dir()];
+    return noteList(dir());
   });
   const held = createMemo(() => {
     void claims[wsId()];
     return listClaims(wsId());
   });
+  // Load the project's persisted notes when the folder changes (idempotent; "" = in-memory only).
+  createEffect(() => { void ensureNotesLoaded(dir()); });
 
   // ---- Usage HUD (AGENTIC §1c): per-pane Claude token spend + estimated cost, read on demand
   // from Claude's on-disk transcripts (lib/claudeUsage.ts). Not reactive/polled — it's file I/O, so

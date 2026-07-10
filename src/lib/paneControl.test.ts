@@ -33,6 +33,7 @@ const h = vi.hoisted(() => ({
   setStatus: vi.fn(),
   notifyAttention: vi.fn(),
   noteSet: vi.fn(),
+  ensureNotesLoaded: vi.fn(() => Promise.resolve()),
   noteGet: vi.fn(),
   noteList: vi.fn(),
   noteDel: vi.fn(),
@@ -63,7 +64,7 @@ vi.mock("../stores/workspace", () => ({
   workspaceByPaneName: h.workspaceByPaneName,
 }));
 vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus }));
-vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel }));
+vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel, ensureNotesLoaded: h.ensureNotesLoaded }));
 vi.mock("../stores/claims", () => ({ claimFile: h.claimFile, releaseFile: h.releaseFile, listClaims: h.listClaims }));
 vi.mock("./askRegistry", () => ({ createAsk: h.createAsk, awaitAsk: h.awaitAsk, replyAsk: h.replyAsk, cancelAsk: h.cancelAsk }));
 vi.mock("./notify", () => ({ notifyAttention: h.notifyAttention }));
@@ -413,29 +414,30 @@ describe("status", () => {
 });
 
 describe("note (blackboard)", () => {
-  const ws = { id: "w1", name: "Home" };
+  // Notes are project-scoped now (keyed by folder), so the store is addressed by cwd, not id.
+  const ws = { id: "w1", name: "Home", cwd: "/proj" };
 
   it("scopes set to the caller pane's workspace and records the writer", async () => {
     workspaceByPaneName.mockReturnValue(ws);
     const res = await call({ op: "note.set", key: "plan.api", value: "Cleo — wip", pane: "Faye" });
     expect(workspaceByPaneName).toHaveBeenCalledWith("Faye");
-    expect(noteSet).toHaveBeenCalledWith("w1", "plan.api", "Cleo — wip", "Faye");
+    expect(noteSet).toHaveBeenCalledWith("/proj", "plan.api", "Cleo — wip", "Faye");
     expect(res).toEqual({ ok: true, data: { action: "set", key: "plan.api", workspace: "Home" } });
   });
 
   it("prefers an explicit --workspace over the caller pane", async () => {
-    workspaceByName.mockReturnValue({ id: "w2", name: "Infra" });
+    workspaceByName.mockReturnValue({ id: "w2", name: "Infra", cwd: "/infra" });
     await call({ op: "note.set", key: "k", value: "v", pane: "Faye", workspace: "Infra" });
     expect(workspaceByName).toHaveBeenCalledWith("Infra");
     expect(workspaceByPaneName).not.toHaveBeenCalled();
-    expect(noteSet).toHaveBeenCalledWith("w2", "k", "v", "Faye");
+    expect(noteSet).toHaveBeenCalledWith("/infra", "k", "v", "Faye");
   });
 
   it("falls back to the active workspace when no pane/workspace resolves", async () => {
     workspaceByPaneName.mockReturnValue(undefined);
     activeWorkspace.mockReturnValue(ws);
     await call({ op: "note.set", key: "k", value: "v", pane: "ghost" });
-    expect(noteSet).toHaveBeenCalledWith("w1", "k", "v", "ghost");
+    expect(noteSet).toHaveBeenCalledWith("/proj", "k", "v", "ghost");
   });
 
   it("errors when --workspace names nothing", async () => {
@@ -458,7 +460,7 @@ describe("note (blackboard)", () => {
     activeWorkspace.mockReturnValue(ws);
     noteGet.mockReturnValue({ value: "lucia-auth", by: "Cleo", at: 123 });
     const res = await call({ op: "note.get", key: "auth.lib" });
-    expect(noteGet).toHaveBeenCalledWith("w1", "auth.lib");
+    expect(noteGet).toHaveBeenCalledWith("/proj", "auth.lib");
     expect(res).toEqual({ ok: true, data: { action: "get", key: "auth.lib", value: "lucia-auth", by: "Cleo", at: 123 } });
   });
 
@@ -475,7 +477,7 @@ describe("note (blackboard)", () => {
     const entries = [{ key: "a", value: "1", by: "Faye", at: 1 }];
     noteList.mockReturnValue(entries);
     const res = await call({ op: "note.list" });
-    expect(noteList).toHaveBeenCalledWith("w1");
+    expect(noteList).toHaveBeenCalledWith("/proj");
     expect(res).toEqual({ ok: true, data: { action: "list", workspace: "Home", entries } });
   });
 
@@ -483,7 +485,7 @@ describe("note (blackboard)", () => {
     activeWorkspace.mockReturnValue(ws);
     noteDel.mockReturnValue(true);
     const res = await call({ op: "note.del", key: "a" });
-    expect(noteDel).toHaveBeenCalledWith("w1", "a");
+    expect(noteDel).toHaveBeenCalledWith("/proj", "a");
     expect(res).toEqual({ ok: true, data: { action: "del", key: "a", workspace: "Home" } });
   });
 

@@ -23,7 +23,7 @@ import {
   workspaceByPaneName,
   type WorkspaceUI,
 } from "../stores/workspace";
-import { noteSet, noteGet, noteList, noteDel } from "../stores/blackboard";
+import { noteSet, noteGet, noteList, noteDel, ensureNotesLoaded } from "../stores/blackboard";
 import { claimFile, holdClaim, releaseFile, listClaims } from "../stores/claims";
 import { addCard, cards, setCardStatus, ensureBoardLoaded, setDrain, drainState } from "../stores/board";
 import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
@@ -182,7 +182,8 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       if ("error" in scope) return scope;
       const key = (req.key ?? "").trim();
       if (!key) return { ok: false, error: "note set needs a key" };
-      noteSet(scope.ws.id, key, req.value ?? "", req.pane ?? "?");
+      await ensureNotesLoaded(scope.ws.cwd);
+      noteSet(scope.ws.cwd, key, req.value ?? "", req.pane ?? "?");
       return { ok: true, data: { action: "set", key, workspace: scope.ws.name } };
     }
 
@@ -190,7 +191,8 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       const scope = noteScope(req);
       if ("error" in scope) return scope;
       const key = (req.key ?? "").trim();
-      const e = noteGet(scope.ws.id, key);
+      await ensureNotesLoaded(scope.ws.cwd);
+      const e = noteGet(scope.ws.cwd, key);
       if (!e) return { ok: false, error: `no note "${key}" on the "${scope.ws.name}" board` };
       return { ok: true, data: { action: "get", key, value: e.value, by: e.by, at: e.at } };
     }
@@ -198,14 +200,16 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
     case "note.list": {
       const scope = noteScope(req);
       if ("error" in scope) return scope;
-      return { ok: true, data: { action: "list", workspace: scope.ws.name, entries: noteList(scope.ws.id) } };
+      await ensureNotesLoaded(scope.ws.cwd);
+      return { ok: true, data: { action: "list", workspace: scope.ws.name, entries: noteList(scope.ws.cwd) } };
     }
 
     case "note.del": {
       const scope = noteScope(req);
       if ("error" in scope) return scope;
       const key = (req.key ?? "").trim();
-      if (!noteDel(scope.ws.id, key)) return { ok: false, error: `no note "${key}" to delete` };
+      await ensureNotesLoaded(scope.ws.cwd);
+      if (!noteDel(scope.ws.cwd, key)) return { ok: false, error: `no note "${key}" to delete` };
       return { ok: true, data: { action: "del", key, workspace: scope.ws.name } };
     }
 
