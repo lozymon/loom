@@ -193,6 +193,18 @@ fn tools() -> Value {
             }
         },
         {
+            "name": "set_role",
+            "description": "Tag a pane with a role (builder/reviewer/scout/coordinator/…) so it can be addressed as a resolvable bus target instead of by name. Persisted (survives restart). Empty role clears it. Defaults to your own pane. Once set, target the role from other tools with a `role:<name>` target (e.g. send_text target \"role:reviewer\" fans out to every reviewer pane).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "target": { "type": "string", "description": "Pane name (default: your own pane, $LOOM_PANE)." },
+                    "role": { "type": "string", "description": "Role name, e.g. \"reviewer\" (omit/empty to clear)." }
+                },
+                "required": []
+            }
+        },
+        {
             "name": "board_set",
             "description": "Post a key on the shared per-workspace blackboard (plan state, who-owns-what, a discovered gotcha). Other panes read it with board_get/board_list.",
             "inputSchema": {
@@ -417,6 +429,11 @@ fn build_request(name: &str, args: &Value, pane: Option<&str>) -> Result<Value, 
             "op": "status",
             "target": arg_target_or_self(args, pane)?,
             "text": args.get("text").and_then(Value::as_str).unwrap_or(""),
+        }),
+        "set_role" => json!({
+            "op": "role.set",
+            "target": arg_target_or_self(args, pane)?,
+            "role": args.get("role").and_then(Value::as_str).unwrap_or(""),
         }),
         // ---- Coordination (§2b/2c/2a) — scoped to the caller pane's workspace via `pane`. ----
         "board_set" => with_scope(

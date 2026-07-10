@@ -21,7 +21,10 @@ const h = vi.hoisted(() => ({
   broadcastTargets: vi.fn(),
   listPanes: vi.fn(),
   resolvePaneByName: vi.fn(),
+  resolvePanesByRole: vi.fn(),
+  revealPane: vi.fn(),
   revealPaneByName: vi.fn(),
+  setPaneRole: vi.fn(),
   spawnPane: vi.fn(),
   workspaceByName: vi.fn(),
   workspaceByPaneName: vi.fn(),
@@ -51,7 +54,10 @@ vi.mock("../stores/workspace", () => ({
   broadcastTargets: h.broadcastTargets,
   listPanes: h.listPanes,
   resolvePaneByName: h.resolvePaneByName,
+  resolvePanesByRole: h.resolvePanesByRole,
+  revealPane: h.revealPane,
   revealPaneByName: h.revealPaneByName,
+  setPaneRole: h.setPaneRole,
   spawnPane: h.spawnPane,
   workspaceByName: h.workspaceByName,
   workspaceByPaneName: h.workspaceByPaneName,
@@ -73,7 +79,10 @@ const {
   broadcastTargets,
   listPanes,
   resolvePaneByName,
+  resolvePanesByRole,
+  revealPane,
   revealPaneByName,
+  setPaneRole,
   spawnPane,
   workspaceByName,
   workspaceByPaneName,
@@ -198,7 +207,52 @@ describe("send", () => {
     writeToPanes.mockReturnValue(0);
     const res = await call({ op: "send", target: "Cleo", text: "hi" });
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/not live/);
+    if (!res.ok) expect(res.error).toMatch(/no live pane/);
+  });
+
+  it("fans a send to every pane with a role via a role: target", async () => {
+    resolvePanesByRole.mockReturnValue([3, 8]);
+    writeToPanes.mockReturnValue(2);
+    const res = await call({ op: "send", target: "role:reviewer", text: "look" });
+    expect(resolvePanesByRole).toHaveBeenCalledWith("reviewer");
+    expect(writeToPanes).toHaveBeenCalledWith([3, 8], "look\r");
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data).toEqual({ count: 2 });
+  });
+
+  it("errors when a role: target matches no pane", async () => {
+    resolvePanesByRole.mockReturnValue([]);
+    const res = await call({ op: "send", target: "role:ghost", text: "x" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no pane with role "ghost"/);
+    expect(writeToPanes).not.toHaveBeenCalled();
+  });
+});
+
+describe("role.set", () => {
+  it("resolves the pane and persists its role", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 5 });
+    const res = await call({ op: "role.set", target: "Cleo", role: " reviewer " });
+    expect(setPaneRole).toHaveBeenCalledWith(5, "reviewer");
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data).toMatchObject({ name: "Cleo", role: "reviewer", cleared: false });
+  });
+
+  it("clears a role when empty", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 5 });
+    const res = await call({ op: "role.set", target: "Cleo", role: "" });
+    expect(setPaneRole).toHaveBeenCalledWith(5, "");
+    if (res.ok) expect(res.data).toMatchObject({ cleared: true });
+  });
+});
+
+describe("focus by role", () => {
+  it("reveals the first pane holding the role", async () => {
+    resolvePanesByRole.mockReturnValue([9, 4]);
+    const res = await call({ op: "focus", target: "role:builder" });
+    expect(resolvePanesByRole).toHaveBeenCalledWith("builder");
+    expect(revealPane).toHaveBeenCalledWith(9);
+    expect(res.ok).toBe(true);
   });
 });
 

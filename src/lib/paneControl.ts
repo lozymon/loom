@@ -14,7 +14,10 @@ import {
   listPanes,
   paneSpecById,
   resolvePaneByName,
+  resolvePanesByRole,
+  revealPane,
   revealPaneByName,
+  setPaneRole,
   spawnPane,
   workspaceByName,
   workspaceByPaneName,
@@ -53,6 +56,23 @@ export async function initPaneControl(): Promise<() => void> {
   });
 }
 
+/** Prefix that turns a bus target into a role lookup: `role:reviewer` → every pane tagged reviewer.
+ *  A role is a *group* target (several panes can share it), so a role-targeted `send` fans out. */
+const ROLE_PREFIX = "role:";
+
+/** Resolve a bus `target` to pane ids — a `role:<name>` target to every pane with that role, a plain
+ *  name to the one pane it names (ambiguity or a miss is an error the CLI surfaces). */
+function resolveTargets(target: string): { paneIds: PaneId[] } | { error: string } {
+  if (target.toLowerCase().startsWith(ROLE_PREFIX)) {
+    const role = target.slice(ROLE_PREFIX.length);
+    const ids = resolvePanesByRole(role);
+    if (ids.length === 0) return { error: `no pane with role "${role.trim()}"` };
+    return { paneIds: ids };
+  }
+  const r = resolvePaneByName(target);
+  return "error" in r ? r : { paneIds: [r.paneId] };
+}
+
 async function dispatch(req: ControlRequest): Promise<ControlResponse> {
   switch (req.op) {
     case "list":
@@ -63,16 +83,17 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
           workspace: p.workspace,
           focused: p.focused,
           live: countLive([p.paneId]) > 0,
+          role: p.role,
         })),
       };
 
     case "send": {
-      const r = resolvePaneByName(req.target);
+      const r = resolveTargets(req.target);
       if ("error" in r) return { ok: false, error: r.error };
       // Default to pressing Enter (\r, matching the broadcast bar); --no-enter suppresses it.
       const text = (req.text ?? "") + (req.enter === false ? "" : "\r");
-      const n = writeToPanes([r.paneId], text);
-      if (n === 0) return { ok: false, error: `pane "${req.target}" is not live` };
+      const n = writeToPanes(r.paneIds, text);
+      if (n === 0) return { ok: false, error: `target "${req.target}" has no live pane` };
       return { ok: true, data: { count: n } };
     }
 
@@ -109,6 +130,14 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
     }
 
     case "focus": {
+      // A role target reveals its first matching pane (a role can be held by several).
+      if (req.target.toLowerCase().startsWith(ROLE_PREFIX)) {
+        const role = req.target.slice(ROLE_PREFIX.length);
+        const ids = resolvePanesByRole(role);
+        if (ids.length === 0) return { ok: false, error: `no pane with role "${role.trim()}"` };
+        revealPane(ids[0]);
+        return { ok: true, data: { name: req.target } };
+      }
       const r = revealPaneByName(req.target);
       if ("error" in r) return { ok: false, error: r.error };
       return { ok: true, data: { name: r.name } };
@@ -129,6 +158,14 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       const text = (req.text ?? "").trim();
       setStatus(r.paneId, text);
       return { ok: true, data: { name: req.target, text, cleared: text === "" } };
+    }
+
+    case "role.set": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      const role = (req.role ?? "").trim();
+      setPaneRole(r.paneId, role);
+      return { ok: true, data: { name: req.target, role, cleared: role === "" } };
     }
 
     // ---- Shared blackboard (§2b) — per-workspace key/value board. Scope resolves to the caller

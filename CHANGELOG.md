@@ -6,6 +6,14 @@ versioning.
 
 ## [Unreleased]
 
+### Added
+- **Roles as a resolvable bus target** (ORCHESTRATION-IDEAS §2) — tag a pane with a role
+  (`loom role reviewer`, or `loom role Cleo builder`) so a driving agent can address *the reviewer*
+  instead of remembering pane names. Roles persist on the `PaneSpec` (survive restart), show as an
+  accent title-bar badge and a column in `loom list`, and are targeted with a `role:<name>` prefix:
+  `loom send role:reviewer "…"` fans out to **every** reviewer pane (a role is a group), `loom focus
+  role:builder` reveals the first. Available over the bus and as the `set_role` MCP tool.
+
 ## [1.9.0] — 2026-07-09
 
 A task board for driving a fleet — dispatch work cards into panes and let the board auto-drain a

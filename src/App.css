@@ -1924,6 +1924,23 @@ body,
   color: var(--text-bright);
 }
 
+/* Role badge — a resolvable bus target (ORCHESTRATION-IDEAS §2), a small accent pill after the name.
+   Set via `loom role …`; other panes address it as `role:<name>`. */
+.pane-chip .pane-role {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-family: var(--font-ui, "IBM Plex Sans", system-ui, sans-serif);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  white-space: nowrap;
+  color: var(--accent-text);
+  background: rgba(var(--accent-rgb), 0.14);
+  border: 1px solid rgba(var(--accent-rgb), 0.32);
+}
+
 /* A hairline divider splits the chip into [identity] │ [branch/status] segments (status-bar feel).
    It lives on the trailing element's left edge; the name always precedes it, so no guard needed. */
 .pane-chip .pane-branch,
