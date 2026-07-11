@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createAsk, awaitAsk, replyAsk, cancelAsk, openAskCount } from "./askRegistry";
+import { createAsk, awaitAsk, replyAsk, cancelAsk, openAskCount, listOpenAsks, subscribeAsks } from "./askRegistry";
 
 // The correlation registry behind `loom ask` / `loom reply` (§2a). The mailbox semantics — parked
 // long-polls resolving on a reply, stashing a reply that beats the next poll, expiry, cancel — are
@@ -80,5 +80,38 @@ describe("askRegistry", () => {
     expect(b).toBeGreaterThan(a);
     cancelAsk(a);
     cancelAsk(b);
+  });
+
+  // ---- Open-asks projection (§2a/§2e — the Fleet-panel list) ----
+
+  it("listOpenAsks surfaces an open ask's fields and drops it once answered", () => {
+    const id = createAsk("Cleo", "Faye", "which auth lib?", 300_000);
+    const mine = listOpenAsks().find((a) => a.id === id);
+    expect(mine).toMatchObject({ id, target: "Cleo", from: "Faye", question: "which auth lib?" });
+    expect(typeof mine!.at).toBe("number");
+    replyAsk(id, "lucia"); // answered → no longer "open"
+    expect(listOpenAsks().some((a) => a.id === id)).toBe(false);
+    cancelAsk(id); // retire the answered-but-unconsumed entry so it can't skew later counts
+  });
+
+  it("notifies subscribers with a fresh snapshot on create, and on reply/expire/cancel", () => {
+    const seen: number[] = [];
+    const unsub = subscribeAsks((open) => seen.push(open.length));
+    const last = () => seen[seen.length - 1];
+
+    const base = listOpenAsks().length;
+    const id = createAsk("Cleo", "Faye", "q", 300_000);
+    expect(last()).toBe(base + 1); // create emitted
+    expect(listOpenAsks().some((a) => a.id === id)).toBe(true);
+
+    cancelAsk(id);
+    expect(last()).toBe(base); // cancel emitted, back to baseline
+
+    unsub();
+    const seenCount = seen.length;
+    const id2 = createAsk("Cleo", "Faye", "q", 300_000);
+    // No further notifications after unsubscribe.
+    expect(seen.length).toBe(seenCount);
+    cancelAsk(id2);
   });
 });

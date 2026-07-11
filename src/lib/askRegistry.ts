@@ -23,6 +23,8 @@ interface AskEntry {
   target: string;
   from: string;
   question: string;
+  /** Epoch-ms the ask was created — for the Fleet panel's "open asks" list (how long it's waited). */
+  at: number;
   /** Set once a reply lands; undefined while still open. */
   answer?: string;
   by?: string;
@@ -32,14 +34,57 @@ interface AskEntry {
   expiry: ReturnType<typeof setTimeout>;
 }
 
+/** Display projection of one still-open ask — the shape the Fleet panel renders (§2a/§2e). */
+export interface OpenAsk {
+  id: number;
+  /** Pane the question was put to. */
+  target: string;
+  /** Pane (or agent) that asked. */
+  from: string;
+  question: string;
+  /** Epoch-ms it was created. */
+  at: number;
+}
+
 let nextId = 0;
 const asks = new Map<number, AskEntry>();
+
+// Observers of the open-ask set (the Fleet panel's reactive store subscribes here). askRegistry
+// owns the lifecycle — including *timer-driven* expiry the UI can't see otherwise — so it pushes a
+// fresh snapshot after every change rather than exposing the raw Map. Kept framework-free (no Solid
+// import) so the RPC engine stays a pure lib; the store adapts the snapshot into reactive state.
+type AsksListener = (open: OpenAsk[]) => void;
+const listeners = new Set<AsksListener>();
+
+/** A snapshot of the currently-open (unanswered) asks, oldest-first. */
+export function listOpenAsks(): OpenAsk[] {
+  const out: OpenAsk[] = [];
+  for (const [id, a] of asks) {
+    if (a.answer !== undefined) continue; // answered-but-unconsumed → no longer "open" for the UI
+    out.push({ id, target: a.target, from: a.from, question: a.question, at: a.at });
+  }
+  return out.sort((x, y) => x.at - y.at);
+}
+
+function emit() {
+  if (listeners.size === 0) return;
+  const snap = listOpenAsks();
+  for (const l of listeners) l(snap);
+}
+
+/** Subscribe to open-ask changes; the callback fires with a fresh snapshot on every create/reply/
+ *  expire/cancel. Returns an unsubscribe fn. */
+export function subscribeAsks(cb: AsksListener): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
 
 /** Register a new pending ask; returns its correlation id. Auto-expires after `timeoutMs`. */
 export function createAsk(target: string, from: string, question: string, timeoutMs: number): number {
   const id = ++nextId;
   const expiry = setTimeout(() => expire(id), Math.max(1000, timeoutMs));
-  asks.set(id, { target, from, question, waiters: new Set(), expiry });
+  asks.set(id, { target, from, question, at: Date.now(), waiters: new Set(), expiry });
+  emit();
   return id;
 }
 
@@ -48,6 +93,7 @@ function expire(id: number) {
   if (!a) return;
   asks.delete(id);
   for (const w of a.waiters) w({ state: "expired" });
+  emit();
 }
 
 /** Long-poll for a reply to `id`, resolving early when one arrives, else `pending` after `waitMs`
@@ -93,6 +139,7 @@ export function replyAsk(id: number, answer: string, by?: string): boolean {
     for (const w of waiters) w({ state: "answered", answer, by });
   }
   // else: leave the entry (answer stashed); the next awaitAsk() consumes and deletes it.
+  emit(); // answered → drops from the open-asks list either way
   return true;
 }
 
@@ -104,6 +151,7 @@ export function cancelAsk(id: number) {
   asks.delete(id);
   clearTimeout(a.expiry);
   for (const w of a.waiters) w({ state: "unknown" });
+  emit();
 }
 
 /** Test seam: how many asks are currently open. */

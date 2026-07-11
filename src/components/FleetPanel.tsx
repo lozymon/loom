@@ -12,8 +12,18 @@ import { activeWorkspace, listGatedPanes, focusPane, activeRolePanes, CANONICAL_
 import { board, noteList, ensureNotesLoaded } from "../stores/blackboard";
 import { claims, listClaims, releaseFile } from "../stores/claims";
 import { holds, releaseGate } from "../stores/inputHolds";
+import { openAsks, dismissAsk } from "../stores/openAsks";
 import { settings, setSetting } from "../stores/settings";
 import { claudeUsage, sessionCost, sessionTokens, fmtTokens, fmtUsd, type SessionUsage } from "../lib/claudeUsage";
+
+/** Coarse "how long ago" label for the open-asks list — seconds under a minute, then minutes/hours. */
+function ago(fromMs: number, nowMs: number): string {
+  const s = Math.max(0, Math.round((nowMs - fromMs) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  return `${Math.round(m / 60)}h`;
+}
 
 export default function FleetPanel(props: { onClose: () => void }) {
   const wsId = () => activeWorkspace()?.id ?? "";
@@ -139,6 +149,14 @@ export default function FleetPanel(props: { onClose: () => void }) {
   };
   onMount(() => window.addEventListener("keydown", onKey));
   onCleanup(() => window.removeEventListener("keydown", onKey));
+
+  // A coarse clock so the Open-asks "waited 3m" ages advance while the panel is open, without a
+  // per-row timer. 15s is fine for minute-granularity display.
+  const [now, setNow] = createSignal(Date.now());
+  onMount(() => {
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    onCleanup(() => clearInterval(t));
+  });
 
   return (
     <aside
@@ -282,6 +300,36 @@ export default function FleetPanel(props: { onClose: () => void }) {
                       </Show>
                     </div>
                     <button class="fleet-release" title="Release the gate — let bus input reach this pane" onClick={() => releaseGate(g.paneId)}>release</button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </section>
+
+        <section class="fleet-section">
+          <div class="fleet-section-head">
+            <span class="fleet-section-title">Open asks</span>
+            <span class="fleet-count">{openAsks.length}</span>
+          </div>
+          <Show
+            when={openAsks.length > 0}
+            fallback={<div class="fleet-empty">No open asks. Agents ask another pane with <code>loom ask &lt;pane&gt; "…"</code>.</div>}
+          >
+            <ul class="fleet-list">
+              <For each={openAsks}>
+                {(a) => (
+                  <li class="fleet-row fleet-ask-row">
+                    <div class="fleet-row-main">
+                      <div class="fleet-ask-head">
+                        <span class="fleet-by" title="Asked by">{a.from}</span>
+                        <span class="fleet-ask-arrow">→</span>
+                        <span class="fleet-by" title="Waiting on">{a.target}</span>
+                        <span class="fleet-ask-age" title="Waiting for a reply">{ago(a.at, now())}</span>
+                      </div>
+                      <span class="fleet-value">{a.question}</span>
+                    </div>
+                    <button class="fleet-release" title="Dismiss — the waiting loom ask resolves unknown" onClick={() => dismissAsk(a.id)}>dismiss</button>
                   </li>
                 )}
               </For>
