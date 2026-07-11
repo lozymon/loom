@@ -15,11 +15,11 @@ stays **ADR-0001-safe**: Loom never parses pane *output*. State comes in through
 - **1a.** Per-workspace "needs you" count pill.
 - **1b.** Idle / stuck detection (byte-flow timing only — `lib/idle.ts`, `settings.idleStuckSeconds`).
 - **1c.** Cost / token HUD (`lib/claudeUsage.ts`, on the Fleet panel).
-- **2a.** Ask/reply RPC with correlation (long-poll mailbox). *Follow-up: no UI list of open asks yet.*
+- **2a.** Ask/reply RPC with correlation (long-poll mailbox). Open asks now list in the Fleet panel.
 - **2b.** Shared blackboard / scratchpad (`loom note`).
 - **2c.** File-level claims / locking (`loom claim`).
 - **2d.** MCP parity for the coordination tools.
-- **2e.** Fleet panel — coordination state made visible. *Follow-up: open asks not shown yet.*
+- **2e.** Fleet panel — coordination state made visible (blackboard, claims, input gates, open asks).
 - **3a.** Workspace templates with roles + seed prompts (`prompt?` on `PaneSpec`).
 - **3b.** Session replay / transcript export (⧉ Copy MD / ⭳ Export).
 - **4b.** Git-aware guardrails — confirm gate on destructive `loom broadcast`.

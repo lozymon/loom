@@ -62,10 +62,10 @@ design decision; `roadmap/…§` for the backlog entry it came from). This is th
 - ✅ **Path gates (`held`)** — mark a path held so a `claim` on it blocks. `claims.ts` · roadmap/ORCHESTRATION-IDEAS §3
 - ✅ **Roles as a resolvable bus target** — persisted `role?` on `PaneSpec`; `loom send @reviewer`. `src/ipc/protocol.ts`, `Terminal.tsx` badge · roadmap/ORCHESTRATION-IDEAS §2
 - ✅ **Fleet role roster + filter** — FleetPanel groups the active workspace's panes by role (builder/reviewer/scout/coordinator + free-form), live counts, click a chip to filter, click a pane to focus. `src/components/FleetPanel.tsx`, `activeRolePanes`/`CANONICAL_ROLES` in `stores/workspace.ts` · roadmap/ORCHESTRATION-IDEAS §2
-- ✅ **Ask/reply RPC** — correlated request/response, ~10s park cap. `src/lib/askRegistry.ts` · roadmap/AGENTIC-ENHANCEMENTS §2a
+- ✅ **Ask/reply RPC** — correlated request/response, ~10s park cap; open asks list live in the Fleet panel (asker → target, question, waited-for, dismiss). `src/lib/askRegistry.ts`, `stores/openAsks.ts`, `FleetPanel.tsx` · roadmap/AGENTIC-ENHANCEMENTS §2a/§2e
 - ✅ **Task board** — a docked Kanban of cards that dispatch into panes; `loom card`. `src/stores/board.ts`, `BoardPanel.tsx` · roadmap/ORCHESTRATION-IDEAS §1
 - ✅ **Approval gate + bus-command audit timeline**. `src/stores/audit.ts`, `FleetApprovals.tsx` · roadmap/ORCHESTRATION-IDEAS §3
-- ✅ **Fleet panel** — makes blackboard / claims / roles state visible. `src/components/FleetPanel.tsx` · roadmap/AGENTIC-ENHANCEMENTS §2e
+- ✅ **Fleet panel** — makes coordination state visible: roles, blackboard, claims, input gates, open asks, usage. `src/components/FleetPanel.tsx` · roadmap/AGENTIC-ENHANCEMENTS §2e
 - ✅ **MCP parity for coordination tools** — the primitives above exposed as agent tools too. `mcp.rs` · roadmap/AGENTIC-ENHANCEMENTS §2d
 - ✅ **Git-aware guardrails** — confirm gate on destructive `loom broadcast`. `src/lib/guardrails.ts`, `paneControl.ts` · roadmap/AGENTIC-ENHANCEMENTS §4b
 - ✅ **Per-pane input gates + broadcast dry-run** — hold a pane's inbound bus input behind a human OK (`loom gate` / `gate_pane`); `loom broadcast --dry-run` previews the fan-out. `src/stores/inputHolds.ts`, `paneControl.ts`, `FleetPanel.tsx` · roadmap/AGENTIC-ENHANCEMENTS §4a

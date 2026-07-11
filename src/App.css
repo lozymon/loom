@@ -3330,6 +3330,32 @@ body,
 }
 .fleet-release:hover { color: var(--text-bright); border-color: var(--border-strong); background: var(--well); }
 
+/* Open asks (AGENTIC §2a/§2e) — pending ask/reply RPCs one agent is waiting on. */
+.fleet-ask-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fleet-ask-arrow {
+  color: var(--text-faint);
+  font: 11px var(--font-mono);
+  flex: 0 0 auto;
+}
+/* Asker/target names are usually short auto-names, but a pane title can be long — cap + ellipsize
+ * so one never forces the panel to scroll horizontally. */
+.fleet-ask-head .fleet-by {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fleet-ask-age {
+  margin-left: auto;
+  font: 500 10px var(--font-mono);
+  color: var(--text-faint);
+}
+
 /* Usage HUD (AGENTIC §1c) — per-pane Claude token spend + estimated cost. */
 .fleet-est {
   font: 500 10px var(--font-mono);
