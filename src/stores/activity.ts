@@ -51,9 +51,17 @@ export interface PaneActivity {
   // Terminal.tsx (setStuck); counts toward "needs you" like `attention`. Not sticky (it clears
   // when output resumes, the pane goes idle, or you look at it).
   stuck: boolean;
+  // Derived *heuristic* "looks like it's waiting on you" flag (ADR-0011). Unlike `attention`
+  // (pushed) and `stuck` (byte-flow timing only), this is the one signal that reads output
+  // *content* — a prompt-shaped last line on an opt-in hookless agent that then went quiet. It is
+  // the lowest-authority rung: suppressed the instant a pushed/kernel fact exists (see
+  // lib/outputObserver.looksWaiting), and rendered as a distinct, dashed "guess" — never the solid
+  // pushed border. Recomputed each metadata poll (setHeuristicWaiting); not sticky (clears on
+  // fresh output, when the pane goes busy/idle, or when you look at it).
+  heuristicWaiting: boolean;
 }
 
-const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "", listening: false, downloadingModel: "", downloadedBytes: 0, lastOutputAt: 0, stuck: false };
+const BLANK: PaneActivity = { unseen: false, bell: false, busy: null, attention: false, status: "", logError: "", listening: false, downloadingModel: "", downloadedBytes: 0, lastOutputAt: 0, stuck: false, heuristicWaiting: false };
 
 const [activity, setActivity] = createStore<Record<PaneId, PaneActivity>>({});
 
@@ -95,6 +103,14 @@ export function noteOutput(id: PaneId) {
 export function setStuck(id: PaneId, stuck: boolean) {
   ensure(id);
   if (activity[id].stuck !== stuck) setActivity(id, "stuck", stuck);
+}
+
+/** Set a pane's derived heuristic "looks like it's waiting" flag (ADR-0011; recomputed each
+ *  metadata poll from lib/outputObserver.looksWaiting). The lowest-authority signal — labeled a
+ *  guess wherever it surfaces. */
+export function setHeuristicWaiting(id: PaneId, waiting: boolean) {
+  ensure(id);
+  if (activity[id].heuristicWaiting !== waiting) setActivity(id, "heuristicWaiting", waiting);
 }
 
 /** Raise a pane's sticky attention flag (busy→idle transition, or `loom attention`). Returns true
@@ -168,6 +184,7 @@ export function seePane(id: PaneId) {
   if (activity[id].bell) setActivity(id, "bell", false);
   if (activity[id].attention) setActivity(id, "attention", false);
   if (activity[id].stuck) setActivity(id, "stuck", false);
+  if (activity[id].heuristicWaiting) setActivity(id, "heuristicWaiting", false);
 }
 
 /** Drop a pane's state entirely (on unmount/close). */

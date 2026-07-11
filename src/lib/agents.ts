@@ -19,24 +19,40 @@ export interface AgentDef {
   command: string;
   /** Matched against PaneSpec.command to identify a running pane. */
   match: RegExp;
+  /**
+   * ADR-0011 opt-in: may the labeled *heuristic* output-observer run against this kind? On for
+   * hookless agents whose kernel/pushed floor is thin (Codex, Aider, Gemini, …), so a scraped
+   * "looks like it's waiting on you" floor adds real value; off (undefined) for kinds that push
+   * rich lifecycle signals (Claude Code), where a guess would only ever be noise below the truth.
+   * This is the per-agent-kind gate ADR-0011 §22 calls out — the tier's default-off mechanism.
+   */
+  heuristics?: boolean;
 }
 
 // Order matters: first match wins. Keep `match` anchored on the program word so a flag or path
 // (e.g. `npx claude`, `/usr/bin/codex --foo`) still resolves.
 export const AGENTS: AgentDef[] = [
   { id: "claude",  label: "Claude Code",        icon: "✦",  color: "#d97757", command: "claude",     match: /(^|[\s/])claude($|\s)/ },
-  { id: "codex",   label: "OpenAI Codex CLI",   icon: "ox", color: "#10a37f", command: "codex",      match: /(^|[\s/])codex($|\s)/ },
-  { id: "gemini",  label: "Google Gemini CLI",  icon: "♊", color: "#4285f4", command: "gemini",     match: /(^|[\s/])gemini($|\s)/ },
-  { id: "copilot", label: "GitHub Copilot CLI", icon: "co", color: "#8957e5", command: "copilot",    match: /(^|[\s/])(gh\s+)?copilot($|\s)/ },
-  { id: "q",       label: "Amazon Q Developer", icon: "Q",  color: "#ec7211", command: "q chat",     match: /(^|[\s/])q\s+chat($|\s)/ },
-  { id: "aider",   label: "Aider",              icon: "ai", color: "#14b8a6", command: "aider",      match: /(^|[\s/])aider($|\s)/ },
-  { id: "cursor",  label: "Cursor (headless)",  icon: "cu", color: "#6b7280", command: "cursor-agent", match: /(^|[\s/])cursor-agent($|\s)/ },
+  { id: "codex",   label: "OpenAI Codex CLI",   icon: "ox", color: "#10a37f", command: "codex",      match: /(^|[\s/])codex($|\s)/, heuristics: true },
+  { id: "gemini",  label: "Google Gemini CLI",  icon: "♊", color: "#4285f4", command: "gemini",     match: /(^|[\s/])gemini($|\s)/, heuristics: true },
+  { id: "copilot", label: "GitHub Copilot CLI", icon: "co", color: "#8957e5", command: "copilot",    match: /(^|[\s/])(gh\s+)?copilot($|\s)/, heuristics: true },
+  { id: "q",       label: "Amazon Q Developer", icon: "Q",  color: "#ec7211", command: "q chat",     match: /(^|[\s/])q\s+chat($|\s)/, heuristics: true },
+  { id: "aider",   label: "Aider",              icon: "ai", color: "#14b8a6", command: "aider",      match: /(^|[\s/])aider($|\s)/, heuristics: true },
+  { id: "cursor",  label: "Cursor (headless)",  icon: "cu", color: "#6b7280", command: "cursor-agent", match: /(^|[\s/])cursor-agent($|\s)/, heuristics: true },
 ];
 
 /** The agent a pane is running, or null for a plain shell / unknown / empty command. */
 export function detectAgent(command?: string | null): AgentDef | null {
   if (!command) return null;
   return AGENTS.find((a) => a.match.test(command)) ?? null;
+}
+
+/** Is the ADR-0011 heuristic observer allowed to inspect this pane's output? True only for a
+ *  detected agent kind that opts in (hookless kinds). Claude / plain shells / unknowns → false,
+ *  so their bytes are never content-inspected. This is the registry gate; a global settings
+ *  kill-switch and the pushed-beats-scraped suppression sit on top of it (see stores/heuristics). */
+export function agentUsesHeuristics(command?: string | null): boolean {
+  return detectAgent(command)?.heuristics === true;
 }
 
 // A resume/continue/session flag the user wrote themselves — then conversation lifecycle is their

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectAgent, resumeClaudeCommand } from "./agents";
+import { detectAgent, resumeClaudeCommand, agentUsesHeuristics } from "./agents";
 
 describe("detectAgent", () => {
   it("returns null for a plain shell or no command", () => {
@@ -94,5 +94,22 @@ describe("resumeClaudeCommand", () => {
       command: "claude",
       sessionId: "abc",
     });
+  });
+});
+
+describe("agentUsesHeuristics (ADR-0011 per-kind opt-in)", () => {
+  it("is on for hookless kinds whose floor is thin", () => {
+    for (const cmd of ["codex", "aider", "gemini", "copilot", "q chat", "cursor-agent --foo"]) {
+      expect(agentUsesHeuristics(cmd)).toBe(true);
+    }
+  });
+
+  it("is off for Claude (it self-reports richly) and for non-agents", () => {
+    expect(agentUsesHeuristics("claude")).toBe(false);
+    expect(agentUsesHeuristics("claude --resume x")).toBe(false);
+    expect(agentUsesHeuristics("bash")).toBe(false);
+    expect(agentUsesHeuristics("npm run dev")).toBe(false);
+    expect(agentUsesHeuristics("")).toBe(false);
+    expect(agentUsesHeuristics(undefined)).toBe(false);
   });
 });

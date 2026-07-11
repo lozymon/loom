@@ -1686,6 +1686,39 @@ body,
 .pane.stuck:not(.focused) {
   box-shadow: 0 0 0 2px rgba(var(--state-needs-rgb), 0.85), var(--shadow-pane);
 }
+
+/* Heuristic "looks like it's waiting" floor (ADR-0011): a hookless agent that printed a prompt then
+   went quiet. Deliberately a *dashed, hollow* ring — visibly a guess, distinct from the solid
+   pushed/timing borders — so the operator never mistakes a scrape for a reported signal (rule 4).
+   The dashed ::before replaces the solid needs box-shadow (reset to the base shadow below). */
+.pane.heuristic:not(.focused) {
+  box-shadow: var(--shadow-pane);
+}
+.pane.heuristic:not(.focused)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1.5px dashed rgba(var(--state-needs-rgb), 0.8);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Heuristic "waiting?" badge — the hollow counterpart to the solid stuck badge: outlined, not
+   filled, so it reads as a guess at a glance. Same amber family as the other attention affordances. */
+.pane-waiting-badge {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px dashed var(--state-needs);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--state-needs);
+  background: color-mix(in srgb, var(--state-needs) 12%, transparent);
+}
 /* Adopt affordance — a subtle pill in the chip offering to keep a hand-started agent (persist +
    resume). Uses the agent accent so it reads as "make this a real <agent> pane". */
 .pane-adopt {
@@ -1768,6 +1801,12 @@ body,
 }
 .pane-state-label[data-state='needs'] {
   color: var(--state-needs);
+}
+/* Heuristic-only "WAITING?" reads as a guess: same amber, but dimmed + italic vs the asserted
+   "NEEDS YOU" (ADR-0011 rule 4 — distinct in the model and the UI). */
+.pane-state-label[data-state='needs'].heuristic {
+  color: color-mix(in srgb, var(--state-needs) 78%, transparent);
+  font-style: italic;
 }
 .pane-state-label[data-state='dead'] {
   color: var(--state-dead);
@@ -3306,6 +3345,18 @@ body,
   flex: 0 0 auto;
   font: 500 11px var(--font-mono);
   color: var(--text-faint);
+}
+
+/* Heuristic "waiting?" chip in the roster (ADR-0011) — dashed + italic so it reads as a guess, not
+   a reported state, matching the pane's dashed border and "~ waiting?" badge. */
+.fleet-waiting {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px dashed var(--state-needs);
+  border-radius: 999px;
+  font: italic 600 10px var(--font-ui);
+  white-space: nowrap;
+  color: var(--state-needs);
 }
 
 /* Gated (held-for-approval) claim (§3) — a warm badge + a release button. */

@@ -54,7 +54,8 @@ design decision; `roadmap/…§` for the backlog entry it came from). This is th
 - ✅ **Idle / stuck detection** — pure timing predicate (`isPaneStuck`, `idleStuckSeconds`). `src/lib/idle.ts` · roadmap/AGENTIC-ENHANCEMENTS §1b
 - ✅ **Cost / token HUD** — per-session token/cost accounting for the Fleet panel. `src/lib/claudeUsage.ts` · roadmap/AGENTIC-ENHANCEMENTS §1c
 - ✅ **Claude session detection** — resolve the live session in a pane's cwd. `src/lib/claudeSessions.ts`, `src-tauri/src/claude.rs`
-- 🟡 **Heuristic output-observer tier** — *authorized, off by default*; a labeled, lossy awareness floor for hookless agents. No consumer wired yet. · [ADR-0011](adr/0011-heuristic-output-observer.md)
+- ✅ **Heuristic output-observer tier** — the ADR-0011 labeled, lossy awareness floor: a pure TS observer of bytes xterm already has (`src/lib/outputObserver.ts`, `src/stores/heuristics.ts`), opt-in per agent kind (`AgentDef.heuristics`), never a parser in Rust. · [ADR-0011](adr/0011-heuristic-output-observer.md)
+- ✅ **Heuristic "waiting on you" floor** — the tier's first consumer: a hookless agent (Codex/Aider/Gemini/…) that printed a prompt-shaped line then went quiet is flagged as a *dashed "~ waiting?" guess* (`looksWaiting`, `activity.heuristicWaiting`, `settings.heuristicStatus`). Suppressed the instant a pushed fact exists; never shown for Claude / plain shells. `src/components/Terminal.tsx`, `FleetPanel.tsx` · [ADR-0011](adr/0011-heuristic-output-observer.md)
 
 ## Coordination primitives (agents working together)
 - ✅ **Shared blackboard** — durable, project-scoped notes keyed by folder. `src/stores/blackboard.ts` · roadmap/ORCHESTRATION-IDEAS §4, roadmap/AGENTIC-ENHANCEMENTS §2b

@@ -72,6 +72,12 @@ export interface Settings {
   /** Flag an agent pane as "needs you" when it's been busy but silent this many seconds (likely
    *  wedged on a prompt; AGENTIC §1b, byte-flow timing only). 0 = off. */
   idleStuckSeconds: number;
+  /** Master kill-switch for the ADR-0011 heuristic output-observer: when on (default), a *labeled,
+   *  dashed* "looks like it's waiting on you" floor is synthesized for hookless agents (Codex,
+   *  Aider, …) from a prompt-shaped, then-quiet last line. Gated per-agent-kind by the registry
+   *  (`AgentDef.heuristics`) so it never runs against Claude or a plain shell, and always beaten by
+   *  a pushed/kernel fact. Off disables the whole tier — no output content is inspected at all. */
+  heuristicStatus: boolean;
   // ---- Agent adoption ----
   /** Auto-remember an agent you start *by hand* in a pane (e.g. typing `claude` in a shell) as that
    *  pane's launch command, so it persists and resumes on restart instead of coming back a shell.
@@ -150,6 +156,7 @@ export const DEFAULT_SETTINGS: Settings = {
   honorInputHolds: true,
   notifyOnAttention: false,
   idleStuckSeconds: 45,
+  heuristicStatus: true,
   autoAdoptAgents: true,
   globalHotkey: "CommandOrControl+Alt+Backquote",
   closeToTray: false,
