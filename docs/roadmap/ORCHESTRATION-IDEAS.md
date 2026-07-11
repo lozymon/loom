@@ -44,6 +44,14 @@ fragility, so it sits behind the higher-value heuristic consumers (a status/"nee
 cost estimate for hookless agents). Loom's default answer to "where did that output go" stays real
 scrollback + search.
 
+> **Update (2026-07-11):** the higher-value consumer landed — the ADR-0011 observer infrastructure
+> (`src/lib/outputObserver.ts` + `src/stores/heuristics.ts`, opt-in via `AgentDef.heuristics`) and its
+> first consumer, a labeled heuristic **"~ waiting?" floor** for hookless agents, are built (see
+> [../FEATURES.md](../FEATURES.md)). Command blocks would now *reuse* that observer's rolling tail
+> rather than pioneer the tier — the sequencing objection is cleared — but they remain a design fork,
+> still behind other work. When built, they extend `outputObserver.ts` (block synthesis from the same
+> bytes), stay dashed-labeled, and obey the four rules.
+
 ### 6. Built-in code editor + embedded browser  ⚠️ out of scope
 Folding a file editor and a web browser into the window turns an agent control room into an IDE and
 dilutes the one thing Loom is for. Loom's deliberate shape is **real terminals + multi-window

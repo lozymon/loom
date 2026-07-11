@@ -441,8 +441,14 @@ export default function Settings(props: { onClose: () => void }) {
                   onChange={(e) => setSetting("idleStuckSeconds", Math.max(0, Math.floor(e.currentTarget.valueAsNumber || 0)))}
                 />
               </label>
+              <ToggleRow
+                label={<>Heuristic "waiting on you" floor for hookless agents <span class="muted">— for agents that don't self-report (Codex, Aider, Gemini…), guess when one is waiting by reading a prompt-shaped last line that then goes quiet</span></>}
+                checked={settings.heuristicStatus}
+                onToggle={() => setSetting("heuristicStatus", !settings.heuristicStatus)}
+              />
             </div>
             <p class="settings-hint muted">An agent pane that's busy but has printed nothing for this long is likely waiting on a prompt — it joins the amber "needs you" count. Uses byte-flow timing only, never the pane's output.</p>
+            <p class="settings-hint muted">The heuristic floor (ADR-0011) is the one signal that reads output <em>content</em>, so it's shown as a <em>dashed "~ waiting?" guess</em>, never asserted — and is dropped the instant the agent (or the kernel) reports something truthier. It runs only for hookless kinds; Claude and plain shells are never inspected.</p>
           </section>
 
           {/* ---- Agent adoption ---- */}

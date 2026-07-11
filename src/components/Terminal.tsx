@@ -34,9 +34,11 @@ import { dictateIntoPane } from "../lib/voceClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
-import { activity, noteUnseen, noteBell, noteOutput, setBusy, setStuck, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
+import { activity, noteUnseen, noteBell, noteOutput, setBusy, setStuck, setHeuristicWaiting, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
+import { observeBytes, resetPaneObserver, paneTailPromptShaped } from "../stores/heuristics";
 import { isGated, getGate, releaseGate } from "../stores/inputHolds";
 import { isPaneStuck } from "../lib/idle";
+import { looksWaiting, HEURISTIC_DWELL_MS } from "../lib/outputObserver";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, appChord, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
@@ -215,13 +217,23 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // The pane's live agent Task — drives the overview fleet caption (ADR-0008).
   const task = () => paneActiveTask(props.paneId);
 
+  // ADR-0011 heuristic tier is live for this pane only when the kill-switch is on AND the pane runs
+  // an opt-in (hookless) agent kind. Claude / plain shells never qualify, so their output content is
+  // never inspected. Both the observer feed (onOutput) and the derived verdict (the poll) gate here.
+  const heuristicsOn = () => settings.heuristicStatus && agent()?.heuristics === true;
+  // The "needs you" is *only* the heuristic guess — no pushed attention behind it. Rendered as a
+  // dashed guess, not the solid pushed border (ADR-0011 rule 4). A blocked/pushed Task can't coexist
+  // with heuristicWaiting (the poll suppresses the guess when one exists), so this check suffices.
+  const onlyHeuristic = () => !!act()?.heuristicWaiting && !act()?.attention;
+
   // The single chip state dot (Frameless): one of working / idle / needs / dead, by precedence.
   // Derived purely from existing metadata (exit code + the activity store) — never pane output,
   // so it stays opacity-safe (ADR-0001). `needs` is the MCP/needs-input attention flag; `working`
   // is a live foreground command; everything else is `idle`.
   const paneState = (): "working" | "idle" | "needs" | "dead" => {
     if (dead() !== null) return "dead";
-    if (act()?.attention || act()?.stuck) return "needs"; // stuck = idle/wedged agent (AGENTIC §1b)
+    // attention/stuck = pushed / timing (§1b); heuristicWaiting = ADR-0011 content guess (labeled).
+    if (act()?.attention || act()?.stuck || act()?.heuristicWaiting) return "needs";
     if (act()?.busy === true) return "working";
     return "idle";
   };
@@ -240,12 +252,18 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const onOutput = (bytes: Uint8Array) => {
     term.write(bytes);
     noteOutput(props.paneId); // timestamp the byte-flow (timing only) for idle/stuck detection
+    // ADR-0011: feed the heuristic observer the *content* — but only for opt-in hookless agent panes
+    // (never Claude, never a shell). This is the one place output content is read, in TS, off bytes
+    // xterm already got; the verdict is computed later on the slow poll (looksWaiting), not here.
+    if (heuristicsOn()) observeBytes(props.paneId, bytes);
     if (!looking()) noteUnseen(props.paneId);
   };
   const onExit = (code: number) => {
     handle = null;
     setBusy(props.paneId, null);
     setStuck(props.paneId, false); // a dead pane isn't "stuck"
+    setHeuristicWaiting(props.paneId, false); // nor "waiting"; and drop the tail so a respawn's
+    resetPaneObserver(props.paneId); //          fresh prompt isn't judged against the old run's output
     setForeground(null);
     // The process that held this pane's file claims (§2c) just died — free them so a crashed or
     // finished agent can't leave a lock blocking the fleet. If it drops to a shell below, that
@@ -446,7 +464,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
-    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); setStuck(props.paneId, false); lastGitCwd = null; return; }
+    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); setStuck(props.paneId, false); setHeuristicWaiting(props.paneId, false); lastGitCwd = null; return; }
     pollTick++;
     // One batched read — busy-state + foreground command + cwd — instead of three IPC round-trips
     // (see metaPty / pty::meta). A whole-call failure leaves every last value untouched, matching
@@ -476,6 +494,20 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         Date.now(),
         settings.idleStuckSeconds * 1000,
       ),
+    );
+    // ADR-0011 heuristic "looks like it's waiting on you" floor — the content-reading sibling of the
+    // timing-only stuck flag above. Only for opt-in hookless agents (heuristicsOn), and *suppressed
+    // the instant a pushed fact speaks*: a live Session/Task, or a pushed attention/status (rule 3;
+    // kernel busy is deliberately NOT a gate — see looksWaiting). Degrades to false, never a claim.
+    setHeuristicWaiting(
+      props.paneId,
+      !looking() && heuristicsOn() && looksWaiting({
+        runningAgent,
+        promptShaped: paneTailPromptShaped(props.paneId),
+        idleMs: Date.now() - (act()?.lastOutputAt ?? 0),
+        thresholdMs: HEURISTIC_DWELL_MS,
+        hasPushedSignal: !!task() || !!act()?.attention || !!act()?.status,
+      }),
     );
     // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.
     setForeground(m.foreground);
@@ -788,6 +820,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       ro.disconnect();
       unregisterPane(props.paneId);
       forgetPane(props.paneId);
+      resetPaneObserver(props.paneId); // free the ADR-0011 observer tail for this pane
       // Detaching hands the PTY to another window — keep it alive; otherwise this unmount is a
       // real close, so kill the child.
       if (handle !== null && !detaching) void killPty(handle);
@@ -803,8 +836,13 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       data-state={paneState()}
       classList={{
         focused: isFocused(),
-        attention: !isFocused() && (act()?.attention || act()?.stuck || false),
-        stuck: !isFocused() && (act()?.stuck ?? false),
+        attention: !isFocused() && (act()?.attention || act()?.stuck || act()?.heuristicWaiting || false),
+        // The timing-only stuck ring yields to the heuristic dashed ring when both fire (the content
+        // read must be marked a guess per ADR-0011 rule 4, even though it saw more).
+        stuck: !isFocused() && (act()?.stuck ?? false) && !act()?.heuristicWaiting,
+        // ADR-0011: a needs-you that's *only* the heuristic guess renders as a dashed ring, visibly
+        // distinct from the solid pushed/timing border, so the operator knows it's a guess (rule 4).
+        heuristic: !isFocused() && onlyHeuristic(),
         agented: !!agent(),
         "drag-over": dragOver(),
       }}
@@ -880,9 +918,19 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
           >🔒 gated</button>
         </Show>
         {/* Idle/stuck badge (AGENTIC §1b): a distinct, unmistakable marker for a silent agent —
-            separate from the per-agent tint so it can't be confused with it. */}
-        <Show when={act()?.stuck}>
+            separate from the per-agent tint so it can't be confused with it. Yields to the more
+            specific heuristic "waiting?" badge below when that's raised (it read an actual prompt). */}
+        <Show when={act()?.stuck && !act()?.heuristicWaiting}>
           <span class="pane-stuck-badge" title={`No output for ${settings.idleStuckSeconds}s — this agent may be waiting on you`}>💤 idle</span>
+        </Show>
+        {/* Heuristic "waiting?" badge (ADR-0011): the content-reading floor for hookless agents. The
+            trailing "?" and the tooltip mark it a guess — a prompt-shaped last line, then silence —
+            never a reported signal. Suppressed automatically whenever a pushed/kernel fact exists. */}
+        <Show when={onlyHeuristic()}>
+          <span
+            class="pane-waiting-badge"
+            title="Heuristic guess (ADR-0011): this agent printed a prompt-shaped line and went quiet, so it may be waiting on you. It's a scraped guess — not a signal the agent reported — and is dropped the moment a real one arrives."
+          >~ waiting?</span>
         </Show>
         <Show
           when={act()?.status}
@@ -908,10 +956,11 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
       {/* Uppercase state label (top-right) — the primary fleet signal; shown only in overview,
           where the hit overlay intercepts the hover controls. */}
-      <span class="pane-state-label" data-state={paneState()}>
+      <span class="pane-state-label" data-state={paneState()} classList={{ heuristic: onlyHeuristic() }}>
         {paneState() === "dead"
           ? `EXITED · ${dead() ?? ""}`.trim()
-          : paneState() === "needs" ? "NEEDS YOU" : paneState().toUpperCase()}
+          // A heuristic-only needs reads as a guess ("WAITING?"), not the asserted "NEEDS YOU".
+          : paneState() === "needs" ? (onlyHeuristic() ? "WAITING?" : "NEEDS YOU") : paneState().toUpperCase()}
       </span>
 
       {/* Fleet caption (overview only, ADR-0008): the live agent Task — its title + files touched,

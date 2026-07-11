@@ -12,6 +12,7 @@ import { activeWorkspace, listGatedPanes, focusPane, activeRolePanes, CANONICAL_
 import { board, noteList, ensureNotesLoaded } from "../stores/blackboard";
 import { claims, listClaims, releaseFile } from "../stores/claims";
 import { holds, releaseGate } from "../stores/inputHolds";
+import { activity } from "../stores/activity";
 import { openAsks, dismissAsk } from "../stores/openAsks";
 import { settings, setSetting } from "../stores/settings";
 import { claudeUsage, sessionCost, sessionTokens, fmtTokens, fmtUsd, type SessionUsage } from "../lib/claudeUsage";
@@ -220,6 +221,11 @@ export default function FleetPanel(props: { onClose: () => void }) {
                     <button class="fleet-role-pane" title="Focus this pane" onClick={() => focusPane(p.paneId)}>
                       <span class="fleet-key">{p.name}</span>
                     </button>
+                    {/* ADR-0011 heuristic floor: a labeled guess this hookless agent is waiting on
+                        you. Dashed chip so it never reads as a reported signal. */}
+                    <Show when={activity[p.paneId]?.heuristicWaiting}>
+                      <span class="fleet-waiting" title="Heuristic guess (ADR-0011): a prompt-shaped line then silence — may be waiting on you. Not a reported signal.">~ waiting?</span>
+                    </Show>
                     <Show when={p.role} fallback={<span class="fleet-role-none" title="No role assigned">—</span>}>
                       {(r) => <span class="fleet-by" title={`Role: ${r()} — address it on the bus as role:${r()}`}>{r()}</span>}
                     </Show>
