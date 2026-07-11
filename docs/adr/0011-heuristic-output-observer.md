@@ -1,6 +1,6 @@
 # Heuristic output-observer: a labeled, lossy awareness tier below the floor
 
-**Status:** Accepted (2026-07-05). **Partially supersedes [ADR-0008](0008-agents-first-class-via-self-report.md)** — it relaxes 0008's blanket "any awareness derived from Pane output stays rejected" into a *labeled, opt-in, always-overridable* tier. It does **not** touch 0008's entity model, its pushed/kernel provenance for ground-truth facts, or the byte-opaque engine.
+**Status:** Accepted (2026-07-05); **first consumer shipped 2026-07-11** (see the Update below). **Partially supersedes [ADR-0008](0008-agents-first-class-via-self-report.md)** — it relaxes 0008's blanket "any awareness derived from Pane output stays rejected" into a *labeled, opt-in, always-overridable* tier. It does **not** touch 0008's entity model, its pushed/kernel provenance for ground-truth facts, or the byte-opaque engine.
 
 ## Context
 
@@ -41,3 +41,12 @@ Byte-*flow timing* (idle/stuck detection by *when* bytes move, not *what* they s
 - **Cost is fragility, owned honestly.** ANSI/prompt scraping is brittle across CLIs and versions. That brittleness is *why* it is a labeled, lowest-authority, opt-in tier and not the floor — a broken heuristic degrades to "no heuristic signal," never to a wrong ground-truth claim.
 - **Still rejected:** a parser in the PTY hot path; any Rust output parsing; treating a scraped fact as ground truth; a bundled Agent SDK. ADR-0008's entity model and its pushed/kernel provenance are unchanged.
 - **Docs reconciled:** [`CONTEXT.md`](../../CONTEXT.md) (Pane opacity clause), [`AGENT_FIRST_PLAN.md`](../../AGENT_FIRST_PLAN.md) (§1.1 load-bearing principle + the opacity row), and [ORCHESTRATION-IDEAS.md](../roadmap/ORCHESTRATION-IDEAS.md) #5 point here.
+
+## Update (2026-07-11): first consumer shipped
+
+The tier is no longer authorization-only — its **shared observer + first consumer landed** (PR #48). This ADR's decision is unchanged; the boundary held in practice, so this records what was built against it.
+
+- **Shared observer:** `src/lib/outputObserver.ts` (pure — bounded rolling tail, `promptShaped`, the `looksWaiting` predicate) + `src/stores/heuristics.ts` (per-pane streaming decoder + tail, a plain `Map` off the reactive graph so the byte hot path never writes a store). Opt-in per agent kind via `AgentDef.heuristics`; global kill-switch `settings.heuristicStatus`.
+- **First consumer:** a labeled **heuristic "waiting on you" floor** for hookless agents (Codex/Aider/Gemini/…) — a prompt-shaped last line that then goes quiet raises `activity.heuristicWaiting`, rendered as a **dashed "~ waiting?"** chip / pane ring / `WAITING?` overview label (never the solid pushed border).
+- **Four rules, confirmed in the build:** ① no Rust/`pty.rs` change — the tap is `Terminal.onOutput`; ② TS consumer of bytes xterm already has; ③ `looksWaiting` returns false the instant a pushed Session/Task or `attention`/`status` exists, and only opt-in kinds are ever content-inspected; ④ dashed/labeled in both the model and the UI. One refinement worth noting: it deliberately does **not** gate on kernel `busy` — a prompt-blocked agent is still the foreground process, so `busy` reads true exactly when it's waiting (the trap [ADR-0011's sibling §1b in `lib/idle.ts`] documents); the dwell separates working from waiting.
+- **Still not built:** the other candidates named in the Scope note — a cost/token estimate for hookless agents, and **structured command blocks** ([ORCHESTRATION-IDEAS.md](../roadmap/ORCHESTRATION-IDEAS.md) #5). #5's sequencing objection (it had to sit behind a higher-value consumer) is now cleared, but it stays a low-priority design fork; when built it should reuse `outputObserver.ts`'s rolling tail rather than re-pioneer the tier.
