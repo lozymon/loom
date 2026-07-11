@@ -132,11 +132,11 @@ export type ControlRequest =
   // never read it from output. Turns overview mode into a fleet dashboard (building/blocked/idle).
   | { op: "status"; target: string; text?: string }
   // Set (or, with no/empty role, clear) a pane's role — a resolvable target vocabulary
-  // (docs/ORCHESTRATION-IDEAS.md §2). Unlike status/attention this is *persisted* on the PaneSpec
+  // (docs/FEATURES.md). Unlike status/attention this is *persisted* on the PaneSpec
   // (survives restart), since a "reviewer" pane stays the reviewer. `target` defaults to the caller
   // pane, so an agent can tag itself. Other ops target a role with a `role:<name>` target string.
   | { op: "role.set"; target: string; role?: string }
-  // ---- Shared blackboard (docs/AGENTIC-ENHANCEMENTS.md §2b) ----
+  // ---- Shared blackboard (docs/FEATURES.md) ----
   // A workspace-scoped key/value board agents post plan state to and poll ("plan.api → Cleo",
   // discovered gotchas, who-owns-what). Pull-based coordination, opacity-safe: the value is agent-
   // pushed, never read from output. Scoped to the caller pane's workspace (`pane`), or an explicit
@@ -146,7 +146,7 @@ export type ControlRequest =
   | { op: "note.get"; key: string; pane?: string; workspace?: string }
   | { op: "note.list"; pane?: string; workspace?: string }
   | { op: "note.del"; key: string; pane?: string; workspace?: string }
-  // ---- File claims (docs/AGENTIC-ENHANCEMENTS.md §2c) ----
+  // ---- File claims (docs/FEATURES.md) ----
   // Cooperative, advisory locks so a fleet doesn't stomp the same file. A sibling of the blackboard:
   // per-workspace, agent-pushed, opacity-safe. `claim` is an atomic test-and-set — it fails if
   // another pane already holds `path`; `pane` (the caller, from $LOOM_PANE) is the holder identity,
@@ -154,10 +154,10 @@ export type ControlRequest =
   | { op: "claim"; path: string; pane?: string; workspace?: string }
   | { op: "release"; path: string; pane?: string; workspace?: string; force?: boolean }
   | { op: "claims"; pane?: string; workspace?: string }
-  // Gate a path (docs/ORCHESTRATION-IDEAS.md §3): mark it *held* so an agent's `claim` on it blocks
+  // Gate a path (docs/FEATURES.md): mark it *held* so an agent's `claim` on it blocks
   // until an operator `release`s it — a lightweight approval gate reusing the claim mechanism.
   | { op: "hold"; path: string; pane?: string; workspace?: string }
-  // ---- Task board (docs/ORCHESTRATION-IDEAS.md §1) ----
+  // ---- Task board (docs/FEATURES.md) ----
   // Cards live in the project's `.loom/board.json` (keyed by the workspace's folder). Agents can
   // create/list/move them so a lead agent can build and hand out work, and a worker can close its
   // own card. Dispatch (spawning a pane) stays operator-driven for now — agents use `spawn` for that.
@@ -167,7 +167,7 @@ export type ControlRequest =
   // Arm/disarm the auto-drainer: keep dispatching top To-do cards until "In progress" hits `cap`.
   // Session-only (never persisted). Lets a lead agent start the swarm itself, not just the operator.
   | { op: "card.drain"; on: boolean; cap?: number; pane?: string; workspace?: string }
-  // ---- Ask/reply RPC (docs/AGENTIC-ENHANCEMENTS.md §2a) ----
+  // ---- Ask/reply RPC (docs/FEATURES.md) ----
   // Turns the fire-and-forget bus into request/response: `ask` types a question into `target`
   // (with reply instructions carrying the correlation id) and returns the id immediately; the
   // `loom ask` CLI then long-polls `ask.await` (kept under the relay's ~10s cap) until the callee
@@ -195,7 +195,7 @@ export interface PaneInfo {
   workspace: string;
   focused: boolean;
   live: boolean;
-  /** The pane's role (docs/ORCHESTRATION-IDEAS.md §2), or absent if unset. */
+  /** The pane's role (docs/FEATURES.md), or absent if unset. */
   role?: string;
 }
 

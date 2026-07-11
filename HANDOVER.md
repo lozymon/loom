@@ -111,10 +111,10 @@ into CI (`cargo test`). UI/integration is not unit-tested — verify by running.
 - [docs/adr/](docs/adr/) — 0001 opacity · 0002 PTYs in-process · 0003 Channel
   transport · 0004 login/interactive shell launch · 0005 Ctrl+Shift namespace ·
   0006 canvas not WebGL · 0007 inter-pane control bus.
-- [docs/IDEAS.md](docs/IDEAS.md) — post-v1 feature log (each item has "✅ Built as").
-- [docs/agent-hooks.md](docs/agent-hooks.md) · [docs/agent-mcp.md](docs/agent-mcp.md)
+- [docs/roadmap/IDEAS.md](docs/roadmap/IDEAS.md) — post-v1 feature log (each item has "✅ Built as").
+- [docs/reference/agent-hooks.md](docs/reference/agent-hooks.md) · [docs/reference/agent-mcp.md](docs/reference/agent-mcp.md)
   — the `loom hooks` + `loom mcp` integration arc.
-- [docs/PRE_WINDOWS_CHECKLIST.md](docs/PRE_WINDOWS_CHECKLIST.md) ·
+- [docs/roadmap/PRE_WINDOWS_CHECKLIST.md](docs/roadmap/PRE_WINDOWS_CHECKLIST.md) ·
   [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
 ## Suggested first moves for the next session

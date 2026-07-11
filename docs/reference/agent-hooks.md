@@ -1,12 +1,12 @@
 # Agent hooks — wire a Claude Code agent into Loom
 
-Loom never parses what scrolls by in a pane ([ADR-0001](adr/0001-opaque-panes-no-agent-awareness.md)).
+Loom never parses what scrolls by in a pane ([ADR-0001](../adr/0001-opaque-panes-no-agent-awareness.md)).
 Instead, an agent running *inside* a pane reports its own state over the `loom` control bus
-([ADR-0007](adr/0007-inter-pane-control-bus.md)) — it flags itself; we never infer anything from
+([ADR-0007](../adr/0007-inter-pane-control-bus.md)) — it flags itself; we never infer anything from
 its output. This page wires Claude Code's **lifecycle hooks** to that bus, so a fleet of agents
 lights up the UI as they work and pause.
 
-This is the "hook adapter" step of the agent-integration arc in [IDEAS.md](IDEAS.md) — the cheap,
+This is the "hook adapter" step of the agent-integration arc in [IDEAS.md](../roadmap/IDEAS.md) — the cheap,
 robust bridge that validates the needs-input (#1) and status (#3) flows. Its bigger sibling is the
 [Loom MCP server](agent-mcp.md), which exposes the same control bus as agent *tools*; hooks and
 MCP are complementary (hooks signal the blocked moments MCP can't see — keep both).

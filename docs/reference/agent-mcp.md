@@ -1,14 +1,14 @@
 # Loom MCP server — drive the fleet as agent tools
 
 `loom mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server that exposes the
-Loom control bus ([ADR-0007](adr/0007-inter-pane-control-bus.md)) as first-class **tools** an
+Loom control bus ([ADR-0007](../adr/0007-inter-pane-control-bus.md)) as first-class **tools** an
 agent can call. It's the model-native face of the same relay the [`loom` CLI](agent-hooks.md) drives
 — each tool builds the identical `ControlRequest` JSON and forwards it over `$LOOM_SOCK`, so the
 `loom` CLI and `loom mcp` are two front-ends to one bus. This is step **C** of the agent-integration arc
-in [IDEAS.md](IDEAS.md): the model *plans with* Loom ("spawn a pane to run tests while I edit")
+in [IDEAS.md](../roadmap/IDEAS.md): the model *plans with* Loom ("spawn a pane to run tests while I edit")
 instead of shelling out.
 
-It stays inside the opacity rule ([ADR-0001](adr/0001-opaque-panes-no-agent-awareness.md)): these
+It stays inside the opacity rule ([ADR-0001](../adr/0001-opaque-panes-no-agent-awareness.md)): these
 are inbound *commands* (and an explicit, requested `read_pane`), never inference from pane output.
 
 ## Tools

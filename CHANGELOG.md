@@ -400,7 +400,7 @@ and brand lead with driving fleets of CLI agents.
   is captured from the active terminal when you open it and pinned to that
   workspace. Switching workspaces shows only what that workspace had open.
 - Project (repo) name in the Source Control header, beside the branch.
-- Documentation: `docs/cli.md` (the `loom` CLI reference), `docs/troubleshooting.md`,
+- Documentation: `docs/reference/cli.md` (the `loom` CLI reference), `docs/reference/troubleshooting.md`,
   and this `CHANGELOG.md`.
 
 ## [0.7.0] — 2026

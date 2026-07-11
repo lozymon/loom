@@ -74,4 +74,4 @@ interactively-authenticated servers may be absent in headless/cron runs.
 - Dev run: `npm run tauri dev`
 
 If `npm run tauri dev` fails to open a window, confirm the platform prerequisites in the
-[README](../README.md#prerequisites) (WebKitGTK, Rust toolchain).
+[README](../../README.md#prerequisites) (WebKitGTK, Rust toolchain).

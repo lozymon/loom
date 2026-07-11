@@ -7,7 +7,7 @@
 >
 > Source-of-truth docs it touches: [PLAN.md](PLAN.md) (milestones/why), the
 > [ADRs](docs/adr/) (esp. [ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md)),
-> [docs/IDEAS.md](docs/IDEAS.md), [docs/ASSESSMENT.md](docs/ASSESSMENT.md),
+> [docs/roadmap/IDEAS.md](docs/roadmap/IDEAS.md), [docs/roadmap/ASSESSMENT.md](docs/roadmap/ASSESSMENT.md),
 > [CLAUDE.md](CLAUDE.md), [README.md](README.md). Those get reframed in Phase 5.
 
 ## 1. The decision (what "agent-first" means here)
@@ -38,11 +38,11 @@ parses a thing), and a **structured side-channel** — the inter-pane control bu
 already have three push mechanisms shipping today; this plan *enriches* them rather than replacing
 the model:
 
-- **Agent hooks** (`loom hooks`, [docs/agent-hooks.md](docs/agent-hooks.md)) — Claude Code fires
+- **Agent hooks** (`loom hooks`, [docs/reference/agent-hooks.md](docs/reference/agent-hooks.md)) — Claude Code fires
   `SessionStart`/`SessionEnd`/`UserPromptSubmit`/`PreToolUse`/`PostToolUse`/`Notification`/`Stop`.
   Today we wire three of them to coarse `status`/`attention`. We wire the full set to real
   session/task events.
-- **MCP server** (`loom mcp`, [docs/agent-mcp.md](docs/agent-mcp.md)) — the model *pushes* richer
+- **MCP server** (`loom mcp`, [docs/reference/agent-mcp.md](docs/reference/agent-mcp.md)) — the model *pushes* richer
   state as deliberate tool calls (`begin_task`, `request_approval`, …).
 - **Coarse, opacity-safe OS signal** — `pty_busy`/`pty_foreground` already derive running/idle from
   the foreground process group (kernel state, not output). This is the **graceful-degradation
@@ -164,7 +164,7 @@ floor.
 - **Fleet board** — promote overview mode (`LayoutNode.tsx` tiles) into a real dashboard backed by
   `Session`/`Task`: who's running what, who's blocked longest, files touched, idle time. Replaces
   the per-pane ephemeral dots with durable entities.
-- **Approvals triage** — the needs-input loop ([IDEAS.md #1](docs/IDEAS.md)) upgraded from a binary
+- **Approvals triage** — the needs-input loop ([IDEAS.md #1](docs/roadmap/IDEAS.md)) upgraded from a binary
   amber border to real `Approval` objects (shows the actual prompt, kind, lets you answer the
   right pane). The fan-out path (`loom broadcast`) stays.
 - **Lifecycle CLI/MCP surface** — extend `cli.rs`/`mcp.rs`: `loom task begin/end`, `loom approve`,
