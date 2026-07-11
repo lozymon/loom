@@ -7,7 +7,7 @@
 // persistence (M3 Stage D) serializes only id/name/cwd/tree/panes.
 
 import { batch, createEffect, onCleanup } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, reconcile } from "solid-js/store";
 import type { LayoutNode, PaneId, PaneSpec, Workspace } from "../ipc/protocol";
 import { allocName, buildBalancedTree } from "../lib/grid";
 import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type Dir, type Path } from "../lib/layout";
@@ -214,6 +214,19 @@ export const paneCount = (ws: Workspace): number => Object.keys(ws.panes).length
 const wsIdxById = (id: string) => app.workspaces.findIndex((w) => w.id === id);
 const wsIdxByPane = (paneId: PaneId) => app.workspaces.findIndex((w) => paneId in w.panes);
 
+/**
+ * Write a whole layout tree, *replacing* rather than merging. Solid's store setter merges an
+ * object value key-by-key, so when a node changes shape — split→leaf when a close collapses the
+ * root to one pane, or leaf→split on the next split — the old branch's `a`/`b`/`dir`/`ratio` keys
+ * would linger and corrupt the node (a `kind:"leaf"` still carrying `a`/`b`). That silently broke
+ * splitting once a workspace was down to a single pane. `reconcile` diffs and drops stale keys;
+ * `structuredClone` first strips any store proxies the pure transforms carried over from `ws.tree`
+ * (reconciling a structure that references the live store recurses forever). Trees are tiny, so the
+ * clone is free. All full-tree writes go through here; scalar `ratio` tweaks (setRatio) do not.
+ */
+const setTree = (i: number, tree: LayoutNode) =>
+  setApp("workspaces", i, "tree", reconcile(structuredClone(tree)));
+
 // ---- Pane operations (resolve their owning workspace by paneId) ----------------------
 // The pure tree transforms these build on (replaceLeaf/removeLeaf/firstLeaf/leafIds) live in
 // lib/layout.ts; each op below wraps one in a `setApp` mutation.
@@ -292,7 +305,7 @@ export function splitPane(paneId: PaneId, dir: "row" | "col") {
   const title = allocName(Object.values(ws.panes).map((p) => p.title));
   batch(() => {
     setApp("workspaces", i, "panes", newId, { title });
-    setApp("workspaces", i, "tree", newTree);
+    setTree(i, newTree);
     setApp("workspaces", i, "focused", newId);
     setApp("workspaces", i, "zoomed", null);
   });
@@ -326,7 +339,7 @@ export function closePane(paneId: PaneId, opts?: { skipConfirm?: boolean }) {
   forgetGate(paneId); // drop any per-pane input gate (§4a) — it must not outlive its pane
 
   batch(() => {
-    setApp("workspaces", i, "tree", next);
+    setTree(i, next);
     setApp("workspaces", i, "panes", paneId, undefined as unknown as PaneSpec);
     if (ws.focused === paneId) setApp("workspaces", i, "focused", firstLeaf(next));
     if (ws.zoomed === paneId) setApp("workspaces", i, "zoomed", null);
@@ -349,7 +362,7 @@ export function swapPanes(a: PaneId, b: PaneId) {
   if (a === b) return;
   const i = wsIdxByPane(a);
   if (i < 0 || !(b in app.workspaces[i].panes)) return;
-  setApp("workspaces", i, "tree", (t) => swapLeaves(t, a, b));
+  setTree(i, swapLeaves(app.workspaces[i].tree, a, b));
 }
 
 export function setRatio(wsId: string, path: Path, ratio: number) {
@@ -521,7 +534,7 @@ export function spawnPane(opts: { title?: string; command: string; cwd?: string 
   const spec: PaneSpec = opts.cwd ? { title, command: opts.command, cwd: opts.cwd } : { title, command: opts.command };
   batch(() => {
     setApp("workspaces", i, "panes", newId, spec);
-    setApp("workspaces", i, "tree", newTree);
+    setTree(i, newTree);
     setApp("workspaces", i, "focused", newId);
     setApp("workspaces", i, "zoomed", null);
   });
@@ -678,7 +691,7 @@ function reopenPaneItem(item: ClosedItem) {
   }));
   batch(() => {
     setApp("workspaces", i, "panes", newId, spec);
-    setApp("workspaces", i, "tree", newTree);
+    setTree(i, newTree);
     setApp("workspaces", i, "focused", newId);
     setApp("workspaces", i, "zoomed", null);
   });
