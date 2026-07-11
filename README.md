@@ -97,7 +97,7 @@ loom attention Cleo --clear                 # drop pane Cleo's border
 
 It works over a per-user unix socket (`$XDG_RUNTIME_DIR/loom.sock`, mode 0600): Rust is a pure relay, all routing/naming/spawn logic lives in the frontend, and pane *output* is never parsed — this is an inbound command channel, distinct from the opacity rule ([ADR-0001](docs/adr/0001-opaque-panes-no-agent-awareness.md) / [ADR-0007](docs/adr/0007-inter-pane-control-bus.md)).
 
-See **[docs/cli.md](docs/cli.md)** for the full `loom` command reference (every flag, `loom status`, `loom hooks`), and **[docs/agent-mcp.md](docs/agent-mcp.md)** / **[docs/agent-hooks.md](docs/agent-hooks.md)** for the model-native MCP tools and the auto-status hooks.
+See **[docs/reference/cli.md](docs/reference/cli.md)** for the full `loom` command reference (every flag, `loom status`, `loom hooks`), and **[docs/reference/agent-mcp.md](docs/reference/agent-mcp.md)** / **[docs/reference/agent-hooks.md](docs/reference/agent-hooks.md)** for the model-native MCP tools and the auto-status hooks.
 
 ### Light a pane when an agent needs you
 
@@ -164,11 +164,10 @@ src-tauri/src/               Rust shell (PTY engine + OS concerns)
   mcp.rs                     the `loom mcp` MCP server (a face of the loom binary)
   lib.rs                     Tauri command handlers + Channel wiring (the frontend contract)
   workspace.rs               schema-agnostic JSON state load/save
-docs/adr/                    architecture decision records
-docs/cli.md                  the `loom` inter-pane control CLI reference
-docs/agent-mcp.md            the `loom mcp` MCP server (agent tools)
-docs/agent-hooks.md          wire a Claude Code agent into Loom
-docs/troubleshooting.md      file locations, rendering, control-bus, build fixes
+docs/adr/                    architecture decision records (the "why", source of truth)
+docs/reference/              user/dev reference — cli.md, agent-mcp.md, agent-hooks.md, troubleshooting.md
+docs/roadmap/                feature backlogs & plans — IDEAS.md, AGENTIC-ENHANCEMENTS.md, ORCHESTRATION-IDEAS.md, CROSS_PLATFORM_PARITY.md, …
+docs/design/                 brand assets + frameless design handoff
 PLAN.md                      the milestone-by-milestone build plan + status
 CHANGELOG.md                 release-by-release change log
 ```

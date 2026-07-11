@@ -1,6 +1,6 @@
 # Frameless redesign — implementation plan
 
-Recreate the **Frameless** chrome redesign (`docs/design_handoff_loom_frameless/`) in the
+Recreate the **Frameless** chrome redesign (`docs/design/design_handoff_loom_frameless/`) in the
 live SolidJS frontend. This is a **visual/chrome refactor**, not a rebuild: every surface the
 design covers already exists as a component. We re-skin the token layer, restructure the pane
 card (the one real structural change), and tune each surface to the spec.

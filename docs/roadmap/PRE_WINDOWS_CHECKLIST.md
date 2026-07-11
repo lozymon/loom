@@ -1,7 +1,7 @@
 # Pre-Windows Checklist
 
 Loose ends to close on the **Linux side** before we open the Windows port (M7). The
-porting work itself is already scoped in [PLAN.md](../PLAN.md) (M7.1–M7.6); this list is
+porting work itself is already scoped in [PLAN.md](../../PLAN.md) (M7.1–M7.6); this list is
 the ground-clearing that should happen *first* so that effort branches off a clean,
 accurate tree.
 

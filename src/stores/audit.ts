@@ -1,4 +1,4 @@
-// Bus-command audit timeline (docs/ORCHESTRATION-IDEAS.md §3). Every inter-pane control request
+// Bus-command audit timeline (docs/FEATURES.md). Every inter-pane control request
 // (ADR-0007) flows through paneControl.dispatch; we append a compact record here so an operator can
 // see the cross-pane command stream — who drove whom, and whether it landed — on one timeline.
 //

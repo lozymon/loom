@@ -11,7 +11,7 @@
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", monospace;
 
-  /* ---- Frameless tokens (design source of truth; docs/frameless-redesign-plan.md) ---------- */
+  /* ---- Frameless tokens (design source of truth; docs/design/frameless-redesign-plan.md) ---------- */
   --canvas: #0e0f12;
   --surface: #191b20;
   --surface-dead: #141518;

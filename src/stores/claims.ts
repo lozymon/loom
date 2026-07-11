@@ -1,5 +1,5 @@
 // File claims — cooperative, advisory locks a fleet uses so two agents don't edit the same file
-// at once (docs/AGENTIC-ENHANCEMENTS.md §2c). A sibling of the blackboard (stores/blackboard.ts):
+// at once (docs/FEATURES.md). A sibling of the blackboard (stores/blackboard.ts):
 // same per-workspace, agent-pushed, opacity-safe shape, but with claim-specific semantics —
 // `claimFile` is an atomic test-and-set (fails if another pane holds the path) and `releaseFile`
 // is holder-scoped (only the holder drops it, unless forced). Kept a separate store from notes so
