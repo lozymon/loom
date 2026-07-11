@@ -55,3 +55,21 @@ _Avoid_: synchronize, mirror (reserved for the deferred live-keystroke mode), bl
 **Workspace**:
 A top-level container shown as an entry in the left rail: a working folder plus one layout tree of Panes. The unit you switch between. Hierarchy is exactly two levels — Workspace contains Panes, with no intermediate layer.
 _Avoid_: tab (implies top tabs and is overloaded — retired entirely), session, project, window (there is deliberately no tmux-style "window" layer)
+
+## Remote control (planned — [ADR-0012](docs/adr/0012-remote-fleet-control-dial-out-vps-relay.md))
+
+**Origin**:
+The provenance of a bus command — `local` (a Pane/CLI on the same host, ADR-0007's trust model) or `device:<name>` (a paired remote Device). The dimension guardrails and the audit timeline branch on; ADR-0007's bus was deliberately origin-blind, and remote control is what forces the distinction.
+_Avoid_: source, caller, sender
+
+**Device**:
+A phone paired once (in person, by QR) to drive and observe the fleet remotely. Holds a long-lived, revocable token bound to an end-to-end key. The remote principal ADR-0007 excluded.
+_Avoid_: client, phone, mobile (the running app is the client; the paired identity is a Device)
+
+**Bridge**:
+Loom's in-process network front-end onto the control bus: it dials out to the Relay, terminates the end-to-end hop, and injects the same `ControlRequest` the local socket would (tagged with its Origin). Transport only — routing and policy stay in TS, per the golden split.
+_Avoid_: gateway, proxy, server
+
+**Relay**:
+The blind rendezvous service on the user's VPS that pairs a Device session with its laptop session and forwards sealed frames between them. Sees only ciphertext and routing metadata, never plaintext.
+_Avoid_: server, broker, hub
