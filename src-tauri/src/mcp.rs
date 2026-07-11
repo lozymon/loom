@@ -96,7 +96,9 @@ fn initialize_result(params: Option<&Value>) -> Value {
             Coordinate with other agents: a shared per-workspace blackboard (board_set/get/list/del) \
             for plan state and who-owns-what; advisory file locks (claim_file/release_file/list_claims) \
             so two agents don't edit the same file; and ask_pane, which asks another pane a question \
-            and blocks until its agent answers with reply_ask (a callable-worker RPC)."
+            and blocks until its agent answers with reply_ask (a callable-worker RPC). Safety: \
+            gate_pane holds a sensitive pane's bus input (send/broadcast then needs a human OK), and \
+            broadcast with dry_run=true previews which panes a fan-out would reach without sending."
     })
 }
 
@@ -148,15 +150,16 @@ fn tools() -> Value {
         },
         {
             "name": "broadcast",
-            "description": "Send the same text to every live pane in a workspace (the active one, or a named one).",
+            "description": "Send the same text to every live pane in a workspace (the active one, or a named one). With dry_run=true, returns which panes it WOULD reach (name, live, gated) without sending anything — preview a fan-out before committing.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "text": { "type": "string", "description": "Text to send to every targeted pane." },
+                    "text": { "type": "string", "description": "Text to send to every targeted pane (omit for a dry run to preview reach only)." },
                     "enter": { "type": "boolean", "description": "Press Enter after the text (default true)." },
-                    "workspace": { "type": "string", "description": "Workspace name (default: the active workspace)." }
+                    "workspace": { "type": "string", "description": "Workspace name (default: the active workspace)." },
+                    "dry_run": { "type": "boolean", "description": "Preview the targeted panes without sending (default false)." }
                 },
-                "required": ["text"]
+                "required": []
             }
         },
         {
@@ -351,6 +354,24 @@ fn tools() -> Value {
             }
         },
         {
+            "name": "gate_pane",
+            "description": "Hold a pane's inbound bus input (an input gate): while gated, any send_text/broadcast to it requires a human OK before it lands — so a bad broadcast can't drive a sensitive pane (a prod-touching one, a live migration) unattended. Defaults to your own pane. Use clear=true to release the gate.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "target": { "type": "string", "description": "Pane name (default: your own pane, $LOOM_PANE)." },
+                    "clear": { "type": "boolean", "description": "Release the gate instead of placing it (default false)." },
+                    "reason": { "type": "string", "description": "Optional note on why the pane is gated (shown in the Fleet panel)." }
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "list_gates",
+            "description": "List every pane whose bus input is currently gated (name, who gated it, and the reason).",
+            "inputSchema": { "type": "object", "properties": {}, "required": [] }
+        },
+        {
             "name": "ask_pane",
             "description": "Ask another pane's agent a question and BLOCK until it answers (with reply_ask). Returns the answer text. A callable-worker RPC — use it to delegate a decision or query to another agent.",
             "inputSchema": {
@@ -421,11 +442,21 @@ fn build_request(name: &str, args: &Value, pane: Option<&str>) -> Result<Value, 
             obj
         }
         "broadcast" => {
+            let dry_run = arg_bool(args, "dry_run", false);
+            // A dry run needs no text (it only previews reach); a real broadcast requires it.
+            let text = if dry_run {
+                arg_str_allow_empty(args, "text")
+            } else {
+                arg_str(args, "text")?
+            };
             let mut obj = json!({
                 "op": "broadcast",
-                "text": arg_str(args, "text")?,
+                "text": text,
                 "enter": arg_bool(args, "enter", true),
             });
+            if dry_run {
+                obj["dryRun"] = json!(true);
+            }
             if let Some(w) = arg_opt(args, "workspace") {
                 obj["workspace"] = json!(w);
             }
@@ -508,6 +539,14 @@ fn build_request(name: &str, args: &Value, pane: Option<&str>) -> Result<Value, 
             pane,
         ),
         "list_claims" => with_scope(json!({ "op": "claims" }), args, pane),
+        // ---- Per-pane input gate (§4a) — defaults to the caller's own pane. ----
+        "gate_pane" => json!({
+            "op": "gate.set",
+            "target": arg_target_or_self(args, pane)?,
+            "on": !arg_bool(args, "clear", false),
+            "reason": args.get("reason").and_then(Value::as_str).unwrap_or(""),
+        }),
+        "list_gates" => json!({ "op": "gate.list" }),
         "reply_ask" => {
             let mut obj = json!({ "op": "reply", "id": arg_u64(args, "id")?, "answer": arg_str_allow_empty(args, "answer") });
             if let Some(p) = pane {
@@ -709,6 +748,8 @@ mod tests {
             ("hold_file", json!({ "path": "a.ts" })),
             ("release_file", json!({ "path": "a.ts" })),
             ("list_claims", json!({})),
+            ("gate_pane", json!({ "target": "Cleo" })),
+            ("list_gates", json!({})),
             ("reply_ask", json!({ "id": 3, "answer": "yes" })),
         ];
         for (name, args) in cases {
@@ -786,5 +827,34 @@ mod tests {
         assert_eq!(req["target"], "Faye");
         // with no target and no caller pane, it's an error, not a silent self-flag
         assert!(build_request("flag_attention", &json!({}), None).is_err());
+    }
+
+    #[test]
+    fn gate_pane_sets_and_clears_defaulting_to_self() {
+        // No target → gate the caller's own pane; on defaults true.
+        let set = build_request("gate_pane", &json!({}), Some("Faye")).unwrap();
+        assert_eq!(set["op"], "gate.set");
+        assert_eq!(set["target"], "Faye");
+        assert_eq!(set["on"], true);
+        // clear=true releases it.
+        let clear = build_request(
+            "gate_pane",
+            &json!({ "target": "Cleo", "clear": true }),
+            Some("Faye"),
+        )
+        .unwrap();
+        assert_eq!(clear["target"], "Cleo");
+        assert_eq!(clear["on"], false);
+        // no target + no caller pane is an error, not a silent self-gate
+        assert!(build_request("gate_pane", &json!({}), None).is_err());
+    }
+
+    #[test]
+    fn broadcast_dry_run_needs_no_text_and_sets_the_flag() {
+        let dry = build_request("broadcast", &json!({ "dry_run": true }), Some("Faye")).unwrap();
+        assert_eq!(dry["op"], "broadcast");
+        assert_eq!(dry["dryRun"], true);
+        // a real broadcast still requires text
+        assert!(build_request("broadcast", &json!({}), Some("Faye")).is_err());
     }
 }

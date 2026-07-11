@@ -1723,6 +1723,26 @@ body,
   background: var(--state-needs);
 }
 
+/* Input-gate badge (§4a): a clickable chip marking a pane whose bus input is held. Amber like the
+   other "attention" affordances; hover darkens to read as the release button it is. */
+.pane-gated-badge {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  color: #1a1206;
+  background: var(--state-needs);
+}
+.pane-gated-badge:hover {
+  filter: brightness(0.92);
+}
+
 /* Secondary group-tint dot in the chip (5px), in the agent's colour. */
 .pane-tint-dot {
   flex: 0 0 auto;

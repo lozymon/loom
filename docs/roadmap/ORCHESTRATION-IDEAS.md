@@ -23,8 +23,8 @@ pushed/kernel fact. The engine stays byte-opaque under both.
 - **2. Role as a resolvable bus target** — `role:<name>` target resolution + `loom role` / `set_role`
   MCP tool. *Follow-up: the Fleet-panel role roster/filter isn't built.*
 - **3. Approval gate + bus-command audit view** — a `held` claim state + a Bus-activity timeline
-  (`stores/audit.ts`, `FleetApprovals.tsx`). *(The primitives-first slice of AGENTIC §4a; a
-  per-pane input gate is still open there.)*
+  (`stores/audit.ts`, `FleetApprovals.tsx`). *(The primitives-first slice of AGENTIC §4a; the
+  dedicated per-pane input gate shipped too — `stores/inputHolds.ts`, `loom gate`.)*
 - **4. Durable, project-scoped blackboard** — the blackboard re-keyed to the project folder and
   persisted to `<dir>/.loom/notes.json`, so a new session inherits what earlier ones learned.
 

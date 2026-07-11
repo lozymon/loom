@@ -62,6 +62,9 @@ export interface Settings {
   /** Ask before a `loom broadcast` fans a *destructive* command (git reset --hard, rm -rf, a
    *  force-push, …) to several panes — the git-aware guardrail (AGENTIC §4b). */
   confirmDestructiveBroadcast: boolean;
+  /** Honor per-pane input gates (AGENTIC §4a): when a pane is gated (`loom gate <pane>`), require
+   *  an OK before any bus-delivered input (send/broadcast) reaches it. Off = gates are ignored. */
+  honorInputHolds: boolean;
   // ---- Notifications ----
   /** Pop a desktop notification when a pane raises attention while Loom is unfocused. */
   notifyOnAttention: boolean;
@@ -144,6 +147,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmClose: true,
   confirmExternalSpawn: true,
   confirmDestructiveBroadcast: true,
+  honorInputHolds: true,
   notifyOnAttention: false,
   idleStuckSeconds: 45,
   autoAdoptAgents: true,

@@ -8,9 +8,10 @@
 // pane updates this live. Scoped to the active workspace by id; switching workspaces re-scopes it.
 
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { activeWorkspace } from "../stores/workspace";
+import { activeWorkspace, listGatedPanes } from "../stores/workspace";
 import { board, noteList, ensureNotesLoaded } from "../stores/blackboard";
 import { claims, listClaims, releaseFile } from "../stores/claims";
+import { holds, releaseGate } from "../stores/inputHolds";
 import { settings, setSetting } from "../stores/settings";
 import { claudeUsage, sessionCost, sessionTokens, fmtTokens, fmtUsd, type SessionUsage } from "../lib/claudeUsage";
 
@@ -30,6 +31,13 @@ export default function FleetPanel(props: { onClose: () => void }) {
   const held = createMemo(() => {
     void claims[wsId()];
     return listClaims(wsId());
+  });
+  // Gated panes (§4a) whose inbound bus input is held, scoped to the active workspace. Touch the
+  // holds key-set so gating/releasing from any pane re-renders.
+  const gated = createMemo(() => {
+    void Object.keys(holds);
+    const name = activeWorkspace()?.name;
+    return listGatedPanes().filter((g) => g.workspace === name);
   });
   // Load the project's persisted notes when the folder changes (idempotent; "" = in-memory only).
   createEffect(() => { void ensureNotesLoaded(dir()); });
@@ -156,6 +164,33 @@ export default function FleetPanel(props: { onClose: () => void }) {
                       <span class="fleet-gate-badge" title="Gated for approval — an agent's claim on this path is blocked until released">⛔ gated</span>
                       <button class="fleet-release" title="Release the gate — let the agent proceed" onClick={() => releaseFile(wsId(), c.path, c.by, true)}>release</button>
                     </Show>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </section>
+
+        <section class="fleet-section">
+          <div class="fleet-section-head">
+            <span class="fleet-section-title">Input gates</span>
+            <span class="fleet-count">{gated().length}</span>
+          </div>
+          <Show
+            when={gated().length > 0}
+            fallback={<div class="fleet-empty">No panes gated. Hold a pane's bus input with <code>loom gate &lt;pane&gt;</code>.</div>}
+          >
+            <ul class="fleet-list">
+              <For each={gated()}>
+                {(g) => (
+                  <li class="fleet-row fleet-gated">
+                    <div class="fleet-row-main">
+                      <span class="fleet-path" title={`Bus input held for ${g.name}`}>🔒 {g.name}</span>
+                      <Show when={g.reason}>
+                        <span class="fleet-value">{g.reason}</span>
+                      </Show>
+                    </div>
+                    <button class="fleet-release" title="Release the gate — let bus input reach this pane" onClick={() => releaseGate(g.paneId)}>release</button>
                   </li>
                 )}
               </For>

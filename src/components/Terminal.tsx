@@ -35,6 +35,7 @@ import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
 import { activity, noteUnseen, noteBell, noteOutput, setBusy, setStuck, noteAttention, seePane, forgetPane, clearStatus, setLogError, clearLogError } from "../stores/activity";
+import { isGated, getGate, releaseGate } from "../stores/inputHolds";
 import { isPaneStuck } from "../lib/idle";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
@@ -868,6 +869,15 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
               📌 keep
             </button>
           )}
+        </Show>
+        {/* Input-gate badge (AGENTIC §4a): this pane's inbound bus input is held — a click releases
+            the gate. Distinct marker so a gated pane reads at a glance in the fleet. */}
+        <Show when={isGated(props.paneId)}>
+          <button
+            class="pane-gated-badge"
+            title={`${getGate(props.paneId)?.reason ? getGate(props.paneId)!.reason + " — " : ""}bus input is held for this pane (loom send/broadcast needs an OK). Click to release.`}
+            onClick={(e) => { e.stopPropagation(); releaseGate(props.paneId); }}
+          >🔒 gated</button>
         </Show>
         {/* Idle/stuck badge (AGENTIC §1b): a distinct, unmistakable marker for a silent agent —
             separate from the per-agent tint so it can't be confused with it. */}

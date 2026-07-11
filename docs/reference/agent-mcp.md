@@ -19,10 +19,12 @@ are inbound *commands* (and an explicit, requested `read_pane`), never inference
 | `send_text` | `send` | type text into one pane (by name), Enter by default |
 | `spawn_pane` | `spawn` | open a new pane running a command (e.g. another agent) |
 | `read_pane` | `read` | read the tail of a pane's scrollback (explicit, requested) |
-| `broadcast` | `broadcast` | send the same text to every live pane in a workspace |
+| `broadcast` | `broadcast` | send the same text to every live pane in a workspace (`dry_run` previews the reach) |
 | `focus_pane` | `focus` | reveal + focus a pane, switching to its workspace |
 | `flag_attention` | `attention` | raise/clear a pane's amber "needs you" border |
 | `set_status` | `status` | set/clear a pane's status label (title bar + overview) |
+| `gate_pane` | `gate.set` | hold/release a pane's inbound bus input (needs a human OK to land) |
+| `list_gates` | `gate.list` | list every pane whose bus input is gated |
 
 `flag_attention` and `set_status` default their target to the agent's **own** pane
 (`$LOOM_PANE`), so an agent can flag *itself* — the same self-reporting the

@@ -5,9 +5,8 @@ stays **ADR-0001-safe**: Loom never parses pane *output*. State comes in through
 `loom` control bus ([ADR-0007](../adr/0007-inter-pane-control-bus.md)) or through byte-*flow timing*
 (when data moved, not what it said), never by scraping what scrolls by.
 
-> Most of this doc has **shipped** — those items now live in **[../FEATURES.md](../FEATURES.md)**
-> (what · where · why). Only the still-open item (§4a) keeps its full write-up below. Build notes
-> for shipped items are recoverable from git history.
+> All of this doc has **shipped** — the items now live in **[../FEATURES.md](../FEATURES.md)**
+> (what · where · why). Build notes for shipped items are recoverable from git history.
 
 ---
 
@@ -24,16 +23,11 @@ stays **ADR-0001-safe**: Loom never parses pane *output*. State comes in through
 - **3a.** Workspace templates with roles + seed prompts (`prompt?` on `PaneSpec`).
 - **3b.** Session replay / transcript export (⧉ Copy MD / ⭳ Export).
 - **4b.** Git-aware guardrails — confirm gate on destructive `loom broadcast`.
-
-## Open
-
-### 4a. Per-pane approval gating / dry-run 🟡
-Pause a pane's input and require a human OK before a broadcast lands, so one bad `loom broadcast`
-can't nuke every repo at once.
-
-*Note:* ORCHESTRATION-IDEAS §3 shipped the primitives-first slice of this (a `held` claim state +
-the bus-command audit timeline). A dedicated **per-pane** gate — hold a pane's stdin until an
-operator approves — is the remaining, larger piece.
+- **4a.** Per-pane approval gating / dry-run — a standing per-pane input gate (`loom gate` /
+  `gate_pane`): while a pane is gated, any bus-delivered input (`send`/`broadcast`) needs a human OK
+  before it lands (honored per Settings → Safety). Plus `loom broadcast --dry-run` to preview which
+  panes a fan-out would reach — flagging dead and gated ones — without sending. Gate state shows on
+  the pane's title-bar chip (🔒) and in the Fleet panel's "Input gates" section.
 
 ---
 
