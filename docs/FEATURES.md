@@ -61,6 +61,7 @@ design decision; `roadmap/…§` for the backlog entry it came from). This is th
 - ✅ **File-level claims / locks** — sibling of the blackboard. `src/stores/claims.ts` · roadmap/AGENTIC-ENHANCEMENTS §2c
 - ✅ **Path gates (`held`)** — mark a path held so a `claim` on it blocks. `claims.ts` · roadmap/ORCHESTRATION-IDEAS §3
 - ✅ **Roles as a resolvable bus target** — persisted `role?` on `PaneSpec`; `loom send @reviewer`. `src/ipc/protocol.ts`, `Terminal.tsx` badge · roadmap/ORCHESTRATION-IDEAS §2
+- ✅ **Fleet role roster + filter** — FleetPanel groups the active workspace's panes by role (builder/reviewer/scout/coordinator + free-form), live counts, click a chip to filter, click a pane to focus. `src/components/FleetPanel.tsx`, `activeRolePanes`/`CANONICAL_ROLES` in `stores/workspace.ts` · roadmap/ORCHESTRATION-IDEAS §2
 - ✅ **Ask/reply RPC** — correlated request/response, ~10s park cap. `src/lib/askRegistry.ts` · roadmap/AGENTIC-ENHANCEMENTS §2a
 - ✅ **Task board** — a docked Kanban of cards that dispatch into panes; `loom card`. `src/stores/board.ts`, `BoardPanel.tsx` · roadmap/ORCHESTRATION-IDEAS §1
 - ✅ **Approval gate + bus-command audit timeline**. `src/stores/audit.ts`, `FleetApprovals.tsx` · roadmap/ORCHESTRATION-IDEAS §3

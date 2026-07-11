@@ -444,6 +444,32 @@ export function setPaneRole(paneId: PaneId, role: string) {
   setApp("workspaces", i, "panes", paneId, "role", trimmed || undefined);
 }
 
+/** The canonical role vocabulary the fleet roster leads with (ORCHESTRATION §2). Roles are
+ *  free-form on `PaneSpec`, but these four are the ones the wizard/agents assign by convention, so
+ *  the FleetPanel roster always shows them as a stable filter bar even at count 0. Any other
+ *  free-form role a pane carries is surfaced alongside them. */
+export const CANONICAL_ROLES = ["builder", "reviewer", "scout", "coordinator"] as const;
+
+/** One leaf pane of the active workspace, with its role, for the FleetPanel roster/filter. In
+ *  row-major (leafIds) order. Reactive: called inside a memo, it subscribes to the active
+ *  workspace's tree + pane specs, so tagging/focusing a pane re-renders the roster. */
+export interface RolePaneListing {
+  paneId: PaneId;
+  name: string;
+  role?: string;
+  focused: boolean;
+}
+export function activeRolePanes(): RolePaneListing[] {
+  const w = activeWorkspace();
+  if (!w) return [];
+  return leafIds(w.tree).map((id) => ({
+    paneId: id,
+    name: w.panes[id]?.title ?? `Pane ${id}`,
+    role: w.panes[id]?.role,
+    focused: w.focused === id,
+  }));
+}
+
 /** Resolve a role name to the panes that carry it — the reverse of `resolvePaneByName` for the
  *  `role:<name>` bus target. Prefers the active workspace's matches; falls back to matches across
  *  all workspaces. Case-insensitive. Returns [] if none. A role is a *group* target (a role can be

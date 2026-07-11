@@ -3258,6 +3258,56 @@ body,
   background: var(--well);
 }
 
+/* Role roster + filter (ORCHESTRATION §2) — a chip bar over a filtered pane list. */
+.fleet-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 4px 4px 8px;
+}
+.fleet-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 500 11px var(--font-ui);
+  color: var(--text-dim);
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+.fleet-role-chip:hover:not(:disabled) { color: var(--text-bright); border-color: var(--border-strong); background: var(--well); }
+.fleet-role-chip.active {
+  color: var(--accent-text, var(--text-bright));
+  border-color: var(--accent, var(--border-strong));
+  background: color-mix(in srgb, var(--accent, var(--text-bright)) 14%, transparent);
+}
+.fleet-role-chip.fleet-role-empty { opacity: 0.45; cursor: default; }
+.fleet-role-n {
+  font: 600 10px var(--font-mono);
+  color: var(--text-faint);
+}
+.fleet-role-chip.active .fleet-role-n { color: inherit; }
+.fleet-role-row { align-items: center; }
+.fleet-role-row.fleet-focused { background: color-mix(in srgb, var(--accent, var(--text-bright)) 8%, transparent); }
+.fleet-role-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.fleet-role-pane:hover .fleet-key { color: var(--accent-text, var(--text-bright)); }
+.fleet-role-none {
+  flex: 0 0 auto;
+  font: 500 11px var(--font-mono);
+  color: var(--text-faint);
+}
+
 /* Gated (held-for-approval) claim (§3) — a warm badge + a release button. */
 .fleet-row.fleet-gated .fleet-path { color: var(--danger); }
 .fleet-gate-badge {
