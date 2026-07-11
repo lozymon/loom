@@ -220,12 +220,17 @@ const wsIdxByPane = (paneId: PaneId) => app.workspaces.findIndex((w) => paneId i
  * root to one pane, or leaf→split on the next split — the old branch's `a`/`b`/`dir`/`ratio` keys
  * would linger and corrupt the node (a `kind:"leaf"` still carrying `a`/`b`). That silently broke
  * splitting once a workspace was down to a single pane. `reconcile` diffs and drops stale keys;
- * `structuredClone` first strips any store proxies the pure transforms carried over from `ws.tree`
+ * the clone first strips any store proxies the pure transforms carried over from `ws.tree`
  * (reconciling a structure that references the live store recurses forever). Trees are tiny, so the
  * clone is free. All full-tree writes go through here; scalar `ratio` tweaks (setRatio) do not.
+ *
+ * The clone is a JSON round-trip (`snapshotValue`), NOT `structuredClone`: `structuredClone` on
+ * Solid's store proxies throws in WebKitGTK (it worked under Node/jsdom, so the unit tests passed
+ * while the real app broke — every split silently no-op'd because this write threw). JSON clone is
+ * pure JS, identical everywhere, and already the codebase's tree-cloning idiom (presets, snapshots).
  */
 const setTree = (i: number, tree: LayoutNode) =>
-  setApp("workspaces", i, "tree", reconcile(structuredClone(tree)));
+  setApp("workspaces", i, "tree", reconcile(snapshotValue(tree)));
 
 // ---- Pane operations (resolve their owning workspace by paneId) ----------------------
 // The pure tree transforms these build on (replaceLeaf/removeLeaf/firstLeaf/leafIds) live in
