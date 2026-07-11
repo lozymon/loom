@@ -58,13 +58,29 @@ loom read Cleo            # last 50 lines
 loom read Cleo -n 200
 ```
 
-### `loom broadcast [--workspace W] [--no-enter] <text...>`
+### `loom broadcast [--workspace W] [--no-enter] [--dry-run] <text...>`
 Send the same text to every **live** pane in a workspace — the active one by default, or
-a named one with `--workspace`. Presses Enter unless `--no-enter`.
+a named one with `--workspace`. Presses Enter unless `--no-enter`. With `--dry-run` it prints
+which panes the fan-out **would** reach — flagging dead and 🔒 gated ones — and sends nothing.
 
 ```
 loom broadcast "run the tests"
 loom broadcast --workspace deploy "git pull"
+loom broadcast --dry-run "git reset --hard"   # preview the reach; no send
+```
+
+### `loom gate [pane] [--reason R] | [pane] --clear | --list`
+Hold a pane's **inbound bus input** (AGENTIC §4a): while a pane is gated, any `loom send` /
+`loom broadcast` to it needs a human OK before it lands — so a bad broadcast can't drive a
+sensitive pane (a prod-touching one, a live migration) unattended. Defaults to your own pane.
+Honored per **Settings → Safety → Honor per-pane input holds**. Gate state shows on the pane's
+title-bar chip (🔒) and in the Fleet panel's "Input gates" section.
+
+```
+loom gate Cleo --reason "touches prod"   # hold Cleo's input
+loom gate                                # gate my own pane
+loom gate Cleo --clear                   # release the gate
+loom gate --list                         # list gated panes
 ```
 
 ### `loom focus <pane>`

@@ -38,7 +38,7 @@ design decision; `roadmap/…§` for the backlog entry it came from). This is th
 
 ## Agent control bus (drive the fleet)
 - ✅ **Inter-pane control bus** — Rust unix-socket relay (pure forwarder), routing in TS. `src-tauri/src/control.rs`, `control_transport.rs`, `src/lib/paneControl.ts` · [ADR-0007](adr/0007-inter-pane-control-bus.md)
-- ✅ **`loom` CLI** — list / send / spawn / read / broadcast / focus / attention / status / card, from inside a pane. `src-tauri/src/cli.rs` · [reference/cli.md](reference/cli.md)
+- ✅ **`loom` CLI** — list / send / spawn / read / broadcast / focus / attention / status / role / card / gate, from inside a pane. `src-tauri/src/cli.rs` · [reference/cli.md](reference/cli.md)
 - ✅ **`loom mcp` server** — the control bus as model-native MCP tools (stdio JSON-RPC). `src-tauri/src/mcp.rs` · roadmap/IDEAS §C · [reference/agent-mcp.md](reference/agent-mcp.md)
 - ✅ **`loom hooks`** — prints Claude Code hook config to auto-push lifecycle→status. `cli.rs` · roadmap/IDEAS §B · [reference/agent-hooks.md](reference/agent-hooks.md)
 - ✅ **Broadcast (fan-out)** — one prompt to every pane / a saved group. `paneControl.ts`
@@ -67,6 +67,7 @@ design decision; `roadmap/…§` for the backlog entry it came from). This is th
 - ✅ **Fleet panel** — makes blackboard / claims / roles state visible. `src/components/FleetPanel.tsx` · roadmap/AGENTIC-ENHANCEMENTS §2e
 - ✅ **MCP parity for coordination tools** — the primitives above exposed as agent tools too. `mcp.rs` · roadmap/AGENTIC-ENHANCEMENTS §2d
 - ✅ **Git-aware guardrails** — confirm gate on destructive `loom broadcast`. `src/lib/guardrails.ts`, `paneControl.ts` · roadmap/AGENTIC-ENHANCEMENTS §4b
+- ✅ **Per-pane input gates + broadcast dry-run** — hold a pane's inbound bus input behind a human OK (`loom gate` / `gate_pane`); `loom broadcast --dry-run` previews the fan-out. `src/stores/inputHolds.ts`, `paneControl.ts`, `FleetPanel.tsx` · roadmap/AGENTIC-ENHANCEMENTS §4a
 
 ## Side panels & tools
 - ✅ **Interactive git panel** — stage / commit, still user-confirmed. `src/components/GitPanel.tsx`, `src-tauri/src/git.rs`, `src/lib/gitClient.ts` · [ADR-0010](adr/0010-interactive-git.md)
@@ -87,7 +88,6 @@ design decision; `roadmap/…§` for the backlog entry it came from). This is th
 - 🟡 **Cross-platform parity (Linux / macOS / Windows)** — Linux + macOS/Windows builds ship; region-capture parity (P3) and signing/docs (P5) open. · roadmap/CROSS_PLATFORM_PARITY
 
 ## Open (tracked in roadmap, not yet built)
-- 🟡 **Per-pane approval gating / dry-run** — roadmap/AGENTIC-ENHANCEMENTS §4a
 - 🟡 **De-Linux the capture error string** — roadmap/PRE_WINDOWS_CHECKLIST D10
 - 🟡 **Cross-OS region capture, code-signing/notarization** — roadmap/CROSS_PLATFORM_PARITY P3 / P5
 

@@ -14,6 +14,7 @@ import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type
 import { loadState, saveState } from "../lib/persist";
 import { countLive, writeToPanes } from "../lib/paneRegistry";
 import { forgetClaims, releaseClaimsBy } from "./claims";
+import { forgetGate, isGated, listGates, type HoldListing } from "./inputHolds";
 import { settings } from "./settings";
 
 /** The mutually-exclusive right-side docked panels (one slot, one open at a time). */
@@ -322,6 +323,7 @@ export function closePane(paneId: PaneId, opts?: { skipConfirm?: boolean }) {
   const spec = ws.panes[paneId];
   if (spec) recordClosed({ kind: "pane", title: spec.title, cwd: spec.cwd || ws.cwd, spec: snapshotValue(spec) });
   releasePaneClaims(paneId); // free any file claims (§2c) this pane held before it's gone
+  forgetGate(paneId); // drop any per-pane input gate (§4a) — it must not outlive its pane
 
   batch(() => {
     setApp("workspaces", i, "tree", next);
@@ -370,16 +372,31 @@ export interface PaneListing {
   workspace: string;
   focused: boolean;
   role?: string;
+  gated?: boolean;
 }
 
 export function listPanes(): PaneListing[] {
   const out: PaneListing[] = [];
   for (const w of app.workspaces) {
     for (const id of leafIds(w.tree)) {
-      out.push({ paneId: id, name: w.panes[id]?.title ?? `Pane ${id}`, workspace: w.name, focused: w.focused === id, role: w.panes[id]?.role });
+      out.push({ paneId: id, name: w.panes[id]?.title ?? `Pane ${id}`, workspace: w.name, focused: w.focused === id, role: w.panes[id]?.role, gated: isGated(id) || undefined });
     }
   }
   return out;
+}
+
+/** Every gated pane (§4a) with its display name resolved — the `gate.list` view. The store keeps
+ *  ids only (it doesn't know the layout); this joins them to pane titles + workspace for output. */
+export interface GateListing extends HoldListing {
+  name: string;
+  workspace: string;
+}
+export function listGatedPanes(): GateListing[] {
+  return listGates().map((g) => {
+    const i = wsIdxByPane(g.paneId);
+    const w = i >= 0 ? app.workspaces[i] : undefined;
+    return { ...g, name: w?.panes[g.paneId]?.title ?? `Pane ${g.paneId}`, workspace: w?.name ?? "" };
+  });
 }
 
 /**

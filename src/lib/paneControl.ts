@@ -12,6 +12,7 @@ import { isDestructiveCommand, sharedFolders } from "./guardrails";
 import {
   activeWorkspace,
   broadcastTargets,
+  listGatedPanes,
   listPanes,
   paneSpecById,
   resolvePaneByName,
@@ -24,6 +25,7 @@ import {
   workspaceByPaneName,
   type WorkspaceUI,
 } from "../stores/workspace";
+import { gatePane, isGated, releaseGate } from "../stores/inputHolds";
 import { noteSet, noteGet, noteList, noteDel, ensureNotesLoaded } from "../stores/blackboard";
 import { claimFile, holdClaim, releaseFile, listClaims } from "../stores/claims";
 import { addCard, cards, setCardStatus, ensureBoardLoaded, setDrain, drainState } from "../stores/board";
@@ -91,17 +93,23 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
           focused: p.focused,
           live: countLive([p.paneId]) > 0,
           role: p.role,
+          gated: p.gated,
         })),
       };
 
     case "send": {
       const r = resolveTargets(req.target);
       if ("error" in r) return { ok: false, error: r.error };
+      // Per-pane input gate (§4a): a gated target needs a human OK before input lands.
+      const gate = applyInputGates(r.paneIds, req.text ?? "");
+      if (gate.deliver.length === 0) {
+        return { ok: false, error: `"${req.target}" is gated — delivery declined by operator` };
+      }
       // Default to pressing Enter (\r, matching the broadcast bar); --no-enter suppresses it.
       const text = (req.text ?? "") + (req.enter === false ? "" : "\r");
-      const n = writeToPanes(r.paneIds, text);
+      const n = writeToPanes(gate.deliver, text);
       if (n === 0) return { ok: false, error: `target "${req.target}" has no live pane` };
-      return { ok: true, data: { count: n } };
+      return { ok: true, data: { count: n, skipped: gate.skipped || undefined } };
     }
 
     case "spawn": {
@@ -133,6 +141,15 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       if (!ws) return { ok: false, error: `no workspace named "${req.workspace}"` };
       const raw = req.text ?? "";
       const ids = broadcastTargets(ws);
+      // Dry-run (§4a): report which panes it *would* reach — name/live/gated — without sending.
+      if (req.dryRun) {
+        const targets = ids.map((id) => ({
+          name: paneSpecById(id)?.title ?? `Pane ${id}`,
+          live: countLive([id]) > 0,
+          gated: isGated(id),
+        }));
+        return { ok: true, data: { dryRun: true, workspace: ws.name, text: raw, targets } };
+      }
       // Git-aware guardrail (§4b): a destructive command fanning out to several panes runs N× on
       // (or races) whatever they share. Warn the operator first — louder when panes share a folder.
       if (settings.confirmDestructiveBroadcast && ids.length >= 2 && isDestructiveCommand(raw)) {
@@ -141,10 +158,27 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
           return { ok: false, error: "destructive broadcast declined by user" };
         }
       }
+      // Per-pane input gates (§4a): any gated pane in the fan-out needs a human OK; open panes
+      // still receive the broadcast regardless.
+      const gate = applyInputGates(ids, raw);
       const text = raw + (req.enter === false ? "" : "\r");
-      const n = writeToPanes(ids, text);
-      return { ok: true, data: { count: n } };
+      const n = writeToPanes(gate.deliver, text);
+      return { ok: true, data: { count: n, skipped: gate.skipped || undefined } };
     }
+
+    case "gate.set": {
+      const r = resolvePaneByName(req.target);
+      if ("error" in r) return { ok: false, error: r.error };
+      if (req.on) {
+        gatePane(r.paneId, req.target, req.reason);
+        return { ok: true, data: { name: req.target, gated: true } };
+      }
+      const dropped = releaseGate(r.paneId);
+      return { ok: true, data: { name: req.target, gated: false, cleared: dropped } };
+    }
+
+    case "gate.list":
+      return { ok: true, data: { entries: listGatedPanes() } };
 
     case "focus": {
       // A role target reveals its first matching pane (a role can be held by several).
@@ -460,6 +494,27 @@ function confirmExternalSpawn(command: string, cwd?: string): boolean {
   return window.confirm(
     `Another pane wants to open a new terminal and run:\n\n${command}${where}\n\nAllow it?`,
   );
+}
+
+/** Apply per-pane input gates (§4a) to a bus delivery. Open panes always pass; gated panes pass
+ *  only if the operator OKs them (one confirm for the whole set). With the honor-holds setting off,
+ *  gates are ignored entirely. Returns the ids to actually write to + how many gated panes were
+ *  dropped (skipped) on a decline. */
+function applyInputGates(ids: PaneId[], text: string): { deliver: PaneId[]; skipped: number } {
+  if (!settings.honorInputHolds) return { deliver: ids, skipped: 0 };
+  const gated = ids.filter((id) => isGated(id));
+  if (gated.length === 0) return { deliver: ids, skipped: 0 };
+  const names = gated.map((id) => paneSpecById(id)?.title ?? `Pane ${id}`);
+  if (confirmHeldPaneInput(names, text)) return { deliver: ids, skipped: 0 };
+  return { deliver: ids.filter((id) => !isGated(id)), skipped: gated.length };
+}
+
+/** Confirm before bus input reaches a gated pane (§4a). Names the gated pane(s) and shows the text
+ *  that would be typed — the operator OK the whole standing-hold enforces. */
+function confirmHeldPaneInput(names: string[], text: string): boolean {
+  const which = names.length === 1 ? `gated pane "${names[0]}"` : `${names.length} gated panes:\n${names.join(", ")}`;
+  const preview = text.trim() ? `\n\nIt would type:\n${text}` : "";
+  return window.confirm(`Bus input is held for ${which} (input gate).${preview}\n\nLet it through?`);
 }
 
 /** Confirm before a destructive command fans out to many panes (§4b guardrail). Names the shared

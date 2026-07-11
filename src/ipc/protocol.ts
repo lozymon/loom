@@ -121,7 +121,9 @@ export type ControlRequest =
   // pane output for product logic; nothing here drives the UI off the content.
   | { op: "read"; target: string; lines?: number }
   // Broadcast text to every live pane in a workspace (the active one, or one named explicitly).
-  | { op: "broadcast"; text: string; enter?: boolean; workspace?: string }
+  // `dryRun` reports which panes it *would* reach (name/live/gated) without sending anything — a
+  // preview before a fan-out (AGENTIC §4a).
+  | { op: "broadcast"; text: string; enter?: boolean; workspace?: string; dryRun?: boolean }
   // Reveal + focus a pane by name (switching to its workspace).
   | { op: "focus"; target: string }
   // Raise (or, with clear, drop) a pane's "needs you" attention border — a UI metadata flag,
@@ -157,6 +159,13 @@ export type ControlRequest =
   // Gate a path (docs/FEATURES.md): mark it *held* so an agent's `claim` on it blocks
   // until an operator `release`s it — a lightweight approval gate reusing the claim mechanism.
   | { op: "hold"; path: string; pane?: string; workspace?: string }
+  // ---- Per-pane input gate (AGENTIC §4a) ----
+  // A standing operator gate on a pane's inbound bus input: while gated, any `send`/`broadcast` to
+  // it requires a human OK before it lands (honored per Settings → Safety). Distinct from the
+  // destructive-broadcast confirm (§4b, any pane) and the claim `held` state (§3, a file path):
+  // this gates a *pane*, keyed by its id resolved from `target`. `gate.list` reports gated panes.
+  | { op: "gate.set"; target: string; on: boolean; reason?: string }
+  | { op: "gate.list" }
   // ---- Task board (docs/FEATURES.md) ----
   // Cards live in the project's `.loom/board.json` (keyed by the workspace's folder). Agents can
   // create/list/move them so a lead agent can build and hand out work, and a worker can close its
@@ -197,6 +206,8 @@ export interface PaneInfo {
   live: boolean;
   /** The pane's role (docs/FEATURES.md), or absent if unset. */
   role?: string;
+  /** True when the pane's inbound bus input is gated (AGENTIC §4a) — absent/false otherwise. */
+  gated?: boolean;
 }
 
 /** Uniform reply shape. `data` is op-specific (PaneInfo[] for list, {count}/{name}…). */

@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   activeWorkspace: vi.fn(),
   broadcastTargets: vi.fn(),
   listPanes: vi.fn(),
+  listGatedPanes: vi.fn(),
+  paneSpecById: vi.fn(),
   resolvePaneByName: vi.fn(),
   resolvePanesByRole: vi.fn(),
   revealPane: vi.fn(),
@@ -40,12 +42,15 @@ const h = vi.hoisted(() => ({
   claimFile: vi.fn(),
   releaseFile: vi.fn(),
   listClaims: vi.fn(),
+  gatePane: vi.fn(),
+  isGated: vi.fn((_id: number): boolean => false),
+  releaseGate: vi.fn(),
   createAsk: vi.fn(),
   awaitAsk: vi.fn(),
   replyAsk: vi.fn(),
   cancelAsk: vi.fn(),
   paneCwd: vi.fn((): Promise<string | null> => Promise.resolve(null)),
-  settings: { confirmExternalSpawn: false, confirmDestructiveBroadcast: false },
+  settings: { confirmExternalSpawn: false, confirmDestructiveBroadcast: false, honorInputHolds: false },
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: h.listen }));
@@ -55,6 +60,8 @@ vi.mock("../stores/workspace", () => ({
   activeWorkspace: h.activeWorkspace,
   broadcastTargets: h.broadcastTargets,
   listPanes: h.listPanes,
+  listGatedPanes: h.listGatedPanes,
+  paneSpecById: h.paneSpecById,
   resolvePaneByName: h.resolvePaneByName,
   resolvePanesByRole: h.resolvePanesByRole,
   revealPane: h.revealPane,
@@ -67,6 +74,7 @@ vi.mock("../stores/workspace", () => ({
 vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus }));
 vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel, ensureNotesLoaded: h.ensureNotesLoaded }));
 vi.mock("../stores/claims", () => ({ claimFile: h.claimFile, releaseFile: h.releaseFile, listClaims: h.listClaims }));
+vi.mock("../stores/inputHolds", () => ({ gatePane: h.gatePane, isGated: h.isGated, releaseGate: h.releaseGate }));
 vi.mock("./askRegistry", () => ({ createAsk: h.createAsk, awaitAsk: h.awaitAsk, replyAsk: h.replyAsk, cancelAsk: h.cancelAsk }));
 vi.mock("./notify", () => ({ notifyAttention: h.notifyAttention }));
 vi.mock("../stores/settings", () => ({ settings: h.settings }));
@@ -100,6 +108,11 @@ const {
   claimFile,
   releaseFile,
   listClaims,
+  listGatedPanes,
+  paneSpecById,
+  gatePane,
+  isGated,
+  releaseGate,
   createAsk,
   awaitAsk,
   replyAsk,
@@ -127,6 +140,8 @@ beforeEach(async () => {
   vi.clearAllMocks();
   settings.confirmExternalSpawn = false;
   settings.confirmDestructiveBroadcast = false;
+  settings.honorInputHolds = false;
+  isGated.mockReturnValue(false);
   vi.stubGlobal("window", { confirm: vi.fn(() => true) });
   listen.mockImplementation((_event: string, cb: typeof handler) => {
     handler = cb;
@@ -395,6 +410,112 @@ describe("broadcast", () => {
     await call({ op: "broadcast", text: "git pull" });
     expect(confirm).not.toHaveBeenCalled();
     expect(writeToPanes).toHaveBeenCalledWith([1, 2], "git pull\r");
+  });
+});
+
+// §4a per-pane input gate: hold a pane's inbound bus input behind a human OK.
+describe("gate", () => {
+  it("gates a pane (gate.set on) as the target", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 5 });
+    const res = await call({ op: "gate.set", target: "Cleo", on: true, reason: "prod" });
+    expect(gatePane).toHaveBeenCalledWith(5, "Cleo", "prod");
+    expect(res).toEqual({ ok: true, data: { name: "Cleo", gated: true } });
+  });
+
+  it("releases a gate (gate.set off)", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 5 });
+    releaseGate.mockReturnValue(true);
+    const res = await call({ op: "gate.set", target: "Cleo", on: false });
+    expect(releaseGate).toHaveBeenCalledWith(5);
+    expect(res).toEqual({ ok: true, data: { name: "Cleo", gated: false, cleared: true } });
+  });
+
+  it("errors on an unknown gate target", async () => {
+    resolvePaneByName.mockReturnValue({ error: 'no pane named "Ghost"' });
+    const res = await call({ op: "gate.set", target: "Ghost", on: true });
+    expect(gatePane).not.toHaveBeenCalled();
+    expect(res).toEqual({ ok: false, error: 'no pane named "Ghost"' });
+  });
+
+  it("gate.list returns the gated-pane roster", async () => {
+    const entries = [{ paneId: 5, name: "Cleo", workspace: "main", by: "op", at: 1 }];
+    listGatedPanes.mockReturnValue(entries);
+    const res = await call({ op: "gate.list" });
+    expect(res).toEqual({ ok: true, data: { entries } });
+  });
+
+  it("honors a gate on send: a declined confirm skips the gated pane", async () => {
+    settings.honorInputHolds = true;
+    resolvePaneByName.mockReturnValue({ paneId: 3 });
+    isGated.mockReturnValue(true);
+    paneSpecById.mockReturnValue({ title: "Cleo" });
+    vi.stubGlobal("window", { confirm: vi.fn(() => false) });
+    const res = await call({ op: "send", target: "Cleo", text: "deploy" });
+    expect(writeToPanes).not.toHaveBeenCalled();
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/gated — delivery declined/);
+  });
+
+  it("honors a gate on send: an OK lets the input through", async () => {
+    settings.honorInputHolds = true;
+    resolvePaneByName.mockReturnValue({ paneId: 3 });
+    isGated.mockReturnValue(true);
+    paneSpecById.mockReturnValue({ title: "Cleo" });
+    writeToPanes.mockReturnValue(1);
+    vi.stubGlobal("window", { confirm: vi.fn(() => true) });
+    const res = await call({ op: "send", target: "Cleo", text: "deploy" });
+    expect(writeToPanes).toHaveBeenCalledWith([3], "deploy\r");
+    expect(res.ok).toBe(true);
+  });
+
+  it("skips only the gated panes of a broadcast, still reaching the open ones", async () => {
+    settings.honorInputHolds = true;
+    activeWorkspace.mockReturnValue({ id: "w1" });
+    broadcastTargets.mockReturnValue([1, 2, 3]);
+    isGated.mockImplementation((id: number) => id === 2);
+    paneSpecById.mockReturnValue({ title: "Gated" });
+    writeToPanes.mockReturnValue(2);
+    vi.stubGlobal("window", { confirm: vi.fn(() => false) }); // decline the gated one
+    const res = await call({ op: "broadcast", text: "go" });
+    expect(writeToPanes).toHaveBeenCalledWith([1, 3], "go\r"); // pane 2 dropped
+    expect(res).toEqual({ ok: true, data: { count: 2, skipped: 1 } });
+  });
+
+  it("ignores gates entirely when honorInputHolds is off", async () => {
+    settings.honorInputHolds = false;
+    resolvePaneByName.mockReturnValue({ paneId: 3 });
+    isGated.mockReturnValue(true);
+    writeToPanes.mockReturnValue(1);
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("window", { confirm });
+    const res = await call({ op: "send", target: "Cleo", text: "x" });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(writeToPanes).toHaveBeenCalledWith([3], "x\r");
+    expect(res.ok).toBe(true);
+  });
+});
+
+describe("broadcast dry-run", () => {
+  it("previews the targeted panes without sending", async () => {
+    activeWorkspace.mockReturnValue({ id: "w1", name: "Home" });
+    broadcastTargets.mockReturnValue([1, 2]);
+    countLive.mockImplementation((ids: number[]) => (ids[0] === 1 ? 1 : 0));
+    isGated.mockImplementation((id: number) => id === 1);
+    paneSpecById.mockImplementation((id: number) => ({ title: id === 1 ? "Cleo" : "Faye" }));
+    const res = await call({ op: "broadcast", text: "go", dryRun: true });
+    expect(writeToPanes).not.toHaveBeenCalled();
+    expect(res).toEqual({
+      ok: true,
+      data: {
+        dryRun: true,
+        workspace: "Home",
+        text: "go",
+        targets: [
+          { name: "Cleo", live: true, gated: true },
+          { name: "Faye", live: false, gated: false },
+        ],
+      },
+    });
   });
 });
 

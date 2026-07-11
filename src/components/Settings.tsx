@@ -404,6 +404,11 @@ export default function Settings(props: { onClose: () => void }) {
                 checked={settings.confirmDestructiveBroadcast}
                 onToggle={() => setSetting("confirmDestructiveBroadcast", !settings.confirmDestructiveBroadcast)}
               />
+              <ToggleRow
+                label={<>Honor per-pane input holds <span class="muted">— require an OK before <code>loom send</code>/<code>broadcast</code> reaches a gated pane (<code>loom gate &lt;pane&gt;</code>)</span></>}
+                checked={settings.honorInputHolds}
+                onToggle={() => setSetting("honorInputHolds", !settings.honorInputHolds)}
+              />
             </div>
           </section>
 

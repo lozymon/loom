@@ -9,6 +9,9 @@
 //!   loom spawn --name Cleo --cwd /repo claude   # open a new pane running `claude`
 //!   loom read Cleo -n 100              # capture Cleo's last 100 scrollback lines
 //!   loom broadcast "run the tests"     # send to every live pane in the active workspace
+//!   loom broadcast --dry-run "…"       # preview which panes it would reach (incl. gated); no send
+//!   loom gate Cleo                     # hold Cleo's bus input — send/broadcast needs a human OK
+//!   loom gate Cleo --clear             # release the gate; `loom gate --list` shows gated panes
 //!   loom focus Cleo                    # switch to Cleo's workspace and focus it
 //!   loom attention                     # light this pane's "needs you" border (clears on focus)
 //!   loom attention Cleo --clear        # drop pane Cleo's attention border
@@ -59,6 +62,7 @@ pub fn is_command(cmd: &str) -> bool {
             | "release"
             | "claims"
             | "hold"
+            | "gate"
             | "ask"
             | "reply"
             | "hooks"
@@ -213,14 +217,17 @@ fn build_request(args: &[String]) -> Result<Value, String> {
         }
 
         "broadcast" => {
-            // loom broadcast [--workspace W] [--no-enter] <text...>   (no text → read stdin)
+            // loom broadcast [--workspace W] [--no-enter] [--dry-run] <text...>   (no text → stdin)
+            // --dry-run reports which panes it would reach (incl. gated ones) without sending.
             let mut enter = true;
+            let mut dry_run = false;
             let mut workspace: Option<String> = None;
             let mut positional: Vec<String> = Vec::new();
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
                     "--no-enter" => enter = false,
+                    "--dry-run" | "-n" => dry_run = true,
                     "--workspace" | "-w" => {
                         i += 1;
                         workspace = Some(args.get(i).cloned().ok_or("--workspace needs a value")?);
@@ -229,12 +236,19 @@ fn build_request(args: &[String]) -> Result<Value, String> {
                 }
                 i += 1;
             }
-            let text = if positional.is_empty() {
-                read_stdin()?
-            } else {
+            // A dry run needs no text (an empty preview still shows the reach), so don't block on
+            // stdin for it; a real broadcast reads stdin when no text is given.
+            let text = if !positional.is_empty() {
                 positional.join(" ")
+            } else if dry_run {
+                String::new()
+            } else {
+                read_stdin()?
             };
             let mut obj = json!({ "op": "broadcast", "text": text, "enter": enter });
+            if dry_run {
+                obj["dryRun"] = json!(true);
+            }
             if let Some(w) = workspace {
                 obj["workspace"] = json!(w);
             }
@@ -576,6 +590,49 @@ fn build_request(args: &[String]) -> Result<Value, String> {
             Ok(obj)
         }
 
+        "gate" => {
+            // loom gate [pane] [--reason R]   — hold this (or a named) pane's bus input (§4a)
+            // loom gate [pane] --clear        — release the gate
+            // loom gate --list                — list gated panes
+            // No pane → the calling pane ($LOOM_PANE), so an agent can gate itself.
+            let mut clear = false;
+            let mut list = false;
+            let mut reason: Option<String> = None;
+            let mut positional: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--clear" => clear = true,
+                    "--list" | "-l" => list = true,
+                    "--reason" | "-r" => {
+                        i += 1;
+                        reason = Some(args.get(i).ok_or("--reason needs text")?.clone());
+                    }
+                    "--" => {
+                        positional.extend_from_slice(&args[i + 1..]);
+                        break;
+                    }
+                    _ => positional.push(args[i].clone()),
+                }
+                i += 1;
+            }
+            if list {
+                return Ok(json!({ "op": "gate.list" }));
+            }
+            let target = if positional.is_empty() {
+                env::var("LOOM_PANE").map_err(|_| {
+                    "no pane given and LOOM_PANE not set — name a pane: loom gate <pane>".to_string()
+                })?
+            } else {
+                positional.remove(0)
+            };
+            let mut obj = json!({ "op": "gate.set", "target": target, "on": !clear });
+            if let Some(r) = reason {
+                obj["reason"] = json!(r);
+            }
+            Ok(obj)
+        }
+
         "reply" => {
             // loom reply <id> <answer...>   — answer an ask you were sent (§2a).
             // The id comes from the `[loom ask #N …]` prompt that was typed into this pane.
@@ -594,7 +651,7 @@ fn build_request(args: &[String]) -> Result<Value, String> {
         }
 
         other => Err(format!(
-            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note, claim, release, claims, ask, reply)"
+            "unknown command '{other}' (try: list, send, spawn, read, broadcast, focus, attention, status, note, claim, release, claims, gate, ask, reply)"
         )),
     }
 }
@@ -625,6 +682,7 @@ fn handle_response(op: &str, resp: &Value) {
                 .and_then(Value::as_u64)
                 .unwrap_or(0);
             println!("sent to {n} pane{}", if n == 1 { "" } else { "s" });
+            print_skipped(data);
         }
         "spawn" => {
             let name = data
@@ -641,12 +699,22 @@ fn handle_response(op: &str, resp: &Value) {
             println!("{text}");
         }
         "broadcast" => {
-            let n = data
-                .and_then(|d| d.get("count"))
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            println!("sent to {n} pane{}", if n == 1 { "" } else { "s" });
+            // A dry run carries a `targets` preview instead of a delivery count.
+            if let Some(targets) = data
+                .and_then(|d| d.get("targets"))
+                .and_then(Value::as_array)
+            {
+                print_broadcast_dry_run(data, targets);
+            } else {
+                let n = data
+                    .and_then(|d| d.get("count"))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                println!("sent to {n} pane{}", if n == 1 { "" } else { "s" });
+                print_skipped(data);
+            }
         }
+        "gate" => print_gate(data),
         "focus" => {
             let name = data
                 .and_then(|d| d.get("name"))
@@ -844,6 +912,90 @@ fn print_claims(data: Option<&Value>) {
         } else {
             println!("{path:<32} (locked by {by})");
         }
+    }
+}
+
+/// Note how many gated panes a send/broadcast skipped (operator declined the gate, §4a).
+fn print_skipped(data: Option<&Value>) {
+    let skipped = data
+        .and_then(|d| d.get("skipped"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if skipped > 0 {
+        println!(
+            "(skipped {skipped} gated pane{})",
+            if skipped == 1 { "" } else { "s" }
+        );
+    }
+}
+
+/// Pretty-print a `loom gate` result: a set/clear on one pane, or the `--list` roster.
+fn print_gate(data: Option<&Value>) {
+    if let Some(arr) = data
+        .and_then(|d| d.get("entries"))
+        .and_then(Value::as_array)
+    {
+        if arr.is_empty() {
+            println!("(no gated panes)");
+            return;
+        }
+        for e in arr {
+            let name = e.get("name").and_then(Value::as_str).unwrap_or("?");
+            let by = e.get("by").and_then(Value::as_str).unwrap_or("");
+            let reason = e.get("reason").and_then(Value::as_str).unwrap_or("");
+            if reason.is_empty() {
+                println!("🔒 {name:<16} (held by {by})");
+            } else {
+                println!("🔒 {name:<16} (held by {by}) — {reason}");
+            }
+        }
+        return;
+    }
+    let name = data
+        .and_then(|d| d.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("?");
+    let gated = data
+        .and_then(|d| d.get("gated"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if gated {
+        println!(
+            "gated '{name}' — bus input now needs an OK (loom gate {name} --clear to release)"
+        );
+    } else {
+        println!("released gate on '{name}'");
+    }
+}
+
+/// Pretty-print a `loom broadcast --dry-run` preview: the panes the fan-out would reach, marking
+/// dead and gated ones, then the text it would type.
+fn print_broadcast_dry_run(data: Option<&Value>, targets: &[Value]) {
+    let n = targets.len();
+    println!(
+        "dry run — broadcast would reach {n} pane{}:",
+        if n == 1 { "" } else { "s" }
+    );
+    for t in targets {
+        let name = t.get("name").and_then(Value::as_str).unwrap_or("?");
+        let live = t.get("live").and_then(Value::as_bool).unwrap_or(false);
+        let gated = t.get("gated").and_then(Value::as_bool).unwrap_or(false);
+        let status = if !live {
+            "dead"
+        } else if gated {
+            "gated (needs OK)"
+        } else {
+            "live"
+        };
+        let marker = if gated { "🔒" } else { "  " };
+        println!("{marker} {name:<16} {status}");
+    }
+    let text = data
+        .and_then(|d| d.get("text"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !text.is_empty() {
+        println!("text: {text}");
     }
 }
 
@@ -1254,6 +1406,8 @@ fn usage() {
         \x20 loom status [pane] <text...> | [pane] --clear\n\
         \x20 loom note set <key> <value...> | get <key> | list | del <key>  [--workspace W]\n\
         \x20 loom claim <path> | release <path> [--force] | claims  [--workspace W]\n\
+        \x20 loom gate [pane] [--reason R] | [pane] --clear | --list\n\
+        \x20 loom broadcast --dry-run [text...]   (preview the fan-out; no send)\n\
         \x20 loom ask <pane> <question...> [--timeout S]\n\
         \x20 loom reply <id> <answer...>\n\
         \x20 loom hooks [--print] | --install [--user|--project]"
