@@ -57,6 +57,7 @@ export async function detachPaneToWindow(id: PaneId, handle: PtyHandle, title: s
     isLive: () => true,
     cwd: () => cwdPty(handle),
     read: () => "",
+    handle: () => handle,
   });
   const label = `pane-${id}`;
   const url = `index.html?detach=${id}&handle=${handle}&title=${encodeURIComponent(title)}`;
@@ -86,6 +87,20 @@ export async function detachPaneToWindow(id: PaneId, handle: PtyHandle, title: s
  *  pane was never detached (e.g. a duplicate destroyed-event). */
 export function redock(id: PaneId) {
   if (detached[id] && !detached[id].redocking) setDetached(id, "redocking", true);
+}
+
+/**
+ * Preserve a live pane's PTY across a *cross-workspace move*. A move takes the pane's PaneId out of
+ * one workspace's render layer and into another's, so its <Terminal> is disposed and re-mounted —
+ * which would ordinarily kill the child (Terminal's onCleanup) and respawn it. Stashing the live
+ * handle here reuses the tear-off/redock path *in place*: `redocking:true` means no placeholder is
+ * shown, the source Terminal's onCleanup sees a pending handoff and skips the kill, and the target
+ * Terminal's `start()` rebinds to the same PTY via `retargetPty` (then calls `forgetDetached`). The
+ * process — and any running agent — survives; only the on-screen scrollback is re-seeded (from the
+ * source's stash, if any). Must be called *before* the store mutation that triggers the remount.
+ */
+export function preservePtyForMove(id: PaneId, handle: PtyHandle) {
+  setDetached(id, { handle, redocking: true });
 }
 
 /** Bring a torn-off pane home from the main grid: close its window (whose destroyed handler

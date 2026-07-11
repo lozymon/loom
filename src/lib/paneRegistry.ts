@@ -6,7 +6,7 @@
 // broadcast bar can reach every live pane without prop-drilling handles down the layout.
 // Plain module state (not a Solid store) — membership is imperative, not reactive.
 
-import type { PaneId } from "../ipc/protocol";
+import type { PaneId, PtyHandle } from "../ipc/protocol";
 
 export interface PaneEntry {
   /** Write raw text into the pane's PTY. No-op if the child has exited. */
@@ -17,6 +17,10 @@ export interface PaneEntry {
   cwd: () => Promise<string | null>;
   /** The last `lines` rows of the pane's scrollback as plain text (`loom read`). */
   read: (lines: number) => string;
+  /** The pane's live PTY handle, or null before first spawn / after the child exits. Read only to
+   *  hand a running PTY across a cross-workspace move (the pane's Terminal remounts, so the handle
+   *  must be stashed for the new mount to rebind instead of respawn). See stores/workspace move ops. */
+  handle: () => PtyHandle | null;
 }
 
 const registry = new Map<PaneId, PaneEntry>();
@@ -49,6 +53,12 @@ export function paneCwd(id: PaneId): Promise<string | null> {
 export function readPane(id: PaneId, lines: number): string | null {
   const entry = registry.get(id);
   return entry ? entry.read(lines) : null;
+}
+
+/** The live PTY handle of pane `id`, or null if it isn't registered / has no live child. Used by the
+ *  cross-workspace move to hand the running PTY across the pane's unavoidable Terminal remount. */
+export function paneHandle(id: PaneId): PtyHandle | null {
+  return registry.get(id)?.handle() ?? null;
 }
 
 /** Write `data` to every live pane in `ids`; returns how many actually received it. */

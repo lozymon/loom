@@ -12,7 +12,8 @@ import type { LayoutNode, PaneId, PaneSpec, Workspace } from "../ipc/protocol";
 import { allocName, buildBalancedTree } from "../lib/grid";
 import { firstLeaf, leafIds, neighbor, removeLeaf, replaceLeaf, swapLeaves, type Dir, type Path } from "../lib/layout";
 import { loadState, saveState } from "../lib/persist";
-import { countLive, writeToPanes } from "../lib/paneRegistry";
+import { countLive, paneHandle, writeToPanes } from "../lib/paneRegistry";
+import { isDetachedPlaceholder, preservePtyForMove } from "../lib/detach";
 import { forgetClaims, releaseClaimsBy } from "./claims";
 import { forgetGate, isGated, listGates, type HoldListing } from "./inputHolds";
 import { settings } from "./settings";
@@ -368,6 +369,186 @@ export function swapPanes(a: PaneId, b: PaneId) {
   const i = wsIdxByPane(a);
   if (i < 0 || !(b in app.workspaces[i].panes)) return;
   setTree(i, swapLeaves(app.workspaces[i].tree, a, b));
+}
+
+// ---- Move panes across / within workspaces (docs/roadmap/plans/01-move-panes.md) -----
+// A pane can leave its workspace for another (existing or new) without killing its process: the
+// PaneId (→ Session, role, sessionId, gate) is preserved and, for a *cross-workspace* move, the
+// live PTY is handed across the pane's unavoidable Terminal remount (preservePtyForMove; the target
+// rebinds instead of respawning). Same-workspace repositioning stays inside one render layer, so it
+// never remounts. All routing/geometry lives here in TS — no Rust, reusing the existing tree ops.
+
+/** Which side of a target pane a moved pane lands on (drop quadrant / beside-op). Row split for
+ *  left/right, column split for up/down; the moved leaf takes child `a` for left/up, `b` otherwise. */
+export type MoveSide = "left" | "right" | "up" | "down";
+
+/** Build the split that inserts `moved` beside `existing` on `side`. */
+function sideSplit(side: MoveSide, existing: LayoutNode, moved: LayoutNode): LayoutNode {
+  const dir = side === "left" || side === "right" ? "row" : "col";
+  const movedFirst = side === "left" || side === "up";
+  return { kind: "split", dir, ratio: 0.5, a: movedFirst ? moved : existing, b: movedFirst ? existing : moved };
+}
+
+/** Can this pane be moved right now? False only while it's torn off into its own window (re-dock
+ *  first). Surfaces (menu/palette/DnD) call this to disable/omit the Move actions (decision 3). */
+export function canMovePane(paneId: PaneId): boolean {
+  return !isDetachedPlaceholder(paneId);
+}
+
+/** Hand a live pane's PTY across the cross-workspace remount so the process survives (see
+ *  preservePtyForMove). No-op for a dead/unregistered pane — the target then respawns from its spec.
+ *  Must run *before* any store mutation that removes the pane from its source workspace. */
+function beginPtyHandoff(paneId: PaneId) {
+  const handle = paneHandle(paneId);
+  if (handle !== null) preservePtyForMove(paneId, handle);
+}
+
+/**
+ * Detach a pane from its source workspace: release its file claims (by its *original* title, still
+ * valid here), remove its leaf, and either splice out the now-empty workspace or re-point the
+ * source's focus/zoom. Returns a frozen copy of its spec (so the caller inserts *the same* pane —
+ * PaneId, command, cwd, sessionId, role all preserved) plus whether the source emptied. Gates are
+ * PaneId-keyed, so they travel for free — we deliberately do NOT forgetGate here (that's close-only).
+ * The shared source-side of every cross-workspace move. Returns null if the pane can't be moved.
+ */
+function detachPaneFromSource(paneId: PaneId): { spec: PaneSpec; sourceEmptied: boolean } | null {
+  if (!canMovePane(paneId)) return null;
+  const i = wsIdxByPane(paneId);
+  if (i < 0) return null;
+  const ws = app.workspaces[i];
+  const spec = snapshotValue(ws.panes[paneId]);
+  releaseClaimsBy(ws.id, spec.title); // by the original title — the pane still owns them here
+  const without = removeLeaf(ws.tree, paneId);
+  if (without === null) {
+    // Was the source's last pane → auto-close the emptied workspace (decision 1): a lightweight
+    // removal, no confirm and no reopen-history (no process dies, nothing is left to reopen). The
+    // caller re-points activeId if the source was the active view (decision 2).
+    setApp("workspaces", app.workspaces.filter((w) => w.id !== ws.id));
+    return { spec, sourceEmptied: true };
+  }
+  batch(() => {
+    setTree(i, without);
+    setApp("workspaces", i, "panes", paneId, undefined as unknown as PaneSpec);
+    if (ws.focused === paneId) setApp("workspaces", i, "focused", firstLeaf(without));
+    if (ws.zoomed === paneId) setApp("workspaces", i, "zoomed", null);
+  });
+  return { spec, sourceEmptied: false };
+}
+
+/** Insert an already-detached pane's `spec` into workspace at index `b`, splitting `beside` on
+ *  `side` (default: beside the target's focused leaf, on the right — the spawnPane convention).
+ *  Renames on title collision so bus name-resolution stays unambiguous (decision 7). Focuses the
+ *  arrival and clears zoom so it's ready when the user switches there (decision 2). */
+function insertPaneInto(b: number, paneId: PaneId, spec: PaneSpec, beside: PaneId, side: MoveSide) {
+  const target = app.workspaces[b];
+  const taken = Object.values(target.panes).map((p) => p.title);
+  if (taken.includes(spec.title)) spec.title = allocName(taken);
+  const newTree = replaceLeaf(target.tree, beside, (leaf) => sideSplit(side, leaf, { kind: "leaf", paneId }));
+  batch(() => {
+    setApp("workspaces", b, "panes", paneId, spec);
+    setTree(b, newTree);
+    setApp("workspaces", b, "focused", paneId);
+    setApp("workspaces", b, "zoomed", null);
+  });
+}
+
+/**
+ * Move `paneId` to an existing workspace `targetWsId`, beside that workspace's focused pane. The
+ * process survives (the PTY is handed across the remount); the view stays put unless the source
+ * auto-closed (then it follows to the target — decision 2).
+ */
+export function movePaneToWorkspace(paneId: PaneId, targetWsId: string) {
+  const a = wsIdxByPane(paneId);
+  const b0 = wsIdxById(targetWsId);
+  if (a < 0 || b0 < 0 || a === b0 || !canMovePane(paneId)) return;
+  const sourceWasActive = app.workspaces[a].id === app.activeId;
+  beginPtyHandoff(paneId);
+  const det = detachPaneFromSource(paneId);
+  if (!det) return;
+  // Re-resolve the target — detaching may have spliced the (emptied) source out, shifting indices.
+  const b = wsIdxById(targetWsId);
+  if (b < 0) return;
+  const target = app.workspaces[b];
+  insertPaneInto(b, paneId, det.spec, target.focused ?? firstLeaf(target.tree), "right");
+  if (det.sourceEmptied && sourceWasActive) setApp("activeId", targetWsId);
+}
+
+/**
+ * Move `paneId` into a brand-new workspace of its own (the pane becomes the root leaf). Built
+ * directly (not via buildWorkspace, which would allocate a fresh pane) so the moved pane — and its
+ * live PTY — carries over intact.
+ */
+export function movePaneToNewWorkspace(paneId: PaneId, name?: string) {
+  const a = wsIdxByPane(paneId);
+  if (a < 0 || !canMovePane(paneId)) return;
+  const src = app.workspaces[a];
+  const sourceWasActive = src.id === app.activeId;
+  const spec = snapshotValue(src.panes[paneId]);
+  const sourceCwd = src.cwd;
+  beginPtyHandoff(paneId); // set the handoff before any mount/unmount below
+  const newWs: WorkspaceUI = {
+    id: nextWsId(),
+    name: name?.trim() || spec.title,
+    cwd: spec.cwd || sourceCwd,
+    tree: { kind: "leaf", paneId },
+    panes: { [paneId]: spec },
+    focused: paneId,
+    zoomed: null,
+    panel: freshPanel(),
+  };
+  batch(() => {
+    setApp("workspaces", app.workspaces.length, newWs);
+    const det = detachPaneFromSource(paneId);
+    if (det?.sourceEmptied && sourceWasActive) setApp("activeId", newWs.id);
+  });
+}
+
+/**
+ * Move `paneId` to sit beside `targetPaneId` on `side`. Within one workspace this is a pure tree
+ * reposition (no panes/claims/focus-workspace change, no remount — mirrors swapPanes' single-tree
+ * scope); across workspaces it's a full move (claims released, PTY handed across, rename on collision).
+ */
+export function movePaneBeside(paneId: PaneId, targetPaneId: PaneId, side: MoveSide) {
+  if (paneId === targetPaneId || !canMovePane(paneId)) return;
+  const a = wsIdxByPane(paneId);
+  const b = wsIdxByPane(targetPaneId);
+  if (a < 0 || b < 0) return;
+  if (a === b) {
+    // Same workspace: reposition within the one tree. panes/claims/focus untouched; keys unchanged
+    // → the render layer isn't remounted.
+    const ws = app.workspaces[a];
+    const without = removeLeaf(ws.tree, paneId);
+    if (without === null) return; // both panes present ⇒ ≥2 leaves ⇒ never null; defensive
+    const newTree = replaceLeaf(without, targetPaneId, (leaf) => sideSplit(side, leaf, { kind: "leaf", paneId }));
+    batch(() => {
+      setTree(a, newTree);
+      setApp("workspaces", a, "focused", paneId);
+    });
+    return;
+  }
+  const sourceWasActive = app.workspaces[a].id === app.activeId;
+  const targetWsId = app.workspaces[b].id;
+  beginPtyHandoff(paneId);
+  const det = detachPaneFromSource(paneId);
+  if (!det) return;
+  const b2 = wsIdxById(targetWsId); // re-resolve — source may have been spliced out
+  if (b2 < 0) return;
+  insertPaneInto(b2, paneId, det.spec, targetPaneId, side);
+  if (det.sourceEmptied && sourceWasActive) setApp("activeId", targetWsId);
+}
+
+/**
+ * Resolve a drag-drop of pane `src` onto pane `target`: within a workspace it's a positional swap
+ * (the established grid gesture); across workspaces it's a move beside the target. `src === target`
+ * and unknown panes are no-ops.
+ */
+export function movePaneOnDrop(src: PaneId, target: PaneId) {
+  if (src === target) return;
+  const a = wsIdxByPane(src);
+  const b = wsIdxByPane(target);
+  if (a < 0 || b < 0) return;
+  if (a === b) swapPanes(src, target);
+  else movePaneBeside(src, target, "right");
 }
 
 export function setRatio(wsId: string, path: Path, ratio: number) {
