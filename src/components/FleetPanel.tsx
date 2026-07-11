@@ -8,7 +8,7 @@
 // pane updates this live. Scoped to the active workspace by id; switching workspaces re-scopes it.
 
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { activeWorkspace, listGatedPanes } from "../stores/workspace";
+import { activeWorkspace, listGatedPanes, focusPane, activeRolePanes, CANONICAL_ROLES } from "../stores/workspace";
 import { board, noteList, ensureNotesLoaded } from "../stores/blackboard";
 import { claims, listClaims, releaseFile } from "../stores/claims";
 import { holds, releaseGate } from "../stores/inputHolds";
@@ -41,6 +41,39 @@ export default function FleetPanel(props: { onClose: () => void }) {
   });
   // Load the project's persisted notes when the folder changes (idempotent; "" = in-memory only).
   createEffect(() => { void ensureNotesLoaded(dir()); });
+
+  // ---- Role roster + filter (ORCHESTRATION §2). Groups the active workspace's panes by their
+  // persisted `role` field (reactive off activeRolePanes), leads with the canonical vocabulary as a
+  // stable filter bar, and lets the operator narrow the pane list to one role. `roleFilter`: null =
+  // All; "" = unassigned (role-less); otherwise a lower-cased role key.
+  const [roleFilter, setRoleFilter] = createSignal<string | null>(null);
+  const rolePanes = createMemo(() => activeRolePanes());
+  const roster = createMemo(() => {
+    const counts = new Map<string, { display: string; count: number }>();
+    let unassigned = 0;
+    for (const p of rolePanes()) {
+      const raw = p.role?.trim();
+      if (!raw) { unassigned++; continue; }
+      const key = raw.toLowerCase();
+      const e = counts.get(key);
+      if (e) e.count++;
+      else counts.set(key, { display: raw, count: 1 });
+    }
+    const groups: { key: string; label: string; count: number }[] =
+      CANONICAL_ROLES.map((c) => ({ key: c, label: c, count: counts.get(c)?.count ?? 0 }));
+    for (const [key, { display, count }] of counts) {
+      if (!(CANONICAL_ROLES as readonly string[]).includes(key)) groups.push({ key, label: display, count });
+    }
+    return { groups, unassigned };
+  });
+  // Panes shown under the roster, narrowed to the active filter.
+  const filteredPanes = createMemo(() => {
+    const f = roleFilter();
+    const panes = rolePanes();
+    if (f === null) return panes;
+    if (f === "") return panes.filter((p) => !p.role?.trim());
+    return panes.filter((p) => p.role?.trim().toLowerCase() === f);
+  });
 
   // ---- Usage HUD (AGENTIC §1c): per-pane Claude token spend + estimated cost, read on demand
   // from Claude's on-disk transcripts (lib/claudeUsage.ts). Not reactive/polled — it's file I/O, so
@@ -121,6 +154,64 @@ export default function FleetPanel(props: { onClose: () => void }) {
       </header>
 
       <div class="fleet-body">
+        <section class="fleet-section">
+          <div class="fleet-section-head">
+            <span class="fleet-section-title">Roles</span>
+            <span class="fleet-count">{rolePanes().length}</span>
+          </div>
+          <div class="fleet-roster">
+            <button
+              class="fleet-role-chip"
+              classList={{ active: roleFilter() === null }}
+              onClick={() => setRoleFilter(null)}
+            >
+              All <span class="fleet-role-n">{rolePanes().length}</span>
+            </button>
+            <For each={roster().groups}>
+              {(g) => (
+                <button
+                  class="fleet-role-chip"
+                  classList={{ active: roleFilter() === g.key, "fleet-role-empty": g.count === 0 }}
+                  disabled={g.count === 0}
+                  title={g.count === 0 ? `No ${g.label} panes` : `Show ${g.count} ${g.label} pane${g.count === 1 ? "" : "s"}`}
+                  onClick={() => setRoleFilter(roleFilter() === g.key ? null : g.key)}
+                >
+                  {g.label} <span class="fleet-role-n">{g.count}</span>
+                </button>
+              )}
+            </For>
+            <Show when={roster().unassigned > 0}>
+              <button
+                class="fleet-role-chip"
+                classList={{ active: roleFilter() === "" }}
+                title="Panes with no role assigned"
+                onClick={() => setRoleFilter(roleFilter() === "" ? null : "")}
+              >
+                unassigned <span class="fleet-role-n">{roster().unassigned}</span>
+              </button>
+            </Show>
+          </div>
+          <Show
+            when={filteredPanes().length > 0}
+            fallback={<div class="fleet-empty">No panes here. Tag one with <code>loom role &lt;pane&gt; &lt;role&gt;</code>.</div>}
+          >
+            <ul class="fleet-list">
+              <For each={filteredPanes()}>
+                {(p) => (
+                  <li class="fleet-row fleet-role-row" classList={{ "fleet-focused": p.focused }}>
+                    <button class="fleet-role-pane" title="Focus this pane" onClick={() => focusPane(p.paneId)}>
+                      <span class="fleet-key">{p.name}</span>
+                    </button>
+                    <Show when={p.role} fallback={<span class="fleet-role-none" title="No role assigned">—</span>}>
+                      {(r) => <span class="fleet-by" title={`Role: ${r()} — address it on the bus as role:${r()}`}>{r()}</span>}
+                    </Show>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </section>
+
         <section class="fleet-section">
           <div class="fleet-section-head">
             <span class="fleet-section-title">Blackboard</span>

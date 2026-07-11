@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { unwrap } from "solid-js/store";
 import { createRoot } from "solid-js";
 import { computeLayout } from "../lib/layout";
-import { activeWorkspace, createWorkspace, splitPane, closePane, switchWorkspace } from "./workspace";
+import { activeWorkspace, createWorkspace, splitPane, closePane, switchWorkspace, setPaneRole, activeRolePanes } from "./workspace";
 import type { LayoutNode } from "../ipc/protocol";
 
 /** Leaf pane-ids of the active workspace, in layout order (reads the real store tree). */
@@ -83,6 +83,42 @@ describe("workspace store: layout-tree writes stay clean across close/split", ()
         expect(leaves()).toHaveLength(3);
         assertClean(unwrap(activeWorkspace()!.tree));
       }
+    });
+  });
+});
+
+// Backs the FleetPanel role roster/filter (ORCHESTRATION §2): activeRolePanes is the reactive data
+// source the panel groups by role, so it must reflect setPaneRole writes in layout order.
+describe("workspace store: activeRolePanes reflects per-pane roles", () => {
+  beforeEach(() => {
+    createRoot(() => {
+      const id = createWorkspace({ name: `r-${Math.random()}`, cwd: "", paneCount: 3 });
+      switchWorkspace(id);
+    });
+  });
+
+  it("lists every leaf pane in layout order with its role (undefined when unset)", () => {
+    createRoot(() => {
+      const ids = leaves();
+      setPaneRole(ids[0], "builder");
+      setPaneRole(ids[2], "Reviewer");
+
+      const roster = activeRolePanes();
+      expect(roster.map((p) => p.paneId)).toEqual(ids);
+      expect(roster.map((p) => p.role)).toEqual(["builder", undefined, "Reviewer"]);
+      // Names always resolve; focus flag tracks the active workspace's focused pane.
+      expect(roster.every((p) => typeof p.name === "string")).toBe(true);
+      expect(roster.filter((p) => p.focused).length).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it("clears a role back to undefined when set to blank (roster drops it to unassigned)", () => {
+    createRoot(() => {
+      const ids = leaves();
+      setPaneRole(ids[1], "scout");
+      expect(activeRolePanes()[1].role).toBe("scout");
+      setPaneRole(ids[1], "  ");
+      expect(activeRolePanes()[1].role).toBeUndefined();
     });
   });
 });
