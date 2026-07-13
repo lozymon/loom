@@ -6,12 +6,12 @@ questions. Flesh these out in place; promote to an ADR when a design fork needs 
 
 | # | Plan | Effort | Rust | ADR | Notes |
 |---|------|--------|------|-----|-------|
-| 01 | [Move / reorder panes](01-move-panes.md) | ~1 day | none | no | Pure TS — PTYs are global by `PaneId`. Quick win. |
+| 01 | [Move / reorder panes](01-move-panes.md) | ~1 day | none | no | ✅ **Shipped v1.11.0** (#52) — pure TS; the live PTY is handed across the remount so the process survives. |
 | 04 | [New-workspace form → full-space](04-new-workspace-form.md) | ~1–2 days | none | no | Kill the modal; de-densify; visual pass. |
 | 03 | [Website + docs on VPS](03-website-docs.md) | ~2–3 days | none | no | Astro+Starlight (rec.), rsync→VPS. Parallelizable. |
 | 02 | [Mobile remote (VPS relay)](02-mobile-remote.md) | weeks | yes | **required** | Flagship. Write the ADR first. |
 
-**Suggested order:** 01 → 04 → 03 (can run in parallel) → 02.
+**Suggested order:** ~~01~~ (shipped) → 04 → 03 (can run in parallel) → 02.
 
 Shared thread: plans 03 and 02 both live on the user's **VPS** — coordinate the domain/subdomain layout
 and reuse one nginx + Let's Encrypt setup across the docs site and the mobile relay.

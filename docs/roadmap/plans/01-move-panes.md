@@ -1,6 +1,6 @@
 # Plan 01 — Move / reorder panes across and within workspaces
 
-**Status:** planning (hardened 2026-07-11) · **Effort:** ~1 day · **Rust:** none · **ADR:** not needed
+**Status:** ✅ shipped v1.11.0 (2026-07-13, #52) · **Effort:** ~1 day · **Rust:** none · **ADR:** not needed
 **Decisions locked:** expose via **all three** surfaces — drag-and-drop, title-bar menu, and command palette.
 
 ## Goal
