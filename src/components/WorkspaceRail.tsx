@@ -5,7 +5,7 @@
 
 import { createSignal, For, Show } from "solid-js";
 import { MOD_NAMESPACE } from "../lib/keybindings";
-import { appState, paneCount, switchWorkspace, closeWorkspace, renameWorkspace, duplicateWorkspace } from "../stores/workspace";
+import { appState, paneCount, switchWorkspace, closeWorkspace, renameWorkspace, duplicateWorkspace, canMovePane, movePaneToWorkspace, movePaneToNewWorkspace } from "../stores/workspace";
 import { anyAttention, anyNeedsAttention, countNeedsAttention } from "../stores/activity";
 import { settings, setSetting } from "../stores/settings";
 
@@ -16,6 +16,17 @@ const RAIL_COLLAPSED = 56;
 export default function WorkspaceRail(props: { onNew: () => void }) {
   // Which workspace row is mid-rename (double-click the name to enter, Enter/blur commits, Esc cancels).
   const [editingId, setEditingId] = createSignal<string | null>(null);
+  // Drag-and-drop: a pane dragged (by its chip) onto a rail row moves it into that workspace; onto
+  // the New button, into a fresh one (docs/roadmap/plans/01-move-panes.md). These track the hovered
+  // drop target for the highlight; the pane id itself is only readable on drop (DnD security).
+  const [dragOverWsId, setDragOverWsId] = createSignal<string | null>(null);
+  const [dragOverNew, setDragOverNew] = createSignal(false);
+
+  /** The moveable pane id carried by a drop, or null (empty payload / a torn-off pane). */
+  const droppedPane = (e: DragEvent): number | null => {
+    const src = Number(e.dataTransfer?.getData("text/plain"));
+    return src && canMovePane(src) ? src : null;
+  };
 
   // Drag the right edge to resize; clamp to a sane range and persist the new width.
   function onResizeDown(e: PointerEvent) {
@@ -78,9 +89,17 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
             return (
               <div
                 class="rail-item"
-                classList={{ active: ws.id === appState.activeId, attention: needsAttention() }}
+                classList={{ active: ws.id === appState.activeId, attention: needsAttention(), "drag-over": dragOverWsId() === ws.id }}
                 onClick={() => switchWorkspace(ws.id)}
                 title={ws.cwd || ws.name}
+                onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; if (dragOverWsId() !== ws.id) setDragOverWsId(ws.id); }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node) && dragOverWsId() === ws.id) setDragOverWsId(null); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverWsId(null);
+                  const src = droppedPane(e);
+                  if (src !== null) movePaneToWorkspace(src, ws.id);
+                }}
               >
                 {/* Live state dot (expanded) / first-letter avatar tinted by state (collapsed). */}
                 <span class="rail-dot" data-state={dotState()} />
@@ -140,7 +159,20 @@ export default function WorkspaceRail(props: { onNew: () => void }) {
             );
           }}
         </For>
-        <button class="rail-new" title={`New workspace (${MOD_NAMESPACE}+T)`} onClick={() => props.onNew()}>
+        <button
+          class="rail-new"
+          classList={{ "drag-over": dragOverNew() }}
+          title={`New workspace (${MOD_NAMESPACE}+T) · drop a pane here to move it into a new one`}
+          onClick={() => props.onNew()}
+          onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; if (!dragOverNew()) setDragOverNew(true); }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverNew(false); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOverNew(false);
+            const src = droppedPane(e);
+            if (src !== null) movePaneToNewWorkspace(src);
+          }}
+        >
           <span class="rail-new-plus">＋</span> New workspace
         </button>
       </div>

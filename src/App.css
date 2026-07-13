@@ -1858,6 +1858,15 @@ body,
   outline-offset: -3px;
 }
 
+/* Drop target highlight while a pane (dragged by its chip) is over a rail row or the New button —
+   dropping moves the pane into that workspace / a fresh one (docs/roadmap/plans/01-move-panes.md). */
+.rail-item.drag-over,
+.rail-new.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--tint-weak);
+}
+
 /* Floating identity chip (top-left): glass pill with state dot + name + branch/status. Also the
    drag handle for swapping panes. */
 .pane-chip {
@@ -2310,6 +2319,19 @@ body,
 .pmi-warn {
   margin-left: auto;
   color: var(--danger);
+}
+/* The inline "Move to ▸" list inside the overflow menu: workspace targets indented under the
+   toggle, so it reads as a nested group without a floating flyout. */
+.pane-menu-item.sub-open {
+  color: var(--text-bright);
+}
+.pane-menu .pane-menu-subitem {
+  padding-left: 22px;
+  color: var(--text-dim);
+}
+.pane-menu .pane-menu-subitem:hover {
+  color: var(--text-bright);
+  background: var(--tint-weak);
 }
 
 /* Terminal area fills the rest of the pane; positions the dead overlay. The chip-clearance

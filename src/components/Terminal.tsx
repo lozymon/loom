@@ -7,7 +7,7 @@
 // copy/paste through the OS clipboard, and a per-pane scrollback search overlay — all on the
 // Ctrl+Shift namespace, so plain Ctrl+C still reaches the PTY as SIGINT.
 
-import { onMount, onCleanup, createEffect, createSignal, Show } from "solid-js";
+import { onMount, onCleanup, createEffect, createSignal, For, Show } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
@@ -60,7 +60,10 @@ import {
   toggleOverview,
   switchWorkspaceRelative,
   switchWorkspaceIndex,
-  swapPanes,
+  movePaneOnDrop,
+  movePaneToWorkspace,
+  movePaneToNewWorkspace,
+  canMovePane,
   releasePaneClaims,
   type WorkspaceUI,
 } from "../stores/workspace";
@@ -91,6 +94,8 @@ const I: Record<string, string> = {
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 13.6 13.6"/></svg>',
   tearOff:
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3.4v9.6H13V8"/><path d="M9.6 2.5h4v4"/><path d="M13.6 2.5 8.4 7.7"/></svg>',
+  move:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.6v10.8M2.6 8h10.8"/><path d="M5.7 5.5 8 3.2l2.3 2.3M5.7 10.5 8 12.8l2.3-2.3M5.5 5.7 3.2 8l2.3 2.3M10.5 5.7 12.8 8l-2.3 2.3"/></svg>',
   log:
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4h10M3 8h10M3 12h6.5"/></svg>',
 };
@@ -163,13 +168,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const [dragOver, setDragOver] = createSignal(false);
   // The `⋯` overflow menu (rarely-used pane actions). Closes on outside click / after any action.
   const [menuOpen, setMenuOpen] = createSignal(false);
-  const runMenu = (fn: () => void | Promise<void>) => { setMenuOpen(false); void fn(); };
+  // The nested "Move to ▸" list inside the overflow menu (expanded inline; closes with the menu).
+  const [moveOpen, setMoveOpen] = createSignal(false);
+  const runMenu = (fn: () => void | Promise<void>) => { setMenuOpen(false); setMoveOpen(false); void fn(); };
   createEffect(() => {
-    if (!menuOpen()) return;
+    if (!menuOpen()) { setMoveOpen(false); return; }
     const close = () => setMenuOpen(false);
     document.addEventListener("pointerdown", close);
     onCleanup(() => document.removeEventListener("pointerdown", close));
   });
+  // Other workspaces this pane could move to (its own is excluded). Reactive to the rail.
+  const otherWorkspaces = () => appState.workspaces.filter((w) => w.id !== props.ws.id);
   // Live shell location for the title bar: cwd (via /proc, ADR-0001's carve-out) + git branch.
   const [cwd, setCwd] = createSignal<string | null>(null);
   const [branch, setBranch] = createSignal<string | null>(null);
@@ -790,6 +799,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       isLive: () => handle !== null,
       cwd: () => (handle !== null ? cwdPty(handle) : Promise.resolve(null)),
       read: (lines) => readScrollback(lines),
+      handle: () => handle,
     });
 
     // Refit + tell the PTY whenever the box resizes (split, drag, zoom, window). Skip when
@@ -821,9 +831,14 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       unregisterPane(props.paneId);
       forgetPane(props.paneId);
       resetPaneObserver(props.paneId); // free the ADR-0011 observer tail for this pane
-      // Detaching hands the PTY to another window — keep it alive; otherwise this unmount is a
-      // real close, so kill the child.
-      if (handle !== null && !detaching) void killPty(handle);
+      // A cross-workspace *move* hands this live PTY across the remount (preservePtyForMove stashed
+      // its handle): keep the child alive and serialize the painted buffer so the pane's new mount
+      // rebinds + replays it (start() → takeScrollback), instead of respawning. `detaching` is the
+      // sibling tear-off path (which already stashed), so gate the move-stash on !detaching.
+      const handingOff = handle !== null && detachedHandle(props.paneId) !== null;
+      if (handingOff && !detaching) stashScrollback(handle!, serialize);
+      // Otherwise this unmount is a real close, so kill the child. (Tear-off keeps it alive too.)
+      if (handle !== null && !detaching && !handingOff) void killPty(handle);
       term.dispose();
     });
 
@@ -854,7 +869,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         e.preventDefault();
         setDragOver(false);
         const src = Number(e.dataTransfer?.getData("text/plain"));
-        if (src) swapPanes(src, props.paneId);
+        if (src) movePaneOnDrop(src, props.paneId);
       }}
     >
       {/* Floating identity chip (top-left). Glass card carrying the state dot + name + branch/status.
@@ -1016,6 +1031,38 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
                   <span class="pmi-ico" innerHTML={I.splitDown} />Split down
                   <span class="pmi-key">{formatBinding(settings.keybindings["split-down"])}</span>
                 </button>
+                {/* Move this pane to another workspace (or a new one) without killing its process —
+                    the live PTY is handed across the remount (docs/roadmap/plans/01-move-panes.md). */}
+                <Show when={canMovePane(props.paneId)}>
+                  <button
+                    class="pane-menu-item"
+                    classList={{ "sub-open": moveOpen() }}
+                    onClick={(e) => { e.stopPropagation(); setMoveOpen((v) => !v); }}
+                  >
+                    <span class="pmi-ico" innerHTML={I.move} />Move to…
+                    <span class="pmi-key">{moveOpen() ? "▾" : "▸"}</span>
+                  </button>
+                  <Show when={moveOpen()}>
+                    <For each={otherWorkspaces()}>
+                      {(w) => (
+                        <button
+                          class="pane-menu-item pane-menu-subitem"
+                          title={`Move this pane to “${w.name}”`}
+                          onClick={() => runMenu(() => movePaneToWorkspace(props.paneId, w.id))}
+                        >
+                          <span class="pmi-ico" />{w.name}
+                        </button>
+                      )}
+                    </For>
+                    <button
+                      class="pane-menu-item pane-menu-subitem"
+                      title="Move this pane into a new workspace of its own"
+                      onClick={() => runMenu(() => movePaneToNewWorkspace(props.paneId))}
+                    >
+                      <span class="pmi-ico">＋</span>New workspace
+                    </button>
+                  </Show>
+                </Show>
                 <button class="pane-menu-item" onClick={() => runMenu(() => void detachPane())}>
                   <span class="pmi-ico" innerHTML={I.tearOff} />Tear off into window
                   <span class="pmi-key">{formatBinding(settings.keybindings["detach-pane"])}</span>

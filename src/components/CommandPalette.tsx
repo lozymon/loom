@@ -8,9 +8,12 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import {
   activeWorkspace,
   appState,
+  canMovePane,
   closedItems,
   closePane,
   listPanes,
+  movePaneToNewWorkspace,
+  movePaneToWorkspace,
   reopenClosed,
   revealPane,
   saveCurrentAsPreset,
@@ -102,6 +105,15 @@ export default function CommandPalette(props: {
         { label: "Zoom focused pane", icon: "⤢", kind: "action", key: kb("toggle-zoom"), run: () => toggleZoom(f) },
         { label: "Close focused pane", icon: "✕", kind: "action", key: kb("close-pane"), run: () => closePane(f) },
       );
+      // Move the focused pane to another workspace (or a new one) — its process is preserved
+      // (docs/roadmap/plans/01-move-panes.md). Omitted while the pane is torn off into its own window.
+      if (canMovePane(f)) {
+        for (const w of appState.workspaces) {
+          if (w.id === appState.activeId) continue;
+          list.push({ label: `Move pane to: ${w.name}`, icon: "⇄", kind: "action", hint: "Move", run: () => movePaneToWorkspace(f, w.id) });
+        }
+        list.push({ label: "Move pane to new workspace", icon: "⇄", kind: "action", hint: "Move", run: () => movePaneToNewWorkspace(f) });
+      }
     }
     for (const w of appState.workspaces) {
       if (w.id === appState.activeId) continue;
