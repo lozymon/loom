@@ -6,6 +6,25 @@ versioning.
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-07-13
+
+Move a pane between workspaces without killing what it's running.
+
+### Added
+- **Move / reorder panes across and within workspaces** (roadmap plan 01, #52) — a pane can leave its
+  workspace for another (existing or new) *without killing its process*: the PaneId — and with it the
+  agent Session, role, `sessionId`, and any input gate — is preserved, and the live PTY is handed
+  across the pane's unavoidable re-mount (reusing the tear-off/redock machinery), so a running agent
+  or command keeps going and simply re-attaches. Exposed three ways: the pane's **⋯ → Move to…**
+  submenu, the **command palette** (*Move pane to…*), and **drag-and-drop** — drag a pane by its chip
+  onto a workspace in the rail (move there) or the **＋ New workspace** button (move into a fresh one).
+  Same-workspace reposition/swap stays inside one render layer (no re-mount). An emptied source
+  workspace auto-closes; arriving panes rename on title collision so bus routing stays unambiguous.
+
+### Changed
+- Dependency bumps: TypeScript 6.0.3 → 7.0.2 (#55), Rust `sysinfo` 0.33 → 0.39.6 (#54), and an npm
+  minor/patch group (#53). Typecheck, tests, and the Rust build stay green.
+
 ## [1.10.0] — 2026-07-10
 
 A coordination-and-safety sprint: six features that turn the fleet into a real orchestration surface —
