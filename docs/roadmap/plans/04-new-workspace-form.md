@@ -1,6 +1,10 @@
 # Plan 04 — New-workspace launcher: full-stage inline view, not a popup
 
-**Status:** planning · **Effort:** ~1–2 days (incl. design pass) · **Rust:** none · **ADR:** not needed
+**Status:** ✅ shipped (2026-07-14) · **Effort:** ~1–2 days (incl. design pass) · **Rust:** none · **ADR:** not needed
+**Built as:** `src/components/NewWorkspaceLauncher.tsx` (renamed from `NewWorkspaceWizard`). Full-stage
+render-swap gated by an app-level `launcherOpen` signal in `App.tsx` (mirrors `zoomed`); docked panels +
+`FleetApprovals` suppressed while open. Calm centered column + `Customize each pane` disclosure; fleet
+one-liner; `savePreset()` (new store fn) wires up "Save as preset". Covered by `workspace.test.ts`.
 **Decisions locked (grilled 2026-07-11):**
 - Stop using a popup/modal — the launcher **takes over the stage** (where the grid normally is),
   **not the whole window**: the left rail and title bar stay visible (truest mirror of `zoomed`).
