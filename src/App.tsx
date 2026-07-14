@@ -1,6 +1,6 @@
 // M3 shell: left workspace rail | stage of workspace layers. Every workspace renders into
 // its own absolutely-filled layer; only the active one is shown (the rest stay mounted so
-// their PTYs survive hiding). The + on the rail opens the new-workspace wizard.
+// their PTYs survive hiding). The + on the rail opens the full-stage new-workspace launcher.
 //
 // Rendering waits for init() to hydrate persisted state, so panes spawn exactly once against
 // the restored layout (no spawn-then-replace), then startPersistence() autosaves changes.
@@ -12,7 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 import TitleBar from "./components/TitleBar";
 import WorkspaceRail from "./components/WorkspaceRail";
 import LayoutView from "./components/LayoutNode";
-import NewWorkspaceWizard from "./components/NewWorkspaceWizard";
+import NewWorkspaceLauncher from "./components/NewWorkspaceLauncher";
 import FleetApprovals from "./components/FleetApprovals";
 import Settings from "./components/Settings";
 import GitPanel from "./components/GitPanel";
@@ -44,7 +44,10 @@ import { saveSession, saveTask, pruneHistory } from "./lib/sessionLogClient";
 import "./App.css";
 
 export default function App() {
-  const [wizardOpen, setWizardOpen] = createSignal(false);
+  // The new-workspace launcher takes over the stage (rail + title bar persist), so it's an
+  // app-level transient signal — like `zoomed`, a mode flag the stage's render-switch reads to
+  // swap what fills it. Never persisted (a fresh launch every open); not in the per-workspace store.
+  const [launcherOpen, setLauncherOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   // The docked right-side panel (Source Control / Docs) is now per-workspace state:
   // these read the active workspace's `panel.open`, so switching workspaces shows only what was
@@ -98,10 +101,10 @@ export default function App() {
   const unlistenCtrl = initPaneControl();
   onCleanup(() => { void unlistenCtrl.then((u) => u()); });
 
-  // Ctrl+Shift+T from a focused pane (ADR-0005) opens the new-workspace wizard.
-  const openWizard = () => setWizardOpen(true);
-  window.addEventListener("loom:new-workspace", openWizard);
-  onCleanup(() => window.removeEventListener("loom:new-workspace", openWizard));
+  // Ctrl+Shift+T from a focused pane (ADR-0005) opens the new-workspace launcher.
+  const openLauncher = () => setLauncherOpen(true);
+  window.addEventListener("loom:new-workspace", openLauncher);
+  onCleanup(() => window.removeEventListener("loom:new-workspace", openLauncher));
 
   // The two right-side panels (Git / Docs) share one docked slot — only one shows at a
   // time, and toggling the open one closes it (Frameless: dock right, never replace the grid; the
@@ -175,7 +178,7 @@ export default function App() {
   // listener covers that gap. Pane-scoped actions (focus/split/close/zoom/copy/paste/…) need a
   // focused pane and stay terminal-only; only workspace/app actions are wired here.
   const GLOBAL_ACTIONS: Partial<Record<ActionId, () => void>> = {
-    "new-workspace": () => setWizardOpen(true),
+    "new-workspace": () => setLauncherOpen(true),
     "reopen-closed": () => reopenLastClosed(),
     "reopen": () => setReopenOpen((v) => !v),
     "history": () => setHistoryOpen((v) => !v),
@@ -278,42 +281,52 @@ export default function App() {
         reopenOn={reopenOpen}
       />
       <div class="body">
-      <WorkspaceRail onNew={() => setWizardOpen(true)} />
+      <WorkspaceRail onNew={() => setLauncherOpen(true)} />
       <div class="stage">
-        <div class="stage-grid">
-          <Show when={ready()}>
-            <For each={appState.workspaces}>
-              {(ws) => (
-                <div class="ws-layer" style={{ display: ws.id === appState.activeId ? "block" : "none" }}>
-                  <LayoutView ws={ws} />
-                </div>
-              )}
-            </For>
-          </Show>
-        </div>
-        {/* Approvals triage (Phase 3): bottom-docked, shown only when agents are blocked on you. */}
-        <FleetApprovals />
+        {/* The launcher takes over the stage exactly as a `zoomed` pane fills it — the rail and
+            title bar (outside .stage) persist. When it's open the normal workspace layers +
+            FleetApprovals don't render, so the create flow gets a clean, undistracted stage. */}
+        <Show
+          when={launcherOpen()}
+          fallback={
+            <>
+              <div class="stage-grid">
+                <Show when={ready()}>
+                  <For each={appState.workspaces}>
+                    {(ws) => (
+                      <div class="ws-layer" style={{ display: ws.id === appState.activeId ? "block" : "none" }}>
+                        <LayoutView ws={ws} />
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
+              {/* Approvals triage (Phase 3): bottom-docked, shown only when agents are blocked on you. */}
+              <FleetApprovals />
+            </>
+          }
+        >
+          <NewWorkspaceLauncher onClose={() => setLauncherOpen(false)} />
+        </Show>
       </div>
       {/* The right-side docked panels — flex siblings of .stage, so opening one narrows the grid
-          (panes refit via their ResizeObserver) rather than covering it. Mutually exclusive. */}
+          (panes refit via their ResizeObserver) rather than covering it. Mutually exclusive.
+          Suppressed while the launcher owns the stage — they belong to the backgrounded workspace. */}
       {/* Keyed on the active workspace so switching between two workspaces that *both* have a
           panel open remounts it against the new workspace (each carries its own source/state). */}
-      <Show when={gitOpen() && activeWorkspace()} keyed>
+      <Show when={!launcherOpen() && gitOpen() && activeWorkspace()} keyed>
         {(_ws) => <GitPanel onClose={() => showPanel(null)} />}
       </Show>
-      <Show when={docsOpen() && activeWorkspace()} keyed>
+      <Show when={!launcherOpen() && docsOpen() && activeWorkspace()} keyed>
         {(_ws) => <DocsPanel onClose={() => showPanel(null)} />}
       </Show>
-      <Show when={fleetOpen() && activeWorkspace()} keyed>
+      <Show when={!launcherOpen() && fleetOpen() && activeWorkspace()} keyed>
         {(_ws) => <FleetPanel onClose={() => showPanel(null)} />}
       </Show>
-      <Show when={boardOpen() && activeWorkspace()} keyed>
+      <Show when={!launcherOpen() && boardOpen() && activeWorkspace()} keyed>
         {(_ws) => <BoardPanel onClose={() => showPanel(null)} />}
       </Show>
       </div>
-      <Show when={wizardOpen()}>
-        <NewWorkspaceWizard onClose={() => setWizardOpen(false)} />
-      </Show>
       <Show when={settingsOpen()}>
         <Settings onClose={() => setSettingsOpen(false)} />
       </Show>
@@ -332,7 +345,7 @@ export default function App() {
       <Show when={paletteOpen()}>
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
-          onNewWorkspace={() => setWizardOpen(true)}
+          onNewWorkspace={() => setLauncherOpen(true)}
           onSettings={() => openSettings()}
           onGit={() => showPanel("git")}
           onDocs={() => showPanel("docs")}

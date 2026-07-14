@@ -24,6 +24,9 @@ import {
   movePaneToWorkspace,
   movePaneToNewWorkspace,
   movePaneBeside,
+  savePreset,
+  launchPreset,
+  presets,
 } from "./workspace";
 import { claimFile, listClaims } from "./claims";
 import { gatePane, isGated } from "./inputHolds";
@@ -328,6 +331,50 @@ describe("workspace store: move panes across / within workspaces", () => {
       movePaneToWorkspace(a1, B); // blocked
       expect(leavesOf(A).sort()).toEqual([a1, a2].sort()); // unchanged
       expect(a1 in wsById(B).panes).toBe(false);
+    });
+  });
+});
+
+describe("workspace store: savePreset captures the launcher config for relaunch", () => {
+  it("round-trips per-pane command/cwd/shell/seed through save → launch", () => {
+    createRoot(() => {
+      const name = `preset-${Math.random()}`;
+      const preset = savePreset({
+        name,
+        cwd: "/repo",
+        paneCount: 2,
+        commands: ["claude", undefined],
+        cwds: [undefined, "/repo/api"],
+        shells: [undefined, "wsl.exe -d Ubuntu"],
+        prompts: ["brief the agent", undefined],
+      });
+
+      // It lands in the presets list, capturing a faithful tree + panes (not just paneCount).
+      expect(presets().some((p) => p.id === preset.id)).toBe(true);
+      expect(preset.paneCount).toBe(2);
+      expect(preset.tree).toBeTruthy();
+      const savedSpecs = Object.values(preset.panes!);
+      expect(savedSpecs.some((s) => s.command === "claude" && s.prompt === "brief the agent")).toBe(true);
+      expect(savedSpecs.some((s) => s.cwd === "/repo/api" && s.shell === "wsl.exe -d Ubuntu")).toBe(true);
+
+      // Relaunching rebuilds a live workspace with the same per-pane specs (fresh PaneIds).
+      const wsId = launchPreset(preset);
+      const specs = Object.values(wsById(wsId).panes);
+      expect(specs).toHaveLength(2);
+      expect(specs.some((s) => s.command === "claude" && s.prompt === "brief the agent")).toBe(true);
+      expect(specs.some((s) => s.cwd === "/repo/api" && s.shell === "wsl.exe -d Ubuntu")).toBe(true);
+    });
+  });
+
+  it("replaces a same-name preset rather than piling up duplicates", () => {
+    createRoot(() => {
+      const name = `dup-${Math.random()}`;
+      savePreset({ name, cwd: "/a", paneCount: 1 });
+      savePreset({ name, cwd: "/b", paneCount: 4 });
+      const matches = presets().filter((p) => p.name === name);
+      expect(matches).toHaveLength(1);
+      expect(matches[0].cwd).toBe("/b");
+      expect(matches[0].paneCount).toBe(4);
     });
   });
 });

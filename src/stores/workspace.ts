@@ -982,6 +982,29 @@ export function saveCurrentAsPreset(): Preset | undefined {
   return preset;
 }
 
+/** Snapshot a pending launcher config (folder/name/layout/fleet/per-pane) as a preset, so the
+ *  new-workspace launcher can *create* presets, not just consume them. Builds the same balanced
+ *  tree the launcher would launch, then captures it verbatim (tree + panes) so per-pane cwd/shell/
+ *  seed round-trip — the older paneCount+commands fields are kept for display + fallback. */
+export function savePreset(opts: NewWorkspaceOpts): Preset {
+  const ws = buildWorkspace(opts);
+  const order = leafIds(ws.tree);
+  const commands = order.map((id) => ws.panes[id]?.command);
+  const preset: Preset = {
+    id: nextPresetId(),
+    name: opts.name.trim() || `Preset ${app.presets.length + 1}`,
+    cwd: opts.cwd,
+    paneCount: order.length,
+    commands: commands.some(Boolean) ? commands : undefined,
+    tree: snapshotValue(ws.tree),
+    panes: snapshotValue(ws.panes),
+  };
+  // Replace a same-name preset rather than piling up duplicates (matches saveCurrentAsPreset).
+  const others = app.presets.filter((p) => p.name !== preset.name);
+  setApp("presets", [preset, ...others].slice(0, 24));
+  return preset;
+}
+
 /** Create + activate a fresh workspace from a saved preset — rebuilding the captured layout
  *  verbatim when present, else (older presets) a balanced grid from paneCount + commands. */
 export function launchPreset(preset: Preset): string {

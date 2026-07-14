@@ -1003,60 +1003,160 @@ body,
   background: var(--control-hover);
 }
 
-/* ---- New-workspace launcher (Frameless overlay card) ---- */
-.wizard-backdrop {
-  position: fixed;
-  inset: 0;
-  background: var(--scrim);
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+/* ============ New-workspace launcher (full-stage, not a modal) ============ */
+/* Takes over the stage where the grid sits (rail + title bar persist), mirroring how a `zoomed`
+   pane fills the stage. A calm centered column reads top-to-bottom; the per-pane machinery hides
+   behind a disclosure. No scrim/backdrop — it IS the stage now. */
+/* Fills the stage as a flex child (the stage is a flex column) rather than an absolute overlay —
+   so it stays *inside* the stage next to the rail, never covering the rail or title bar. */
+.launcher {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  color: var(--text-bright);
+  font: 13px var(--font-ui);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: loom-launch-in 0.18s ease-out;
+}
+
+@keyframes loom-launch-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .launcher { animation: none; }
+}
+
+/* The scrolling body; the footer is pinned outside it. */
+.launcher-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: clamp(20px, 5vh, 56px) 24px 28px;
+}
+
+/* The calm centered column. Widens when "Customize each pane" is open (that panel wants the room). */
+/* Fixed width — opening "Customize each pane" reveals content *below*, never widening the column,
+   so nothing above it shifts sideways. */
+.launcher-col {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.launcher-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.launcher-title {
+  margin: 0;
+  font: 600 22px var(--font-ui);
+  letter-spacing: -0.02em;
+  color: var(--text-bright);
+}
+.launcher-sub {
+  margin: 4px 0 0;
+  font: 13px var(--font-ui);
+  color: var(--text-mid);
+}
+.launcher .launcher-x {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
-  animation: loom-scrim-in 0.14s ease-out;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 22px;
+  line-height: 1;
 }
-
-.wizard {
-  width: 600px;
-  max-width: 92vw;
-  background: var(--surface);
-  border-radius: 18px;
+.launcher .launcher-x:hover {
+  background: var(--tint-weak);
   color: var(--text-bright);
-  font: 13px var(--font-ui);
-  box-shadow: var(--shadow-overlay);
-  overflow: hidden;
-  animation: loom-ov-in 0.16s ease-out;
 }
 
-.wizard-steps {
+/* Quick start — a horizontal strip of shortcuts past the whole flow (built-ins + saved presets). */
+.launcher-quick {
   display: flex;
-  gap: 18px;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--hairline);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: -8px;
+}
+.launcher-quick-label {
+  font: 10.5px var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--text-faint);
-  font: 500 12px var(--font-mono);
-  letter-spacing: 0.04em;
+  margin-right: 4px;
 }
-
-.wizard-steps .on {
+.launcher .launcher-chip {
+  font: 12.5px var(--font-ui);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+}
+.launcher .launcher-chip:hover {
+  color: var(--text-bright);
+}
+.launcher .launcher-chip.on {
+  background: rgba(var(--accent-rgb), 0.14);
   color: var(--accent-text);
-  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.launcher-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+.launcher .launcher-chip-preset {
+  border-radius: 8px 0 0 8px;
+}
+.launcher .launcher-chip-del {
+  padding: 6px 8px;
+  background: var(--well);
+  color: var(--text-faint);
+  border-radius: 0 8px 8px 0;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  font-size: 10px;
+}
+.launcher .launcher-chip-del:hover {
+  color: var(--danger);
 }
 
-.wizard-body {
-  padding: 20px 22px;
-  min-height: 160px;
+/* A titled zone in the column. */
+.launcher-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
-.wizard-label {
+.launcher-field {
+  display: flex;
+  flex-direction: column;
+}
+.launcher-label {
   display: block;
   margin-bottom: 8px;
   color: var(--text-mid);
   font: 12.5px var(--font-ui);
+}
+.launcher-field + .launcher-field {
+  margin-top: 16px;
 }
 
 .wizard-row {
@@ -1085,7 +1185,7 @@ body,
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.wizard button {
+.launcher button {
   font: 13px var(--font-ui);
   color: var(--text-mid);
   background: var(--tint-weak);
@@ -1098,22 +1198,22 @@ body,
     color 0.12s ease;
 }
 
-.wizard button:hover {
+.launcher button:hover {
   background: var(--surface-dead);
   color: var(--text-bright);
 }
 
-.wizard button.primary {
+.launcher button.primary {
   background: var(--accent);
   border: none;
   color: var(--on-accent);
   border-radius: 11px;
 }
-.wizard button.primary:hover {
+.launcher button.primary:hover {
   background: var(--accent-strong-hover);
 }
 
-.wizard button.primary:hover {
+.launcher button.primary:hover {
   background: var(--accent-strong-hover);
 }
 
@@ -1125,7 +1225,7 @@ body,
   margin-top: 10px;
 }
 
-.wizard .wizard-recent {
+.launcher .wizard-recent {
   font: 11px var(--font-mono);
   color: var(--text-mid);
   background: var(--well);
@@ -1133,7 +1233,7 @@ body,
   border-radius: 7px;
   padding: 5px 10px;
 }
-.wizard .wizard-recent:hover {
+.launcher .wizard-recent:hover {
   color: var(--text-bright);
 }
 
@@ -1142,111 +1242,19 @@ body,
   font-size: 11px;
 }
 
-/* ---- Single-page launcher (two columns: where | what) ---- */
-.wizard-wide {
-  width: 880px;
-}
-
-.wizard-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.wizard-head strong {
-  font: 600 16px var(--font-ui);
-  letter-spacing: -0.01em;
-  color: var(--text-bright);
-}
-.wizard-head .muted {
-  font: 12px var(--font-ui);
-  color: var(--text-mid);
-}
-.wizard .wizard-x {
-  margin-left: auto;
-  padding: 0 4px;
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  font-size: 18px;
-  cursor: pointer;
-}
-.wizard .wizard-x:hover {
-  color: var(--text-bright);
-}
-
 /* Layout row header — label on the left, live pane-count on the right. */
 .wiz-row-head {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 2px;
 }
-.wiz-row-head .wizard-label {
+.wiz-row-head .launcher-label {
   flex: 1 1 auto;
   margin-bottom: 0;
 }
 .wiz-panes-n {
   font: 12px var(--font-mono);
   color: var(--accent-text);
-}
-
-.wiz-cols {
-  display: flex;
-  align-items: stretch;
-}
-
-.wiz-left,
-.wiz-right {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 22px 24px;
-  max-height: 70vh;
-  overflow-y: auto;
-  /* border-box so the 380px column width INCLUDES its padding + border (matching the prototype's
-     box-sizing reset) — otherwise the column renders ~49px too wide. */
-  box-sizing: border-box;
-}
-
-.wiz-left {
-  flex: 0 0 380px;
-  border-right: 1px solid var(--hairline);
-}
-
-.wiz-right {
-  flex: 1 1 auto;
-  min-width: 0;
-  gap: 18px;
-}
-
-/* Column section header (WHERE / WHAT RUNS). */
-.wiz-section {
-  font: 10.5px var(--font-mono);
-  letter-spacing: 0.16em;
-  color: var(--text-faint);
-}
-
-.wiz-opts {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 4px;
-}
-
-.wiz-opt {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--text-mid);
-  font: 12.5px var(--font-ui);
-  cursor: pointer;
-}
-
-.wiz-opt input {
-  accent-color: var(--accent);
 }
 
 /* Layout tiles — each tile renders a mini diagram of the real grid shape. */
@@ -1277,7 +1285,7 @@ body,
   font: 13px var(--font-ui);
   color: var(--text-bright);
 }
-.wizard .wiz-fleet-select {
+.launcher .wiz-fleet-select {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 200px;
@@ -1294,22 +1302,7 @@ body,
   padding: 6px 28px 6px 12px;
   cursor: pointer;
 }
-.wizard .wiz-fleet-apply {
-  flex: 0 0 auto;
-  margin-left: auto;
-  white-space: nowrap;
-  font: 500 12.5px var(--font-ui);
-  color: #fff;
-  background: var(--accent);
-  border: none;
-  border-radius: 8px;
-  padding: 7px 15px;
-}
-.wizard .wiz-fleet-apply:hover {
-  background: var(--accent-strong-hover);
-}
-
-.wizard .wiz-ltile {
+.launcher .wiz-ltile {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1323,7 +1316,7 @@ body,
   color: var(--text-faint);
 }
 
-.wizard .wiz-ltile.on {
+.launcher .wiz-ltile.on {
   background: var(--well);
   color: var(--accent-text);
   box-shadow: 0 0 0 2px var(--accent);
@@ -1355,30 +1348,6 @@ body,
   opacity: 0.8;
 }
 
-.wiz-slider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.wiz-slider .muted {
-  font: 12.5px var(--font-ui);
-  color: var(--text-mid);
-}
-
-.wiz-slider input[type="range"] {
-  flex: 1 1 auto;
-  accent-color: var(--accent);
-}
-
-.wiz-slider-n {
-  min-width: 2ch;
-  text-align: right;
-  font: 12px var(--font-mono);
-  color: var(--accent-text);
-}
-
 /* Agent chips — fleet-fill list + the per-pane editor share these. */
 .wiz-fleet {
   display: flex;
@@ -1386,7 +1355,7 @@ body,
   gap: 8px;
 }
 
-.wizard .wiz-chip {
+.launcher .wiz-chip {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1397,11 +1366,11 @@ body,
   color: var(--text-mid);
   font: 12.5px var(--font-ui);
 }
-.wizard .wiz-chip:hover {
+.launcher .wiz-chip:hover {
   color: var(--text-bright);
 }
 
-.wizard .wiz-chip.on {
+.launcher .wiz-chip.on {
   background: rgba(var(--accent-rgb), 0.12);
   color: var(--text-bright);
   box-shadow: inset 0 0 0 1px var(--chip, var(--accent));
@@ -1420,13 +1389,13 @@ body,
   font-weight: 700;
 }
 
-.wizard .wiz-chip-shell .wiz-chip-ic {
+.launcher .wiz-chip-shell .wiz-chip-ic {
   background: var(--tint-weak);
   color: var(--text-mid);
 }
 
 /* An agent whose program isn't installed / on PATH: dimmed, with a warning glyph. */
-.wizard .wiz-chip-missing {
+.launcher .wiz-chip-missing {
   opacity: 0.55;
 }
 
@@ -1438,6 +1407,55 @@ body,
 
 .wiz-cell.wiz-cell-missing {
   box-shadow: inset 0 0 0 1px rgba(var(--state-needs-rgb), 0.4);
+}
+
+/* "Customize each pane" disclosure — a quiet, full-width toggle that reveals the grid + editor. */
+.launcher .launcher-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  background: var(--well);
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--chip-border);
+  color: var(--text-mid);
+  font: 13px var(--font-ui);
+  text-align: left;
+}
+.launcher .launcher-disclosure:hover {
+  color: var(--text-bright);
+}
+.launcher-caret {
+  display: inline-block;
+  color: var(--text-faint);
+  transition: transform 0.16s ease;
+}
+.launcher-caret.open {
+  transform: rotate(90deg);
+}
+.launcher-disclosure-hint {
+  margin-left: auto;
+  font: 11.5px var(--font-mono);
+  color: var(--text-faint);
+}
+
+/* Revealed panel: the pane grid, then the per-pane editor beneath it — a purely vertical reveal
+   inside the same fixed-width column, so opening it never resizes the form. */
+.launcher-customize {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  animation: loom-launch-in 0.16s ease-out;
+}
+.wiz-editor-empty {
+  padding: 20px 16px;
+  background: var(--well);
+  border-radius: 11px;
+  color: var(--text-faint);
+  font: 12.5px var(--font-ui);
+  text-align: center;
 }
 
 /* Interactive preview grid. */
@@ -1454,7 +1472,7 @@ body,
   flex: 1 1 0;
 }
 
-.wizard .wiz-cell {
+.launcher .wiz-cell {
   flex: 1 1 0;
   min-width: 0;
   min-height: 60px;
@@ -1471,18 +1489,18 @@ body,
   color: var(--text-mid);
 }
 
-.wizard .wiz-cell:hover {
+.launcher .wiz-cell:hover {
   box-shadow: inset 0 0 0 1px var(--text-faint);
 }
 
-.wizard .wiz-cell.on {
+.launcher .wiz-cell.on {
   box-shadow: 0 0 0 1.5px var(--accent);
 }
 
-.wizard .wiz-cell.agent {
+.launcher .wiz-cell.agent {
   box-shadow: inset 3px 0 0 var(--cell-accent), inset 0 0 0 1px var(--chip-border);
 }
-.wizard .wiz-cell.agent.on {
+.launcher .wiz-cell.agent.on {
   box-shadow: 0 0 0 1.5px var(--accent);
 }
 
@@ -1493,7 +1511,7 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.wizard .wiz-cell.on .wiz-cell-name {
+.launcher .wiz-cell.on .wiz-cell-name {
   color: var(--accent-text);
 }
 
@@ -1526,39 +1544,46 @@ body,
   color: var(--text-bright);
 }
 
-.wizard .wiz-editor-x {
+.launcher .wiz-editor-x {
   padding: 2px 7px;
   background: transparent;
   color: var(--text-mid);
 }
 
-.wizard-foot {
+/* Footer — pinned to the bottom of the stage, its inner row aligned to the centered column. */
+.launcher-foot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 14px 24px;
+  border-top: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.launcher-foot-inner {
+  width: 100%;
+  max-width: 680px;
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: auto;
-  padding-top: 6px;
 }
-
-.wizard-foot .spacer {
+.launcher-foot-inner .spacer {
   flex: 1 1 auto;
 }
-
 .wiz-foot-hint {
   font: 11.5px var(--font-mono);
   color: var(--text-faint);
 }
 
-/* Footer Cancel = ghost; Create workspace stays the accent primary. */
-.wizard-foot button:not(.primary) {
+/* Footer Cancel / Save = ghost; Create workspace stays the accent primary. */
+.launcher-foot button:not(.primary) {
   background: transparent;
   color: var(--text-mid);
 }
-.wizard-foot button:not(.primary):hover {
+.launcher-foot button:not(.primary):hover {
   background: var(--tint-weak);
   color: var(--text-bright);
 }
-.wizard-foot button.primary {
+.launcher-foot button.primary {
   padding: 10px 22px;
   border-radius: 10px;
 }
@@ -2580,46 +2605,6 @@ body,
 
 .pane-search-close:hover:not(:disabled) {
   color: var(--fg);
-}
-
-/* ---- Wizard presets — wrapped pills with an inline delete ---- */
-.wizard-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.wizard-preset {
-  display: inline-flex;
-  align-items: center;
-}
-
-.wizard .wizard-preset-go {
-  font: 12.5px var(--font-ui);
-  color: var(--text-mid);
-  background: var(--well);
-  border: none;
-  border-radius: 8px;
-  padding: 7px 13px;
-}
-.wizard .wizard-preset-go:hover {
-  color: var(--text-bright);
-}
-.wizard .wizard-preset-go.on {
-  background: rgba(var(--accent-rgb), 0.14);
-  color: var(--accent-text);
-}
-
-.wizard .wizard-preset-del {
-  margin-left: -4px;
-  padding: 4px 6px;
-  background: transparent;
-  color: var(--text-faint);
-  font-size: 11px;
-}
-.wizard .wizard-preset-del:hover {
-  color: var(--danger);
-  background: transparent;
 }
 
 /* ---- Shared modal scrim (Shortcuts, Session logs) ---- */
@@ -5014,8 +4999,7 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .palette,
   .palette-overlay,
-  .settings-backdrop,
-  .wizard-backdrop {
+  .settings-backdrop {
     animation: none;
   }
 }
