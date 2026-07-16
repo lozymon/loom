@@ -25,8 +25,9 @@ and a shippable result.
 until you walk back to the laptop.
 
 Precisely: the payoff is **Approvals** (ADR-0008 — an Agent blocked on its own stdin, which waits
-*indefinitely*), **not Clearances** (an Agent blocked on a bus reply, which dies with its caller in ~2
-minutes — Claude Code's Bash tool times out at 120 s by default). See ADR-0012 rule 3.5.
+*indefinitely*), **not Clearances** (an Agent blocked on a bus reply — answerable for **ten seconds**,
+since `control.rs` parks a caller for `REPLY_TIMEOUT = 10s` and then answers on its behalf). See
+ADR-0012 rule 3.5 and the P0b design below.
 
 Driving (`send`/`read`/`broadcast` from the phone) is the **second-class half**: it carries essentially
 the entire risk budget of this plan, and its remote approve/deny tap is a Confirmation, not an
@@ -167,17 +168,10 @@ rejects. P1 below is the UX spike that a LAN-only app would otherwise be an expe
       ADR-0012 rule 4 makes origin-tagged audit a hard requirement and names an "after-the-fact record"
       that doesn't exist. Persist audit rows (third table in ADR-0009's `sessions.db`). **Prerequisite,
       not follow-up** — it's small, and it's currently invisible in the checklist.
-- [ ] **P0b — Clearances: de-block the guardrails** (ADR-0012 rule 3.4). The three `window.confirm`
-      helpers in `paneControl.ts` are synchronous: an agent tripping one on an unattended laptop
-      freezes the webview and every Pane's rendering until someone walks over. Replace with parked,
-      non-blocking Clearances + an in-app panel. **Ships value with no phone, no relay, no ADR-0012** —
-      a local defect fix, and that is now its main justification (rule 3.5: Clearances die with their
-      caller in ~2 min, so they are rarely answerable from a phone). Distinct from ADR-0008's Approval
-      (see CONTEXT.md) — do not merge the two inboxes. Two things to settle before coding:
-      **(a) lifetime** — no wall clock; a Clearance lives while its caller waits and is *withdrawn* (not
-      denied) when the caller vanishes; **(b) the abort signal** — `control.rs` must report
-      caller-disconnect *before* the frontend can execute, or Approve on a dead Clearance spawns a pane
-      nobody awaits.
+- [ ] **P0b — Clearances: de-block the guardrails** (ADR-0012 rule 3.4). Ships with no phone, no relay
+      and no accepted ADR: it fixes a **live defect** (see below) and is the hinge everything else hangs
+      off. **Start here.** → [P0b design](#p0b-design--the-clearance-data-model)
+
 - [ ] **P0c — extend `list`'s payload.** It returns `{name, workspace, focused, live, role, gated}` —
       **no `status`, no `attention`** (`paneControl.ts`). `FleetPanel` reads those from the TS store
       in-process, so nothing noticed; the app is the first wire consumer. **The fleet screen — the
@@ -192,6 +186,84 @@ rejects. P1 below is the UX spike that a LAN-only app would otherwise be an expe
       origin tagging + audit, Clearances over the wire. First shippable, safe state.
 - [ ] **P3 — React Native app** (Android) over P2 — Host-scoped from v1 (rule 7).
 - [ ] **P4 — Push:** `attention` → metadata-only push (+ `pid`) to the paired Device.
+
+## P0b design — the Clearance data model
+
+**This fixes a bug that exists today, not a hypothetical.** `control.rs:25` parks a socket caller for
+`REPLY_TIMEOUT = 10s`; `window.confirm` blocks the webview indefinitely. So right now:
+
+1. Cleo runs `loom spawn`; `control.rs` parks, waiting ≤10s.
+2. The frontend fires `window.confirm` — the webview freezes, every Pane stops rendering.
+3. **At 10s** Rust gives up (`pending.take(req_id)`) and tells the agent `"timed out waiting for app"`.
+4. You come back from lunch and click **Allow**.
+5. `dispatch` proceeds and **spawns the pane**; `pane_cmd_reply` then finds no sender and discards the
+   response.
+
+A command runs 45 minutes late, nobody awaits it, and the agent that asked was told it failed. Note the
+real bound on answering a Clearance is **Rust's 10 seconds** — not the agent's tool timeout — which
+settles rule 3.5 conclusively: Clearances are a **local** fix and are never answered from a phone.
+
+**Shape.** Mirrors `stores/inputHolds.ts` (ephemeral, `Record`-keyed, `forget*` on pane close) and
+`PendingReplies` (reactive data kept separate from the continuation):
+
+```ts
+export type ClearanceKind = "spawn" | "destructive-broadcast" | "gated-input";
+export type ClearanceOutcome = "approved" | "denied" | "withdrawn" | "expired";
+
+export interface Clearance {
+  id: number;
+  kind: ClearanceKind;
+  origin: Origin;            // local | device:<name> — from the envelope, never the body (rule 3.1)
+  asker?: string;            // caller's pane name, when known
+  summary: string;           // "Cleo wants to open a terminal and run:"
+  detail: string;            // the command / the input text
+  targets: PaneId[];         // gated-input: the gated panes; broadcast: the fan-out
+  at: number;
+  expiresAt: number | null;  // Flow A: at+60s. Flow B: null — no wall clock (rule 3.4).
+}
+
+const [clearances, setClearances] = createStore<Record<number, Clearance>>({});
+const resolvers = new Map<number, (o: ClearanceOutcome) => void>();   // deliberately not reactive
+```
+
+The resolver sits in a plain `Map`, outside the store — the same split `PendingReplies` already makes
+between the data and the channel. Continuations do not belong in a Solid store proxy.
+
+**Four outcomes, not two — this is the load-bearing part:**
+
+| Outcome | Meaning |
+|---|---|
+| `approved` | execute |
+| `denied` | the operator said no — audit it |
+| `withdrawn` | **the caller vanished.** Don't execute, and **don't record a decision** — nobody made one |
+| `expired` | Flow A's 60 s wall clock elapsed → default-deny |
+
+Collapsing `withdrawn` into `denied` would write fictional operator denials into the rule 4 audit trail.
+
+`dispatch` becomes: `const o = await requestClearance(spec); if (o !== "approved") return { ok: false, … }`.
+`applyInputGates` goes async with it; its callers (`send`, `broadcast`) already are.
+
+**Lifetime is caller liveness, and quit is already answered — by [ADR-0002](../../adr/0002-ptys-live-in-app-process-no-detach.md).**
+Quitting kills every PTY, so every caller dies with the app. A persisted Clearance would be one whose
+caller is *definitionally* gone and which must therefore never execute. So Clearances are **ephemeral**,
+exactly like `inputHolds`/`claims` — nothing to persist, and persisting would be the bug.
+`forgetClearances(paneId)` from `closePane` mirrors `forgetGate`, belt-and-braces behind the abort signal.
+
+**Transport changes this forces** (the model cannot work against a 10 s reply window):
+
+- **`pane_cmd_parked(reqId)`** — the frontend signals "waiting on a human, not wedged"; Rust drops the
+  deadline for that request. The 10 s default stays for genuinely hung frontends, which is its purpose.
+- **EOF polling while parked** — set the socket non-blocking and probe periodically; `Ok(0)` = peer
+  closed. This is how the caller's departure is learned **before** anything executes.
+- **`loom://pane-cmd-abort { reqId }`** — Rust tells the frontend to withdraw; the card disappears and
+  Approve becomes unreachable.
+
+**Open choice: no dedup** (recommended). A retrying agent produces a second Clearance; the first
+self-cleans when its CLI dies. Collapsing two asks into one card risks approving something you only
+read once.
+
+**UI:** an in-app panel mirroring `GitPanel.tsx` (the house pattern for new side panels). Distinct from
+ADR-0008's Approval — see CONTEXT.md — and **do not merge the two inboxes**.
 
 ## ADR
 
