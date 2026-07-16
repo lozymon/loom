@@ -129,7 +129,23 @@ ADR-0012 rule 3.2–3.4 for the split.
 - The **Clearance inbox** and the **attention inbox** are separate lists on purpose: a Clearance is Loom
   holding a command pending your go/no-go; an Attention/Approval is an Agent reporting it is blocked on
   you (ADR-0008). Same screen shape, different entities — see CONTEXT.md.
-- Every screen is **scoped to the selected pairing** (ADR-0012 rule 7). Keys live in Android Keystore.
+- Every screen is **scoped to the selected Pairing** (ADR-0012 rule 7). Keys are **Keystore-wrapped**
+  (rule 6.1 — a non-extractable key can't feed a JS Noise lib).
+- **Swipe between Panes** on the Pane-detail screen, with a visible Pane strip (name chips + state dots)
+  above it — a swipe with no affordance is undiscoverable, and the strip doubles as fleet state. Three
+  decisions this forces, all cheap now and expensive later:
+  - **Scope: within the Workspace, in layout-tree leaf order** — never across Workspaces (matches the
+    two-level hierarchy and Broadcast's rule). "Next" on the phone is the Pane next to it on the laptop,
+    so spatial memory transfers. **Dead Panes included**: they keep their tile on the desktop precisely
+    because the exit code is post-mortem evidence, and that's most wanted when an agent died while you
+    were out.
+  - **The ANSI renderer must wrap — no horizontal pan.** `read` returns raw lines routinely wider than a
+    phone; if the terminal pans horizontally the swipe gesture is ambiguous. Decide before the renderer
+    is written, not after.
+  - **No neighbour prefetch.** Each prefetch is a real `read`: more scrollback over the wire, more secrets
+    pulled you never looked at, more pressure on rule 5's limiter. Fetch on settle.
+- Swipe is also what makes the **Read Window** (rule 3) load-bearing rather than optional — a gesture whose
+  value is fluid movement can't survive a Confirmation per step.
 - **Push notifications** on `attention` signals — the payoff feature. Payloads are **metadata-only**
   ("a pane needs you") + `pid` so the app knows which Loom raised it and can deep-link; the relay routes
   the push and stays blind, so the app fetches specifics over the E2E channel on open.

@@ -59,7 +59,11 @@ Note what the surface test buys over a danger-ranked table: **remote `spawn` —
 
 `broadcast` is denied on its own record: the human broadcast bar was **removed 2026-06-25 as unused** (ASSESSMENT.md), and the stated reason was structural — multi-agent work is cross-*project*, which a single-Workspace fan-out "never served anyway." `ControlRequest.broadcast` is still single-Workspace, so a phone screen would rebuild the exact limitation that made the bar useless, on a worse keyboard. (It also cannot send Ctrl-C — it appends `\r` — so it does not serve the one plausible remote case, "stop everything.") Agent-driven `loom broadcast` is local-origin and unaffected.
 
-**`read` is the known usability risk.** It is the primary *observe* verb, and a tap per read may make the app tiresome. If it does, the answer is a **time-boxed read window** (approve once → reads flow for ~15 min, each still audited), **not** demotion to `allow`. This deliberately holds the Device to a stricter standard than the laptop, where anyone at the keyboard reads freely: a phone is lost far more easily, and rule 6.6's revocation only helps once the loss has been *noticed*.
+**`read` runs under a time-boxed Read Window — required, not conditional.** A Confirmation per `read` collapses the moment the app is actually usable: swiping between Panes is the natural way to scan a Workspace, and a six-Pane Workspace would cost six taps. So `read`'s `approve` resolves **once** into a **Read Window** — default **15 minutes**, after which the next `read` re-prompts.
+
+This is **not** a demotion to `allow`: the window expires, it is revocable, it is scoped to one Pairing, every read inside it is still **audited** individually (rule 4), and it is still rate-limited (rule 5). Nor is it a general unlock — `send` still Confirms every time.
+
+**The duration is a security parameter, not a comfort setting**: it is exactly the span in which a stolen, unlocked phone can page through every Pane's scrollback unchallenged. 15 minutes is the default for that reason, not because it felt convenient. The Device is still held to a stricter standard than the laptop, where anyone at the keyboard reads freely — a phone is lost far more easily, and rule 6.6's revocation only helps once the loss has been *noticed*.
 
 #### 3.1 Origin is envelope metadata, never request payload
 

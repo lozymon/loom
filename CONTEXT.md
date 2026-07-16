@@ -78,6 +78,10 @@ _Avoid_: connection, link, session (a Session is an Agent run — a different th
 The go/no-go a bus command must obtain before it executes, whenever policy demands a human — the input gate, the spawn or destructive-broadcast guard, or a remote command's `approve` disposition. Parked and *non-blocking* (never a synchronous modal, which would freeze every Pane's rendering), answerable at the laptop or from a paired Device, and **default-denied** on timeout. Distinct from an Approval: an **Agent** raises an Approval about *its own work*; **Loom** raises a Clearance about *a command*. A Clearance is an authorization boundary only where actor and decider differ (an Agent's command, decided by the user) — for a command the user sent from their own Device it is a Confirmation, catching typos, not attackers.
 _Avoid_: approval (a different thing — see above), confirm, modal, prompt
 
+**Read Window**:
+The time-boxed span in which a Device's `read` calls proceed without a fresh Confirmation — default 15 minutes, after which the next `read` re-prompts. Scoped to one Pairing. Exists because swiping between Panes makes a tap-per-read untenable. **Not a general unlock**: only `read` is covered (a `send` still Confirms every time), every read inside it is still audited and rate-limited, and it expires. Its duration is a security parameter — the span a stolen, unlocked phone reads freely — not a comfort setting.
+_Avoid_: unlock, grace period, session (a Session is an Agent run — a different thing)
+
 **Bridge**:
 Loom's in-process network front-end onto the control bus: it dials out to the Relay, terminates the end-to-end hop, and injects the same `ControlRequest` the local socket would (tagged with its Origin). Transport only — routing and policy stay in TS, per the golden split.
 _Avoid_: gateway, proxy, server
