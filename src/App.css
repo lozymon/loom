@@ -5232,3 +5232,117 @@ body,
   opacity: 0.4;
   cursor: default;
 }
+
+/* ---- Clearance dock (ADR-0012 rule 3.4) --------------------------------------------------------
+   A bus command parked pending a human decision. Self-surfacing bottom-right (the operator does not
+   open it), non-blocking — the replacement for the webview-freezing `window.confirm`. The amber
+   `--state-needs` (Loom's constant-across-themes "needs you") carries it; the brand accent stays
+   quiet, matching how the app signals attention elsewhere. */
+.clearance-dock {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 70; /* above panels + the voce overlay (60); it is a decision that gates real commands */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 340px;
+  max-width: calc(100vw - 36px);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  pointer-events: none; /* the gap between cards doesn't eat clicks; cards re-enable it */
+}
+.clearance-card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid rgba(var(--state-needs-rgb), 0.5);
+  box-shadow: var(--shadow-overlay);
+  animation: clearance-rise 0.16s ease-out;
+}
+@keyframes clearance-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clearance-card { animation: none; }
+}
+.clearance-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.clearance-kind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--state-needs);
+  border: 1px solid rgba(var(--state-needs-rgb), 0.4);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.clearance-timer {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--state-needs);
+  font-variant-numeric: tabular-nums;
+}
+.clearance-summary {
+  font-size: 13px;
+  color: var(--text-bright);
+  line-height: 1.4;
+}
+.clearance-detail {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--surface-dead);
+  border: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-bright);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 108px;
+  overflow-y: auto;
+}
+.clearance-note {
+  font-size: 11.5px;
+  color: var(--state-needs);
+  line-height: 1.35;
+}
+.clearance-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.clearance-btn {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--chip-border);
+  background: transparent;
+  color: var(--text-mid);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.clearance-btn:hover { background: var(--tint-weak); }
+.clearance-btn.approve {
+  border-color: rgba(var(--state-needs-rgb), 0.5);
+  color: var(--state-needs);
+  background: rgba(var(--state-needs-rgb), 0.1);
+}
+.clearance-btn.approve:hover { background: rgba(var(--state-needs-rgb), 0.18); }
+.clearance-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--state-needs);
+}
