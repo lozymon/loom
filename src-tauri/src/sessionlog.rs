@@ -1,11 +1,13 @@
-//! Durable Session/Task history in SQLite (ADR-0009). The in-memory TS store
-//! (`src/stores/sessions.ts`) is the live source of truth; this is its durable, queryable mirror —
-//! answering "what did my agents do?" and cross-session search after a restart.
+//! Durable Session/Task history in SQLite (ADR-0009), plus the durable bus-command **audit** trail
+//! (ADR-0012 rule 4). The in-memory TS stores (`src/stores/sessions.ts`, `src/stores/audit.ts`) are
+//! the live source of truth; this is their durable, queryable mirror — answering "what did my agents
+//! do?" and, for audit, "who drove whom, and from where" after a restart.
 //!
-//! TS drives every write (no product logic in Rust, like `workspaces.json`): it hands us a
-//! Session/Task row to upsert and we run the SQL — we never parse the bus protocol or decide what a
-//! row means. Only structured lifecycle rows land here, never PTY bytes, so this stays off the
-//! flood path (ADR-0003/0006).
+//! TS drives every write (no product logic in Rust, like `workspaces.json`): it hands us a row to
+//! append/upsert and we run the SQL — we never parse the bus protocol or decide what a row means.
+//! Only structured lifecycle/audit rows land here, never PTY bytes, so this stays off the flood path
+//! (ADR-0003/0006). The audit trail is why ADR-0012 rule 4 is a hard requirement rather than
+//! aspirational: a phone-driven `broadcast` must be attributable after the fact, not just live.
 
 use std::sync::Mutex;
 
@@ -95,7 +97,17 @@ pub fn open(app: &AppHandle) -> Result<Connection, String> {
             approval_kind TEXT
          );
          CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
-         CREATE INDEX IF NOT EXISTS idx_tasks_started ON tasks(started_at);",
+         CREATE INDEX IF NOT EXISTS idx_tasks_started ON tasks(started_at);
+         CREATE TABLE IF NOT EXISTS audit(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts INTEGER NOT NULL,
+            op TEXT NOT NULL,
+            target TEXT,
+            ok INTEGER NOT NULL,
+            detail TEXT,
+            origin TEXT NOT NULL DEFAULT 'local'
+         );
+         CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);",
     )
     .map_err(|e| e.to_string())?;
     Ok(conn)
@@ -260,4 +272,129 @@ pub fn session_log_recent(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     Ok(hits)
+}
+
+// ---- Audit trail (ADR-0012 rule 4) --------------------------------------------------------------
+// The durable half of the bus-command timeline. The live view stays a bounded in-memory ring
+// (stores/audit.ts); this is the after-the-fact record. Append-only from TS; one row per relayed
+// command, so it is low-volume like the Session/Task writes and stays off the flood path.
+
+/// One relayed bus command, as TS records it. No `id`: the DB autoincrements its own, since the
+/// in-memory ring's ids are a per-run sequence and would collide across restarts.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditRow {
+    ts: i64,
+    op: String,
+    target: Option<String>,
+    ok: bool,
+    detail: Option<String>,
+    /// `local` | `device:<name>` (ADR-0012 rule 4). Defaults to `local` for callers not yet
+    /// origin-aware (every caller today; the remote envelope arrives with P2).
+    #[serde(default = "default_origin")]
+    origin: String,
+}
+
+fn default_origin() -> String {
+    "local".to_string()
+}
+
+/// One audit row for display/hydration (mirrors the TS `AuditEntry`, minus the ephemeral list id).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditHit {
+    ts: i64,
+    op: String,
+    target: Option<String>,
+    ok: bool,
+    detail: Option<String>,
+    origin: String,
+}
+
+/// Append one relayed command to the durable audit trail. Best-effort from TS's view.
+#[tauri::command]
+pub fn audit_log_save(log: tauri::State<SessionLog>, entry: AuditRow) -> Result<(), String> {
+    let conn = log.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO audit(ts, op, target, ok, detail, origin) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            entry.ts,
+            entry.op,
+            entry.target,
+            entry.ok as i64,
+            entry.detail,
+            entry.origin,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The most recent audit rows, oldest-first (so TS can seed its ring in timeline order). `limit`
+/// caps the load; the DB may hold more (trimmed by `audit_log_prune`).
+#[tauri::command]
+pub fn audit_log_recent(
+    log: tauri::State<SessionLog>,
+    limit: Option<u32>,
+) -> Result<Vec<AuditHit>, String> {
+    let lim = limit.unwrap_or(500).min(5000);
+    let conn = log.0.lock().map_err(|e| e.to_string())?;
+    // Take the newest `lim` by id, then hand them back ascending so the ring ends newest-last.
+    let mut stmt = conn
+        .prepare(
+            "SELECT ts, op, target, ok, detail, origin FROM \
+             (SELECT * FROM audit ORDER BY id DESC LIMIT ?1) ORDER BY id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let hits = stmt
+        .query_map(params![lim], |row| {
+            Ok(AuditHit {
+                ts: row.get(0)?,
+                op: row.get(1)?,
+                target: row.get(2)?,
+                ok: row.get::<_, i64>(3)? != 0,
+                detail: row.get(4)?,
+                origin: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(hits)
+}
+
+/// Trim the audit trail to a bounded window — the durable analogue of the in-memory ring's cap.
+/// Drops rows older than `max_age_days` (if > 0) and keeps at most `max_rows` (if > 0). Called at
+/// startup, like `session_log_prune`.
+#[tauri::command]
+pub fn audit_log_prune(
+    log: tauri::State<SessionLog>,
+    max_age_days: i64,
+    max_rows: i64,
+) -> Result<(), String> {
+    let conn = log.0.lock().map_err(|e| e.to_string())?;
+    if max_age_days > 0 {
+        let cutoff = now_ms() - max_age_days * 24 * 60 * 60 * 1000;
+        conn.execute("DELETE FROM audit WHERE ts < ?1", params![cutoff])
+            .map_err(|e| e.to_string())?;
+    }
+    if max_rows > 0 {
+        conn.execute(
+            "DELETE FROM audit WHERE id NOT IN \
+             (SELECT id FROM audit ORDER BY id DESC LIMIT ?1)",
+            params![max_rows],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Wipe the whole audit trail (the UI "clear timeline" affordance — clears the ring *and* the
+/// durable record, so a restart doesn't resurrect what the operator cleared).
+#[tauri::command]
+pub fn audit_log_clear(log: tauri::State<SessionLog>) -> Result<(), String> {
+    let conn = log.0.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM audit", [])
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }

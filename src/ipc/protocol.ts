@@ -121,6 +121,12 @@ export interface ControlEvent {
   request: string;
 }
 
+/** Provenance of a bus command (ADR-0012 rule 4; CONTEXT.md "Origin"). `local` = a Pane/CLI on the
+ *  same host (ADR-0007's trust model); `device:<name>` = a paired remote Device. Every caller today
+ *  is `local`; the remote envelope that sets `device:*` arrives with Plan 02 P2. Carried on the
+ *  audit trail so a phone-driven command is attributable, distinct from a local one. */
+export type Origin = "local" | `device:${string}`;
+
 /** Requests the `loom` CLI can make. `target`/`name` are pane display titles (e.g. "Cleo"). */
 export type ControlRequest =
   | { op: "list" }

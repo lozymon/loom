@@ -189,6 +189,10 @@ pub fn run() {
             sessionlog::session_log_search,
             sessionlog::session_log_recent,
             sessionlog::session_log_prune,
+            sessionlog::audit_log_save,
+            sessionlog::audit_log_recent,
+            sessionlog::audit_log_prune,
+            sessionlog::audit_log_clear,
         ])
         .setup(move |app| {
             // Start the inter-pane control bus once the app handle exists (ADR-0007).

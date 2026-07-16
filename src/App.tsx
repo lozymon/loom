@@ -42,6 +42,12 @@ import { actionForKey, appChord, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type A
 import { initPaneControl } from "./lib/paneControl";
 import { setSessionSink } from "./stores/sessions";
 import { saveSession, saveTask, pruneHistory } from "./lib/sessionLogClient";
+import { pruneAudit } from "./lib/auditClient";
+import { loadAuditHistory } from "./stores/audit";
+
+/** Durable audit-trail row cap (ADR-0012 rule 4). Generous — one row per bus command — but bounded,
+ *  the durable analogue of the in-memory ring's 500. A setting can replace this if it ever matters. */
+const AUDIT_MAX_ROWS = 20000;
 import "./App.css";
 
 export default function App() {
@@ -91,10 +97,15 @@ export default function App() {
   onMount(async () => {
     await Promise.all([initTheme(), initSettings(), init()]);
     startPersistence();
+    // Seed the audit timeline from its durable trail (ADR-0012 rule 4) so it survives restart.
+    void loadAuditHistory();
     setReady(true);
-    // Prune the agent-history DB to the configured bounded window (ADR-0009), once settings are
-    // loaded. Best-effort: a failure (e.g. history DB unavailable) must not disrupt startup.
+    // Prune the durable DBs to their bounded windows, once settings are loaded. Best-effort: a
+    // failure (e.g. history DB unavailable) must not disrupt startup.
     void pruneHistory(settings.historyMaxAgeDays, settings.historyMaxSessions).catch(() => {});
+    // The audit trail is one row per bus command (higher volume than sessions), so it keeps its own
+    // generous row cap; reuse the history age bound.
+    void pruneAudit(settings.historyMaxAgeDays, AUDIT_MAX_ROWS).catch(() => {});
   });
 
   // Listen for inter-pane control requests (the `loom` CLI → Rust relay → here). Registered in
