@@ -21,8 +21,12 @@ and a shippable result.
 ## Goal
 
 **"Your agents ask, your phone answers."** Observe the fleet from anywhere and — the payoff —
-**resolve Clearances and `attention` signals by push** ("Faye needs you") instead of the work stalling
+**answer the Agent that is blocked on you**, by push ("Faye needs you"), instead of the work stalling
 until you walk back to the laptop.
+
+Precisely: the payoff is **Approvals** (ADR-0008 — an Agent blocked on its own stdin, which waits
+*indefinitely*), **not Clearances** (an Agent blocked on a bus reply, which dies with its caller in ~2
+minutes — Claude Code's Bash tool times out at 120 s by default). See ADR-0012 rule 3.5.
 
 Driving (`send`/`read`/`broadcast` from the phone) is the **second-class half**: it carries essentially
 the entire risk budget of this plan, and its remote approve/deny tap is a Confirmation, not an
@@ -167,8 +171,13 @@ rejects. P1 below is the UX spike that a LAN-only app would otherwise be an expe
       helpers in `paneControl.ts` are synchronous: an agent tripping one on an unattended laptop
       freezes the webview and every Pane's rendering until someone walks over. Replace with parked,
       non-blocking Clearances + an in-app panel. **Ships value with no phone, no relay, no ADR-0012** —
-      it's a local defect fix. It is also the hinge the whole mobile payoff hangs off (P4), so it comes
-      first. Distinct from ADR-0008's Approval (see CONTEXT.md) — do not merge the two inboxes.
+      a local defect fix, and that is now its main justification (rule 3.5: Clearances die with their
+      caller in ~2 min, so they are rarely answerable from a phone). Distinct from ADR-0008's Approval
+      (see CONTEXT.md) — do not merge the two inboxes. Two things to settle before coding:
+      **(a) lifetime** — no wall clock; a Clearance lives while its caller waits and is *withdrawn* (not
+      denied) when the caller vanishes; **(b) the abort signal** — `control.rs` must report
+      caller-disconnect *before* the frontend can execute, or Approve on a dead Clearance spawns a pane
+      nobody awaits.
 - [ ] **P0c — extend `list`'s payload.** It returns `{name, workspace, focused, live, role, gated}` —
       **no `status`, no `attention`** (`paneControl.ts`). `FleetPanel` reads those from the TS store
       in-process, so nothing noticed; the app is the first wire consumer. **The fleet screen — the

@@ -44,7 +44,7 @@ So remote authority is **enumerated per op, and fails closed**. An op earns a di
 | Disposition | Ops | Earns it by |
 |---|---|---|
 | **`allow`** — no prompt | `list` (payload extended — see below) | the one reader; feeds the fleet-list screen |
-| **`approve`** — Confirmation (3.3) | `send`, `read` | the Pane-detail screen (read tail + send box) |
+| **`approve`** — Confirmation (3.3) | `send` (destructive only), `read` (Read Window) | the Pane-detail screen (read tail + send box) |
 | **`deny`** | `spawn`, `broadcast`, `status`, `attention`, `gate.set`, `gate.list`, `role.set`, `focus`, the blackboard, **and everything unlisted — including ops that do not exist yet** | no surface, no articulated need, or actively harmful |
 
 **One reader, two writers, everything else closed** — that is the entire remote surface.
@@ -85,6 +85,10 @@ The Device sends `send`/`spawn`/`broadcast`; the `approve` disposition parks it 
 
 **Flow A's security therefore comes from rules 6, 3, and 4 — pairing, the deny-by-default table, and audit — never from the tap.** The ADR must not claim otherwise; an authorization control that only defends against its own operator's typos is one we would otherwise over-trust.
 
+**Timeout: 60 s, default-deny.** The operator is holding the phone; silence means they abandoned the action.
+
+**So `send` Confirms only when the text is destructive** — reuse `isDestructiveCommand` (`lib/guardrails.ts`), already backing the broadcast guard. Follow the logic through: a Confirmation stops no attacker (they tap it), so its *entire* value is typo protection — which means it should fire where typos hurt and nowhere else. Answering an Agent's question (`y`) is the hero flow (3.4) and must cost **one tap, no keyboard ceremony**; `rm -rf` still Confirms. Both are audited and rate-limited regardless.
+
 #### 3.4 Flow B — local-origin, human away: **Clearances**, non-blocking
 
 This is the flow that needs re-homing, and it is the hazard this ADR opened with: an Agent trips a guardrail while the laptop is unattended, `window.confirm` fires, and — being synchronous — it **blocks the webview thread, freezing every Pane's rendering until someone walks over**. Remote control makes this *more* likely to fire, since its whole premise is that you are elsewhere. Leaving the local branch on `window.confirm` would name the hazard and then preserve it.
@@ -93,7 +97,20 @@ So a tripped guardrail stops being a modal and becomes a first-class, non-blocki
 
 **Flow B is worth building with no Device paired at all.** A synchronous modal that freezes every Pane is a defect on its own merits; `paneControl.ts` already documents that dispatch's reply blocks on it. That makes Clearances a **local** correctness fix that remote control merely gives a second surface — not new remote machinery.
 
-This reweights the product: the strong pitch is **"your Agents ask, your phone answers"** (needs `list` + resolve-a-Clearance, rides ADR-0008's pushed signals, and is exactly the `attention`→push payoff Plan 02 already names), while **"type commands into your fleet from a phone"** — `send`/`read` and their entire risk budget — becomes **optional**, not foundational.
+**A Clearance must never outlive its caller — bind it to caller liveness, not a wall clock.** The caller already has its own timeout and it is short: an Agent invoking `loom spawn` through Claude Code's Bash tool gets **120 s by default**. "Waits forever" is therefore fiction — at minute 2 the tool call fails while the operator is 40 minutes into lunch. A second, wall-clock timeout inside Loom would merely race the caller's real one with a different wrong number. So a Flow B Clearance lives exactly as long as something is waiting on the reply; when the caller vanishes (tool timeout, killed CLI, dead Pane) the Clearance is **withdrawn — not denied**, because no decision was made.
+
+**This obliges `control.rs` to signal caller-disconnect *before* the frontend executes.** Today the accept thread parks on a channel and only learns the socket is dead when it writes the reply back — too late. Approving a Clearance whose Agent gave up would **spawn the pane** and *then* fail to deliver the reply: a command runs that nobody awaits and no Agent learns of. A `loom://pane-cmd-abort { reqId }` (or equivalent) must withdraw the card first.
+
+#### 3.5 What this means for the product — corrected
+
+An earlier draft of 3.4 called Flow B "the feature." That over-reached, and the caller-timeout above is why. Two *different* things block an Agent, and only one survives a lunch break:
+
+- **Blocked on its own stdin** — "Can I edit `config.ts`?" The Agent waits *indefinitely*. This is an **Approval** (ADR-0008; `stores/sessions` already carries `approvalRequest`/`approvalResolve`). Push → open app → answer → it proceeds. **Works at any delay.**
+- **Blocked on a bus reply** — `loom spawn` trips a guardrail. This is a **Clearance**, and it dies with its caller in ~2 minutes.
+
+So: **Approvals are the remote payoff** — which is what Plan 02 said before this ADR muddied it — and **Clearances are principally a *local* fix.** That does not lower P0b's priority: a synchronous modal freezing every Pane's rendering is a defect on its own merits, and Clearances remain the right shape. It changes what the *app* is for. "Type commands into your fleet from a phone" (`send`/`read`, and the whole risk budget) stays **optional**; the hero is answering the Agent that is patiently waiting on you.
+
+*(Note `approval.resolve` is **already a bus op** and does **not** answer anything — it marks the Task unblocked and clears attention. Answering still means `send`. A future `approval.answer` taking one of an Agent's offered choices would need ADR-0008's Approval to carry a `choices` list, which it does not; that is a separate arc, not v1.)*
 
 ### 4. Audit records Origin — mandatory, not optional
 
@@ -205,6 +222,7 @@ This reaches back into the other rules:
 
 - **ADR-0007's one-sentence trust model no longer holds globally.** It remains true for local-origin bus traffic; remote-origin traffic is governed by *this* ADR (pairing, E2E, per-command approval, audited origin) instead of "the OS user." Update the cross-reference in 0007 when this is accepted.
 - **`paneControl.dispatch` becomes origin-aware and gains a policy table.** Dispatch takes `origin` **as a parameter from the Rust-authored envelope** — the request type must *not* gain an `origin` field (rule 3.1: the body is caller-authored, so a field there is forgeable). It consults the per-op disposition (rule 3) before executing. This is the one place the golden split's "routing in TS" now also carries *policy* differences by origin — deliberately, because policy is product logic.
+- **`control.rs` gains caller-disconnect detection** (rule 3.4) — a parked Clearance must be withdrawn the moment its caller stops waiting, *before* any Approve can execute it. This is new behaviour in the accept thread, which currently only discovers a dead socket on reply-write.
 - **`control.rs`'s `ControlEvent` gains a Rust-authored `origin`** (rule 3.1), and ADR-0007's "Rust attaches no caller identity (it's a pure relay)" is amended: Rust now attaches transport identity, TS still owns all policy. Update 0007's cross-reference on acceptance.
 - **The three guardrail helpers stop being synchronous** (rule 3.4). `confirmExternalSpawn`, `confirmDestructiveBroadcast`, and `confirmHeldPaneInput` currently call `window.confirm`, which blocks the webview thread and stalls dispatch's reply; they become non-blocking **Clearances** — parked state, an in-app panel, an optional Device push, default-deny on timeout — for **both** Origins. This is the largest single change to existing code in this ADR, and it is a **local** correctness fix (a modal that freezes every Pane's rendering is a defect with or without a phone); remote merely adds a second surface to answer on.
 - **Clearance vs Approval is a live terminology hazard.** ADR-0008's Approval (an Agent, blocked, describing its own work) and a Clearance (Loom, holding a command, asking permission) are different entities that both want to be called "the thing in the inbox." CONTEXT.md now separates them; the app must not merge them into one undifferentiated list.
