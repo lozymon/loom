@@ -194,6 +194,16 @@ export function forgetPane(id: PaneId) {
 
 /** Does any pane in `ids` have a sticky signal (unseen output / bell / attention)? Drives the
  *  rail's lighter per-workspace activity dot. */
+/** A pane's agent-pushed status label ("" = none). Read by the bus `list` op (Plan 02 P0c). */
+export function paneStatus(id: PaneId): string {
+  return activity[id]?.status ?? "";
+}
+
+/** Whether a pane's agent has raised its "needs you" attention border. Read by `list` (P0c). */
+export function paneAttention(id: PaneId): boolean {
+  return activity[id]?.attention ?? false;
+}
+
 export function anyAttention(ids: Iterable<PaneId>): boolean {
   for (const id of ids) {
     const a = activity[id];

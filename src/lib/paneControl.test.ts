@@ -33,6 +33,8 @@ const h = vi.hoisted(() => ({
   noteAttention: vi.fn(),
   clearAttention: vi.fn(),
   setStatus: vi.fn(),
+  paneStatus: vi.fn(() => ""),
+  paneAttention: vi.fn(() => false),
   notifyAttention: vi.fn(),
   noteSet: vi.fn(),
   ensureNotesLoaded: vi.fn(() => Promise.resolve()),
@@ -71,7 +73,7 @@ vi.mock("../stores/workspace", () => ({
   workspaceByName: h.workspaceByName,
   workspaceByPaneName: h.workspaceByPaneName,
 }));
-vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus }));
+vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus, clearStatus: vi.fn(), paneStatus: h.paneStatus, paneAttention: h.paneAttention }));
 vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel, ensureNotesLoaded: h.ensureNotesLoaded }));
 vi.mock("../stores/claims", () => ({ claimFile: h.claimFile, releaseFile: h.releaseFile, listClaims: h.listClaims }));
 vi.mock("../stores/inputHolds", () => ({ gatePane: h.gatePane, isGated: h.isGated, releaseGate: h.releaseGate }));
@@ -89,6 +91,8 @@ const {
   activeWorkspace,
   broadcastTargets,
   listPanes,
+  paneStatus,
+  paneAttention,
   resolvePaneByName,
   resolvePanesByRole,
   revealPane,
@@ -200,20 +204,34 @@ describe("initPaneControl", () => {
 });
 
 describe("list", () => {
-  it("maps each pane and derives `live` from the registry", async () => {
+  it("maps each pane, derives `live`, and enriches with pushed status/attention (P0c)", async () => {
     listPanes.mockReturnValue([
       { name: "Cleo", workspace: "main", focused: true, paneId: 1 },
       { name: "Faye", workspace: "main", focused: false, paneId: 2 },
     ]);
     countLive.mockImplementation((ids: number[]) => (ids[0] === 1 ? 1 : 0));
+    // Cleo is working with a status label; Faye has raised its attention border.
+    paneStatus.mockImplementation((id: number) => (id === 1 ? "running tests" : ""));
+    paneAttention.mockImplementation((id: number) => id === 2);
 
     const res = await call({ op: "list" });
     expect(res).toEqual({
       ok: true,
       data: [
-        { name: "Cleo", workspace: "main", focused: true, live: true },
-        { name: "Faye", workspace: "main", focused: false, live: false },
+        { name: "Cleo", workspace: "main", focused: true, live: true, status: "running tests" },
+        { name: "Faye", workspace: "main", focused: false, live: false, attention: true },
       ],
+    });
+  });
+
+  it("omits status/attention when a pane has pushed neither (no null noise)", async () => {
+    listPanes.mockReturnValue([{ name: "Wade", workspace: "main", focused: false, paneId: 3 }]);
+    countLive.mockReturnValue(1);
+    // default mocks: paneStatus -> "", paneAttention -> false
+    const res = await call({ op: "list" });
+    expect(res).toEqual({
+      ok: true,
+      data: [{ name: "Wade", workspace: "main", focused: false, live: true }],
     });
   });
 });

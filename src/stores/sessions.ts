@@ -18,6 +18,7 @@ import type {
   PaneId,
   Session,
   SessionId,
+  SessionState,
   Task,
   TaskId,
   TaskOutcome,
@@ -34,6 +35,12 @@ const [livePane, setLivePane] = createStore<Record<PaneId, SessionId | undefined
 export { sessions, tasks, livePane };
 
 // ---- read helpers for the fleet UI (reactive when called inside a tracking scope) ----
+
+/** The state of a Pane's Live Session (ADR-0008), or undefined if nothing is running there. Read by
+ *  the bus `list` op so a remote fleet view can show running/blocked/idle per pane (Plan 02 P0c). */
+export function paneSessionState(paneId: PaneId): SessionState | undefined {
+  return liveSession(paneId)?.state;
+}
 
 /** The active (running or blocked) Task of a Pane's Live Session, or undefined. */
 export function paneActiveTask(paneId: PaneId): Task | undefined {

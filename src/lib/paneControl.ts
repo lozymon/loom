@@ -38,7 +38,14 @@ import { noteSet, noteGet, noteList, noteDel, ensureNotesLoaded } from "../store
 import { claimFile, holdClaim, releaseFile, listClaims } from "../stores/claims";
 import { addCard, cards, setCardStatus, ensureBoardLoaded, setDrain, drainState } from "../stores/board";
 import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
-import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
+import {
+  noteAttention,
+  clearAttention,
+  setStatus,
+  clearStatus,
+  paneStatus,
+  paneAttention,
+} from "../stores/activity";
 import { recordAudit } from "../stores/audit";
 import {
   sessionStart,
@@ -48,6 +55,7 @@ import {
   taskEnd,
   approvalRequest,
   approvalResolve,
+  paneSessionState,
 } from "../stores/sessions";
 import { detectAgent } from "./agents";
 import type { AgentId, PaneId } from "../ipc/protocol";
@@ -129,6 +137,11 @@ export interface DispatchCtx {
 async function dispatch(req: ControlRequest, ctx: DispatchCtx = {}): Promise<ControlResponse> {
   switch (req.op) {
     case "list":
+      // Enrich the layout listing with the agent-pushed signals a remote fleet view needs (Plan 02
+      // P0c): `status`/`attention` from the activity store and the ADR-0008 Session `state`. All are
+      // *pushed* signals, never parsed from output (ADR-0001/0008) — opacity-safe. `FleetPanel` reads
+      // these from the stores in-process; the bus `list` is the first consumer that needs them over
+      // the wire, and it improves `loom list` locally too. Absent fields are omitted, not null.
       return {
         ok: true,
         data: listPanes().map((p) => ({
@@ -138,6 +151,9 @@ async function dispatch(req: ControlRequest, ctx: DispatchCtx = {}): Promise<Con
           live: countLive([p.paneId]) > 0,
           role: p.role,
           gated: p.gated,
+          status: paneStatus(p.paneId) || undefined,
+          attention: paneAttention(p.paneId) || undefined,
+          sessionState: paneSessionState(p.paneId),
         })),
       };
 
