@@ -6,6 +6,25 @@ versioning.
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-07-15
+
+Create workspaces from a calm full-stage launcher instead of a cramped modal.
+
+### Changed
+- **New-workspace launcher is now a full-stage view, not a modal** (roadmap plan 04, #56) — the ＋ on
+  the rail (and Ctrl+Shift+T) opens the launcher *in the stage* where the grid normally sits, so the
+  workspace rail and title bar stay put (mirroring how a zoomed pane fills the stage) instead of a
+  floating card dimming the whole window. It reads as one calm centered column — working folder + name,
+  a layout picker, and a one-click "fill every pane with an agent" fleet row — with the per-pane grid
+  and editor folded behind a **Customize each pane** disclosure that reveals below without resizing the
+  form. A quick-start strip (built-in shapes + your saved presets) sits up top as a shortcut past the
+  whole flow.
+
+### Added
+- **Save as preset** in the launcher — capture the current folder / name / layout / fleet / per-pane
+  config (including per-pane cwd, shell, and seed prompt) as a relaunchable preset, so presets can now
+  be *created* from the launcher, not just consumed there.
+
 ## [1.11.0] — 2026-07-13
 
 Move a pane between workspaces without killing what it's running.
