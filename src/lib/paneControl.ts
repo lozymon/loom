@@ -58,10 +58,23 @@ import {
   paneSessionState,
 } from "../stores/sessions";
 import { detectAgent } from "./agents";
-import type { AgentId, PaneId } from "../ipc/protocol";
+import type { AgentId, Origin, PaneId } from "../ipc/protocol";
 import { notifyAttention } from "./notify";
 import { settings } from "../stores/settings";
 import { requestClearance, withdrawClearance } from "../stores/clearances";
+import { remoteDisposition } from "./remotePolicy";
+
+/** For a remote Clearance card: the pane/target the command names, if any. */
+function remoteTargetOf(req: ControlRequest): string | undefined {
+  const r = req as unknown as Record<string, unknown>;
+  return typeof r.target === "string" ? r.target : undefined;
+}
+
+/** For a remote Clearance card: the text under review (the send payload; read has none). */
+function remoteDetailOf(req: ControlRequest): string {
+  const r = req as unknown as Record<string, unknown>;
+  return typeof r.text === "string" ? r.text : "";
+}
 
 // Which Clearance (if any) a live request is currently parked on, keyed by the request's `reqId`.
 // Requests run concurrently (each event is its own async dispatch), so a global signal can't tell
@@ -81,11 +94,14 @@ export async function initPaneControl(): Promise<() => void> {
 
   const unlistenCmd = await listen<ControlEvent>(PANE_CMD_EVENT, async (event) => {
     const { reqId, request } = event.payload;
+    // Origin is Rust-authored on the envelope (rule 3.1); never trust an `origin` in the body. A
+    // legacy/absent field is treated as local.
+    const origin: Origin = event.payload.origin ?? "local";
     let parsed: ControlRequest | null = null;
     let response: ControlResponse;
     try {
       parsed = JSON.parse(request) as ControlRequest;
-      response = await dispatch(parsed, {
+      response = await dispatch(parsed, origin, {
         onPark: (clearanceId) => {
           parkedByReq.set(reqId, clearanceId);
           // Tell Rust to stop counting down its reply deadline — a human may take minutes.
@@ -99,7 +115,7 @@ export async function initPaneControl(): Promise<() => void> {
     }
     // Record every relayed command on the audit timeline (ORCHESTRATION-IDEAS §3). Opacity-safe:
     // this logs the command, never pane output. A malformed request (no `parsed`) is skipped.
-    if (parsed) recordAudit(parsed, response.ok, response.ok ? undefined : response.error);
+    if (parsed) recordAudit(parsed, response.ok, response.ok ? undefined : response.error, origin);
     void invoke(Cmd.paneCmdReply, { reqId, response: JSON.stringify(response) });
   });
 
@@ -134,7 +150,34 @@ export interface DispatchCtx {
   onPark?: (clearanceId: number) => void;
 }
 
-async function dispatch(req: ControlRequest, ctx: DispatchCtx = {}): Promise<ControlResponse> {
+async function dispatch(
+  req: ControlRequest,
+  origin: Origin = "local",
+  ctx: DispatchCtx = {},
+): Promise<ControlResponse> {
+  // Remote-origin commands are governed by the deny-by-default policy table (ADR-0012 rule 3), NOT
+  // by the local guardrails. Local-origin (unix socket / pane / CLI) keeps ADR-0007's full authority.
+  if (origin !== "local") {
+    const disp = remoteDisposition(req.op);
+    if (disp === "deny") {
+      return { ok: false, error: `"${req.op}" is not permitted from a device` };
+    }
+    if (disp === "approve") {
+      // Flow A Confirmation (rule 3.2): park a Clearance on the operator before executing. A
+      // Confirmation stops typos, not a thief — its real security is pairing + this table + audit.
+      const outcome = await requestClearance(
+        {
+          kind: "remote-command",
+          summary: `${origin} wants to run "${req.op}"${remoteTargetOf(req) ? ` on ${remoteTargetOf(req)}` : ""}:`,
+          detail: remoteDetailOf(req),
+        },
+        ctx.onPark,
+      );
+      if (outcome !== "approved") {
+        return { ok: false, error: `"${req.op}" from ${origin} was ${outcome}` };
+      }
+    }
+  }
   switch (req.op) {
     case "list":
       // Enrich the layout listing with the agent-pushed signals a remote fleet view needs (Plan 02

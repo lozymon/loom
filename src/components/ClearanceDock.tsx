@@ -23,6 +23,7 @@ const KIND_LABEL: Record<ClearanceKind, string> = {
   spawn: "New terminal",
   "destructive-broadcast": "Destructive broadcast",
   "gated-input": "Input gate",
+  "remote-command": "Remote command",
 };
 
 /** Countdown seconds until default-deny, or null when there is no wall clock (the local case). */

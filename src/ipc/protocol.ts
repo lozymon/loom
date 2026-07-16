@@ -115,10 +115,14 @@ export interface LogErrorEvent {
   error: string;
 }
 
-/** Event payload: an opaque request line + the id the reply must echo back. */
+/** Event payload: an opaque request line + the id the reply must echo back, plus the Rust-authored
+ *  Origin (ADR-0012 rule 3.1). `origin` is set from *which transport the frame arrived on* — never
+ *  from the request body, which is caller-authored and forgeable. Absent/legacy payloads are treated
+ *  as `local` by the handler. */
 export interface ControlEvent {
   reqId: number;
   request: string;
+  origin?: Origin;
 }
 
 /** Provenance of a bus command (ADR-0012 rule 4; CONTEXT.md "Origin"). `local` = a Pane/CLI on the

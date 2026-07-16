@@ -91,13 +91,17 @@ impl PendingReplies {
     }
 }
 
-/// Payload carried by the `loom://pane-cmd` event: the raw request line plus the id the
-/// frontend must echo back via `pane_cmd_reply`.
+/// Payload carried by the `loom://pane-cmd` event: the raw request line, the id the frontend must
+/// echo back via `pane_cmd_reply`, and the **Rust-authored Origin** (ADR-0012 rule 3.1). Origin is
+/// set from *which transport the frame arrived on* — `local` from this unix socket, `device:<name>`
+/// from the LAN bridge — never from the request body, which the caller controls. The frontend
+/// applies the deny-by-default policy table off this field, so it must never be caller-settable.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ControlEvent {
     req_id: u32,
     request: String,
+    origin: String,
 }
 
 /// Payload for `loom://pane-cmd-abort`: withdraw any Clearance parked for this request, its caller
@@ -163,7 +167,14 @@ fn handle_conn(stream: Stream, app: AppHandle, pending: Arc<PendingReplies>) {
     };
 
     let (req_id, rx, on_human) = pending.register();
-    if app.emit(EVENT, ControlEvent { req_id, request }).is_err() {
+    // This is the unix-socket transport: same-user callers, ADR-0007's trust model → origin `local`.
+    // The LAN bridge (Plan 02 L1b) emits the same event with `device:<name>`.
+    let event = ControlEvent {
+        req_id,
+        request,
+        origin: "local".to_string(),
+    };
+    if app.emit(EVENT, event).is_err() {
         pending.take(req_id);
         let _ = control_transport::write_line(&stream, r#"{"ok":false,"error":"app not ready"}"#);
         return;

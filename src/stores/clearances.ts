@@ -17,8 +17,9 @@
 import { createStore } from "solid-js/store";
 import type { PaneId } from "../ipc/protocol";
 
-/** Which guardrail parked the command. */
-export type ClearanceKind = "spawn" | "destructive-broadcast" | "gated-input";
+/** Which guardrail parked the command. `remote-command` is the deny-by-default `approve` gate
+ *  (ADR-0012 rule 3.2): a `send`/`read` from a Device, held for a Confirmation. */
+export type ClearanceKind = "spawn" | "destructive-broadcast" | "gated-input" | "remote-command";
 
 /**
  * How a Clearance ended. Four, not two — the distinction is load-bearing:
