@@ -9,7 +9,7 @@ questions. Flesh these out in place; promote to an ADR when a design fork needs 
 | 01 | [Move / reorder panes](01-move-panes.md) | ~1 day | none | no | ✅ **Shipped v1.11.0** (#52) — pure TS; the live PTY is handed across the remount so the process survives. |
 | 04 | [New-workspace form → full-space](04-new-workspace-form.md) | ~1–2 days | none | no | ✅ **Shipped v1.12.0** (#56) — full-stage launcher (rail + title bar persist); calm centered column; per-pane grid behind a disclosure; Save as preset. |
 | 03 | [Website + docs on VPS](03-website-docs.md) | ~2–3 days | none | no | Astro+Starlight (rec.), rsync→VPS. Parallelizable. |
-| 02 | [Mobile remote (VPS relay)](02-mobile-remote.md) | **P0: ~1wk** · flagship: months | yes | **required** | ADR-0012 grilled 2026-07-15. **P0a/b/c ship standalone** (audit persistence, non-blocking Clearances, `list` payload) — local value, no phone/VPS needed. |
+| 02 | [Mobile remote (VPS relay)](02-mobile-remote.md) | **P0 ✅ done** · flagship: months | yes | **required** | ADR-0012 grilled 2026-07-15. **P0a/b/c shipped standalone** (PR #57 — durable audit, non-blocking Clearances, enriched `list`; verified live). Flagship (P1–P4) gated on accepting ADR-0012 + a pairing-crypto review. |
 
 **Suggested order:** ~~01~~ (shipped) → ~~04~~ (shipped) → 03 (can run in parallel) → 02.
 

@@ -6,9 +6,10 @@
 
 ## Effort — two tiers, deliberately separable
 
-- **P0a+P0b+P0c — ~1 week, ships on its own.** All three are *local* fixes with local value: a durable
-  audit trail, a webview that no longer freezes when an agent asks permission, and a `loom list` that
-  reports status. None needs a phone, a VPS, or even ADR-0012 to be accepted.
+- **P0a+P0b+P0c — ✅ shipped (PR #57).** All three were *local* fixes with local value, and each is now
+  merged-pending and verified live: a durable audit trail (rule 4), a webview that no longer freezes
+  when an agent asks permission (a real defect), and a `loom list` that reports status/attention. None
+  needed a phone, a VPS, or ADR-0012 to be accepted — which was the point of splitting them out.
 - **P1–P4 — the flagship: months, not "weeks."** Rust bridge + Noise + pairing UI, a Go relay with
   persisted state and deploy, a React Native app (incl. a JS Noise stack, Keystore wrapping, a QR
   scanner and an **ANSI renderer** — there is no xterm.js on RN), then FCM push.
@@ -164,19 +165,19 @@ the cheap piece (the blind relay is ~a few hundred lines) while still needing al
 origin/audit work to be safe, **and** it bakes in an inbound laptop listener that ADR-0012 rule 1
 rejects. P1 below is the UX spike that a LAN-only app would otherwise be an expensive way to buy.
 
-- [ ] **P0a — audit persistence:** `stores/audit.ts` is a 500-entry in-memory ring, cleared on restart.
-      ADR-0012 rule 4 makes origin-tagged audit a hard requirement and names an "after-the-fact record"
-      that doesn't exist. Persist audit rows (third table in ADR-0009's `sessions.db`). **Prerequisite,
-      not follow-up** — it's small, and it's currently invisible in the checklist.
-- [ ] **P0b — Clearances: de-block the guardrails** (ADR-0012 rule 3.4). Ships with no phone, no relay
-      and no accepted ADR: it fixes a **live defect** (see below) and is the hinge everything else hangs
-      off. **Start here.** → [P0b design](#p0b-design--the-clearance-data-model)
-
-- [ ] **P0c — extend `list`'s payload.** It returns `{name, workspace, focused, live, role, gated}` —
-      **no `status`, no `attention`** (`paneControl.ts`). `FleetPanel` reads those from the TS store
-      in-process, so nothing noticed; the app is the first wire consumer. **The fleet screen — the
-      payoff half — has no data source until this lands.** Add `status`, `attention`, ADR-0008 Session
-      state. Opacity-safe (pushed signals, never parsed output) and improves `loom list` locally today.
+- [x] **P0a — audit persistence** ✅ **Shipped** (PR #57, commit `4c59378`). Durable `audit` table in
+      ADR-0009's `sessions.db` (rule 4's after-the-fact record); ring mirrors + hydrates on startup;
+      `origin` column defaults `local` until the P2 envelope sets `device:*`. Verified live: rows
+      survived a restart and the next command appended to the survivors.
+- [x] **P0b — Clearances: de-block the guardrails** ✅ **Shipped** (PR #57, commits `f8dbc35` +
+      `5778731`). The three `window.confirm` guardrails became non-blocking Clearances; `control.rs`
+      polls caller liveness and emits `pane-cmd-abort` so a Clearance never outlives its caller.
+      Fixed a **live defect** (a modal froze every Pane's rendering). Verified live end-to-end
+      (render / no-freeze / withdraw / approve-spawns / deny-doesn't). → [P0b design](#p0b-design--the-clearance-data-model)
+- [x] **P0c — extend `list`'s payload** ✅ **Shipped** (PR #57, commit `45fe37c`). `list` now carries
+      pushed `status` / `attention` / `sessionState` (opacity-safe; omitted when absent), giving the
+      mobile fleet screen its data source and improving `loom list` locally. Verified live over the
+      raw socket. *(`sessionState`'s populated form awaits live `loom hook` events.)*
 - [ ] **P1 — LAN bridge (spike):** bridge serves the verbs over a local WebSocket; prove them from a
       browser / script on the same Wi-Fi. No relay, no auth, no E2E. **Not shippable** — but point a
       *phone browser* at it to answer "does driving a fleet from a phone feel good?" for a day's work
