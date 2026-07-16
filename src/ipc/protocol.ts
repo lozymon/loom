@@ -84,6 +84,9 @@ export const Cmd = {
   wslDistros: "wsl_distros",
   /** Hand a relayed inter-pane request's answer back to Rust (ADR-0007). */
   paneCmdReply: "pane_cmd_reply",
+  /** Tell Rust a relayed request is now parked on a human decision (a Clearance, ADR-0012 rule
+   *  3.4), so it lifts the reply deadline and polls the caller's liveness instead. */
+  paneCmdParked: "pane_cmd_parked",
 } as const;
 
 // ---- Inter-pane control bus (ADR-0007) -----------------------------------------------
@@ -94,6 +97,13 @@ export const Cmd = {
 
 /** The Tauri event Rust emits for each inbound request. */
 export const PANE_CMD_EVENT = "loom://pane-cmd";
+
+/** Event Rust emits when a parked caller's socket closes before the frontend replied: withdraw any
+ *  Clearance for this `reqId` (ADR-0012 rule 3.4 — a Clearance must never outlive its caller). */
+export const PANE_CMD_ABORT_EVENT = "loom://pane-cmd-abort";
+export interface PaneCmdAbortEvent {
+  reqId: number;
+}
 
 /** Event Rust emits when a pane's session-log write fails mid-stream (disk full, file removed).
  *  The owning pane matches `id` to its live PtyHandle and drops its "recording" indicator —

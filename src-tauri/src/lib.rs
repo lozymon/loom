@@ -159,6 +159,7 @@ pub fn run() {
             clipboard_set_text,
             wsl_distros,
             control::pane_cmd_reply,
+            control::pane_cmd_parked,
             editor::open_editor,
             voce::voce_dictate,
             voce::voce_finish,

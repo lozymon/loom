@@ -39,10 +39,10 @@ pub fn read_line<R: Read>(r: R) -> io::Result<Option<String>> {
 }
 
 #[cfg(unix)]
-pub use unix::{bind, connect, endpoint, probe_alive, Listener, Stream};
+pub use unix::{bind, connect, endpoint, peer_closed, probe_alive, Listener, Stream};
 
 #[cfg(windows)]
-pub use windows::{bind, connect, endpoint, probe_alive, Listener, Stream};
+pub use windows::{bind, connect, endpoint, peer_closed, probe_alive, Listener, Stream};
 
 #[cfg(unix)]
 mod unix {
@@ -88,6 +88,29 @@ mod unix {
         UnixStream::connect(addr).is_ok()
     }
 
+    /// Non-destructively check whether the peer has closed its end while we hold a parked request
+    /// (ADR-0012 rule 3.4 — withdraw a Clearance the instant its caller stops waiting). A
+    /// non-blocking read (`peek` is still unstable): the protocol is one line per connection and the
+    /// caller has already sent its request and is blocked reading for the reply, so nothing is
+    /// pending to consume — `Ok(0)` is an orderly EOF, `WouldBlock` means still connected.
+    /// Conservative on error: a hard failure is treated as "gone" rather than risk a stuck Clearance.
+    pub fn peer_closed(stream: &Stream) -> bool {
+        use io::Read;
+        if stream.set_nonblocking(true).is_err() {
+            return false; // can't check — assume alive; the reply-timeout backstop still applies
+        }
+        let mut s: &UnixStream = stream;
+        let mut buf = [0u8; 1];
+        let closed = match s.read(&mut buf) {
+            Ok(0) => true,                                            // orderly EOF — caller gone
+            Ok(_) => false,                                           // unexpected data, but alive
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => false, // nothing yet — still waiting
+            Err(_) => true,                                           // hard error — treat as gone
+        };
+        let _ = stream.set_nonblocking(false); // restore blocking for the reply write
+        closed
+    }
+
     /// Bind a listener at `addr`, clearing any stale socket file first and restricting it to the
     /// owner (0600, belt-and-suspenders on the 0700 runtime dir). Callers MUST `probe_alive` first
     /// so a *live* instance is never clobbered.
@@ -122,7 +145,7 @@ mod windows {
         CreateFileW, FlushFileBuffers, ReadFile, WriteFile,
     };
     use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, WaitNamedPipeW,
+        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PeekNamedPipe, WaitNamedPipeW,
     };
 
     // Plain integer flags/codes used by the calls above. Defined locally (rather than imported)
@@ -406,6 +429,26 @@ mod windows {
             return true;
         }
         io::Error::last_os_error().raw_os_error() == Some(ERROR_PIPE_BUSY)
+    }
+
+    /// Non-destructively check whether the client closed its pipe end while we hold a parked request
+    /// (ADR-0012 rule 3.4). `PeekNamedPipe` neither consumes bytes nor blocks; it fails with
+    /// `ERROR_BROKEN_PIPE` once the client is gone. Conservative on error: any failure is treated as
+    /// "gone" rather than risk a stuck Clearance. Compile-checked from Linux like the rest of this
+    /// module; runtime-verified on a Windows VM, not here.
+    pub fn peer_closed(stream: &Stream) -> bool {
+        let mut avail: u32 = 0;
+        let ok = unsafe {
+            PeekNamedPipe(
+                stream.handle as _,
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+                &mut avail,
+                ptr::null_mut(),
+            )
+        };
+        ok == 0 // success → pipe alive; failure (incl. ERROR_BROKEN_PIPE) → caller gone
     }
 }
 
