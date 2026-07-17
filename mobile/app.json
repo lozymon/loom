@@ -7,7 +7,9 @@
     "scheme": "loom",
     "android": {
       "package": "cloud.furevikstrand.loom",
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "plugins": [
       [
@@ -17,7 +19,8 @@
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }
