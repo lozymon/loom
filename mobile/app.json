@@ -5,6 +5,12 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "loom",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
     "android": {
       "package": "cloud.furevikstrand.loom",
       "permissions": [
