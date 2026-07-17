@@ -13,7 +13,11 @@
     "plugins": [
       [
         "expo-camera",
-        { "cameraPermission": "Loom uses the camera once, to scan the pairing QR on your laptop." }
+        {
+          "cameraPermission": "Loom uses the camera once, to scan the pairing QR on your laptop.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
       ]
     ]
   }
