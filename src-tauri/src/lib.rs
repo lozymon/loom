@@ -163,7 +163,7 @@ pub fn run() {
             wsl_distros,
             control::pane_cmd_reply,
             control::pane_cmd_parked,
-            lanbridge::lan_bridge_start,
+            lanbridge::lan_bridge_enable,
             lanbridge::lan_bridge_stop,
             lanbridge::lan_bridge_status,
             lanbridge::lan_bridge_pair,

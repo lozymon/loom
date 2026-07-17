@@ -117,14 +117,19 @@ pub fn lan_bridge_pair(state: State<LanBridge>, app: AppHandle) -> Result<Pairin
     let key = random32();
     save_psk(&app, &key)?;
     *state.psk.lock().map_err(|e| e.to_string())? = Some(key);
+    Ok(pairing_info(&state, key))
+}
+
+/// Build the QR payload for the current key + running port.
+fn pairing_info(state: &LanBridge, key: [u8; KEY_LEN]) -> PairingInfo {
     let host = lan_ip().unwrap_or_else(|| "127.0.0.1".to_string());
     let port = state.port.load(Ordering::Relaxed);
-    Ok(PairingInfo {
+    PairingInfo {
         url: format!("ws://{host}:{port}"),
         host,
         port,
         key: base64::engine::general_purpose::STANDARD.encode(key),
-    })
+    }
 }
 
 /// Revoke pairing: stop the bridge, drop the key from memory and disk. A lost phone is cut off.
@@ -136,26 +141,37 @@ pub fn lan_bridge_unpair(state: State<LanBridge>, app: AppHandle) -> Result<(), 
     Ok(())
 }
 
+/// **Enable remote control** — the one-button action behind Settings → Remote. Ensures a pairing key
+/// exists (loads the persisted one, or mints + persists a fresh one on first enable), binds the LAN,
+/// and returns the full `PairingInfo` to render as a QR. Idempotent: if already running, it just
+/// returns the current pairing info.
 #[tauri::command]
-pub fn lan_bridge_start(
+pub fn lan_bridge_enable(
     state: State<LanBridge>,
     pending: State<Arc<PendingReplies>>,
     app: AppHandle,
     port: u16,
-) -> Result<BridgeStatus, String> {
-    // Load a persisted key into memory if we haven't yet this run.
-    {
+) -> Result<PairingInfo, String> {
+    // Ensure a key: reuse the persisted one, else mint + persist a fresh one on first enable.
+    let key = {
         let mut guard = state.psk.lock().map_err(|e| e.to_string())?;
         if guard.is_none() {
             *guard = load_psk(&app);
         }
+        match *guard {
+            Some(k) => k,
+            None => {
+                let k = random32();
+                save_psk(&app, &k)?;
+                *guard = Some(k);
+                k
+            }
+        }
+    };
+    if !state.running.load(Ordering::Relaxed) {
+        start_on(&state, pending.inner().clone(), app, port, key)?;
     }
-    let psk = state
-        .psk
-        .lock()
-        .map_err(|e| e.to_string())?
-        .ok_or("not paired — call lan_bridge_pair first")?;
-    start_on(&state, pending.inner().clone(), app, port, psk)
+    Ok(pairing_info(&state, key))
 }
 
 /// Start core, shared by the command and the dev env-var autostart. Binds first (so a port clash
