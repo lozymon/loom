@@ -1,9 +1,14 @@
 name: Build Android APK
 
-# Builds an installable debug APK of the local-first mobile app (mobile/) and uploads it as a
-# downloadable artifact — no local Android SDK, no Expo account. Manual-trigger only (Android builds
-# are slow/heavy), so it never gates PRs or runs on unrelated pushes. Debug-signed: it installs on
-# your own device for sideloading; it is NOT a Play-Store release.
+# Builds an installable APK of the local-first mobile app (mobile/) and uploads it as a downloadable
+# artifact — no local Android SDK, no Expo account. Manual-trigger only (Android builds are
+# slow/heavy), so it never gates PRs or runs on unrelated pushes.
+#
+# Builds the RELEASE variant on purpose: a *debug* APK does not embed the JS bundle — it expects a
+# Metro dev server at runtime, so installed standalone it fails with "Unable to load script". The
+# release variant embeds index.android.bundle (self-contained, no Metro) and — via Expo's prebuild
+# defaults — is signed with the debug keystore, so it still installs for personal sideloading without
+# a custom signing key. It is NOT a Play-Store upload.
 #
 # To use: Actions tab → "Build Android APK" → Run workflow → pick the branch → download the artifact.
 
@@ -55,13 +60,13 @@ jobs:
         working-directory: mobile
         run: npx expo prebuild --platform android --no-install
 
-      - name: Gradle assembleDebug
+      - name: Gradle assembleRelease
         working-directory: mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: loom-android-debug-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: loom-android-release-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
