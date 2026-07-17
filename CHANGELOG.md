@@ -6,6 +6,34 @@ versioning.
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-07-17
+
+Drive your fleet from your phone, and never let a permission prompt freeze the app again.
+
+### Added
+- **Remote control from the Loom Android app, over your LAN** (Plan 02, local-first path) — observe
+  and drive the fleet from your phone on the same Wi-Fi: a fleet list, per-pane read/send, and the
+  approval flow. **Off by default;** enable it under **Settings → Remote**, which mints a pairing key,
+  binds the LAN, and shows a QR the app scans. Every frame is end-to-end sealed (ChaCha20-Poly1305)
+  to the paired phone, and remote commands are governed by a deny-by-default policy (only `list`,
+  `read`, `send` are reachable; `spawn`/`broadcast`/etc. are refused from a device). **Experimental:**
+  the LAN sealing is a pre-shared-key scheme pending an independent crypto review (see
+  `docs/design/lansec-review-brief.md`) — treat it as a home-network convenience, not a hardened
+  channel, and leave it off if you're on an untrusted network.
+- **Durable audit trail** — the inter-pane bus-command timeline now persists (in `sessions.db`) and
+  survives a restart, and records the *origin* of each command (`local` vs a paired device), so a
+  phone-driven command is attributable after the fact.
+
+### Changed
+- **Permission prompts no longer freeze the app** — the guardrails (external `spawn`, destructive
+  broadcast, a gated pane's input) used a blocking `window.confirm` that stalled the whole webview,
+  freezing every pane's rendering until you answered. They now surface as **non-blocking Clearance
+  cards** (bottom-right) you approve or deny while the rest of the app keeps running; an unanswered
+  Clearance is withdrawn if the requester gives up, and default-denies on timeout.
+- **`loom list`** now reports each pane's agent-pushed **status** label and flags a pane that has
+  raised **attention** (`!`), so the CLI reads as a fleet dashboard (and the same data feeds the
+  mobile fleet view).
+
 ## [1.12.0] — 2026-07-15
 
 Create workspaces from a calm full-stage launcher instead of a cramped modal.
