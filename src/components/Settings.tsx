@@ -6,6 +6,7 @@
 
 import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
+import RemoteSettings from "./RemoteSettings";
 import { getVersion } from "@tauri-apps/api/app";
 import { themes, themeId, setTheme } from "../stores/theme";
 import {
@@ -36,10 +37,11 @@ const NAV_ITEMS: { id: NavItemId; label: string; hint: string }[] = [
   { id: "reopen", label: "Reopen", hint: "closed panes & Claude sessions" },
 ];
 
-type TabId = "appearance" | "terminal" | "keys";
+type TabId = "appearance" | "terminal" | "remote" | "keys";
 const TABS: { id: TabId; label: string }[] = [
   { id: "appearance", label: "Appearance" },
   { id: "terminal", label: "Terminal" },
+  { id: "remote", label: "Remote" },
   { id: "keys", label: "Key bindings" },
 ];
 
@@ -597,6 +599,10 @@ export default function Settings(props: { onClose: () => void }) {
                 </section>
               )}
             </For>
+          </Show>
+
+          <Show when={tab() === "remote"}>
+            <RemoteSettings />
           </Show>
         </div>
 

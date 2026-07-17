@@ -7,6 +7,8 @@ mod control_transport;
 mod docs;
 mod editor;
 mod git;
+mod lanbridge;
+mod lansec;
 mod logs;
 pub mod mcp;
 mod pty;
@@ -138,6 +140,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(PtyManager::new())
         .manage(pending.clone())
+        .manage(lanbridge::LanBridge::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -160,6 +163,11 @@ pub fn run() {
             wsl_distros,
             control::pane_cmd_reply,
             control::pane_cmd_parked,
+            lanbridge::lan_bridge_enable,
+            lanbridge::lan_bridge_stop,
+            lanbridge::lan_bridge_status,
+            lanbridge::lan_bridge_pair,
+            lanbridge::lan_bridge_unpair,
             editor::open_editor,
             voce::voce_dictate,
             voce::voce_finish,
@@ -197,6 +205,13 @@ pub fn run() {
         .setup(move |app| {
             // Start the inter-pane control bus once the app handle exists (ADR-0007).
             control::start(app.handle().clone(), pending.clone());
+            // Dev seam (Plan 02 L1b): start the LAN bridge at boot if $LOOM_LAN_BRIDGE_PORT is set.
+            // Localhost-only, off unless the env var is present; the Settings toggle arrives in L1c.
+            lanbridge::autostart_from_env(
+                app.handle(),
+                &app.state::<lanbridge::LanBridge>(),
+                pending.clone(),
+            );
             // Open the durable Session/Task history DB (ADR-0009). A failure here is non-fatal —
             // the live in-memory store still works; we just lose persistence/search this run.
             match sessionlog::open(app.handle()) {

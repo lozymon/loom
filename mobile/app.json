@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Loom",
+    "slug": "loom-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "loom",
+    "android": {
+      "package": "cloud.furevikstrand.loom",
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Loom uses the camera once, to scan the pairing QR on your laptop.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
+    ]
+  }
+}

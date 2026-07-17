@@ -1,0 +1,9 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+# native build outputs if the app is later prebuilt/ejected
+android/
+ios/

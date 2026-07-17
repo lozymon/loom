@@ -1,8 +1,33 @@
 # Plan 02 — Mobile remote control (fully remote via VPS relay)
 
-**Status:** planning · **Rust:** yes (new bridge)
-**ADR:** **[ADR-0012 — Remote fleet control over a dial-out VPS relay](../../adr/0012-remote-fleet-control-dial-out-vps-relay.md)** (drafted; the decisions below are resolved there). This is the first thing to break ADR-0007's "local unix socket only, no network exposure" boundary.
-**Decisions locked:** a **native app** (React Native, Android first), **fully remote** via the user's own VPS as a **blind end-to-end relay** — reachable from anywhere, not just the LAN.
+**Status:** P0 shipped (PR #57); **flagship re-sequenced to local-first, 2026-07-16** · **Rust:** yes (new bridge)
+**ADR:** **[ADR-0012 — Remote fleet control over a dial-out VPS relay](../../adr/0012-remote-fleet-control-dial-out-vps-relay.md)** (the *from-anywhere* design; still the destination).
+**Decisions locked:** a **native app** (React Native — the app speaks `ControlRequest`/`ControlResponse` from `ipc/protocol.ts`, so a TS client reuses the types a Dart/Flutter one would hand-redeclare and drift).
+
+## Direction change — local-first keeper, then from-anywhere (2026-07-16)
+
+The user chose to build a **LAN-only keeper app they actually use** now, deferring the VPS/relay. This
+**reverses ADR-0012 rule 1 for the local path**: the laptop **listens** on the LAN (off by default,
+LAN-bound), the phone connects in — correct here because a trusted home LAN is a different threat model
+than the internet-facing relay. ADR-0012 stays the destination (from-anywhere); this is a nearer,
+shippable milestone that reuses almost all of it and front-loads the RN app.
+
+**Phases (local-first):**
+- **L1a — origin envelope + deny-by-default policy gate** (ADR-0012 rules 3, 3.1). Pure logic, no
+  networking: a remote-origin command is gated by the op table (`list` allow; `send`/`read` approve →
+  Clearance; everything else deny) and tagged for audit. *The foundation the bridge stands on, and the
+  rule-3 work P0 deliberately left out.* **← building now.**
+- **L1b — LAN bridge** (Rust, **sync `tungstenite`** to match `control.rs`'s std-threads model). A
+  WebSocket server that feeds the *same* `pane-cmd` relay the unix socket does, tagged `origin:
+  device:<name>` — pure transport, routing/policy stay in TS.
+- **L1c — pairing + frame encryption.** A code/QR from the laptop establishes a shared key; frames are
+  sealed with it (`read` ships scrollback — cleartext on the LAN is not acceptable even at home). Far
+  simpler than the flagship's Noise pairing; no crypto-review gate.
+- **L2 — the React Native app** over L1: fleet list (P0c `list`), pane detail (read+send), Clearance +
+  attention inbox (P0b).
+
+*The from-anywhere path (VPS relay, dial-out, blind E2E, push — the rest of this doc) layers on later;
+L1's origin/policy/pairing all carry forward.*
 
 ## Effort — two tiers, deliberately separable
 

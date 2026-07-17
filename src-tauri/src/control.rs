@@ -91,13 +91,17 @@ impl PendingReplies {
     }
 }
 
-/// Payload carried by the `loom://pane-cmd` event: the raw request line plus the id the
-/// frontend must echo back via `pane_cmd_reply`.
+/// Payload carried by the `loom://pane-cmd` event: the raw request line, the id the frontend must
+/// echo back via `pane_cmd_reply`, and the **Rust-authored Origin** (ADR-0012 rule 3.1). Origin is
+/// set from *which transport the frame arrived on* — `local` from this unix socket, `device:<name>`
+/// from the LAN bridge — never from the request body, which the caller controls. The frontend
+/// applies the deny-by-default policy table off this field, so it must never be caller-settable.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ControlEvent {
     req_id: u32,
     request: String,
+    origin: String,
 }
 
 /// Payload for `loom://pane-cmd-abort`: withdraw any Clearance parked for this request, its caller
@@ -162,31 +166,39 @@ fn handle_conn(stream: Stream, app: AppHandle, pending: Arc<PendingReplies>) {
         _ => return, // EOF, blank line, or read error — nothing to relay
     };
 
-    let (req_id, rx, on_human) = pending.register();
-    if app.emit(EVENT, ControlEvent { req_id, request }).is_err() {
-        pending.take(req_id);
-        let _ = control_transport::write_line(&stream, r#"{"ok":false,"error":"app not ready"}"#);
-        return;
-    }
-    let response = wait_reply(&stream, &rx, &on_human, req_id, &app, &pending);
+    let response = relay_request(&app, &pending, request, "local", || {
+        control_transport::peer_closed(&stream)
+    });
     let _ = control_transport::write_line(&stream, &response);
 }
 
-/// Block for the frontend's reply, honouring two regimes:
-/// - **normal:** give up after `REPLY_TIMEOUT` (a wedged webview must never hang a pane).
-/// - **parked on a human** (`pane_cmd_parked` flipped `on_human`, a Clearance — ADR-0012 rule 3.4):
-///   drop that deadline, but poll the caller's socket every `LIVENESS_POLL`; if the caller stops
-///   waiting, emit `ABORT_EVENT` so the frontend withdraws the Clearance, and stop waiting. This is
-///   what keeps a Clearance from outliving its caller — the invariant behind the zombie-spawn fix.
-fn wait_reply(
-    stream: &Stream,
-    rx: &mpsc::Receiver<String>,
-    on_human: &AtomicBool,
-    req_id: u32,
+/// Relay one request to the webview and block for its reply — the seam **both** transports share
+/// (the unix socket here, and the LAN bridge, Plan 02 L1b). Emits the `pane-cmd` event tagged with
+/// the Rust-authored `origin` (rule 3.1), then waits, honouring two regimes:
+/// - **normal:** give up after `REPLY_TIMEOUT` (a wedged webview must never hang a caller).
+/// - **parked on a human** (`pane_cmd_parked` flipped `on_human`, a Clearance — rule 3.4): drop that
+///   deadline, but poll `is_peer_gone` every `LIVENESS_POLL`; if the caller left, emit `ABORT_EVENT`
+///   so the frontend withdraws the Clearance. This is what keeps a Clearance from outliving its
+///   caller. `is_peer_gone` is transport-specific (a unix-socket EOF peek here; a TCP peek in the
+///   bridge), which is the only part that differs between transports.
+pub fn relay_request(
     app: &AppHandle,
     pending: &PendingReplies,
+    request: String,
+    origin: &str,
+    mut is_peer_gone: impl FnMut() -> bool,
 ) -> String {
     const TIMED_OUT: &str = r#"{"ok":false,"error":"timed out waiting for app"}"#;
+    let (req_id, rx, on_human) = pending.register();
+    let event = ControlEvent {
+        req_id,
+        request,
+        origin: origin.to_string(),
+    };
+    if app.emit(EVENT, event).is_err() {
+        pending.take(req_id);
+        return r#"{"ok":false,"error":"app not ready"}"#.to_string();
+    }
     // Only meaningful before `on_human` is set; a parked-on-human request ignores it.
     let deadline = std::time::Instant::now() + REPLY_TIMEOUT;
     loop {
@@ -211,7 +223,7 @@ fn wait_reply(
             Err(RecvTimeoutError::Timeout) => {
                 // Withdraw only once the frontend has parked on a human AND the caller has left,
                 // so a normal in-flight request is never aborted by a transient poll.
-                if human && control_transport::peer_closed(stream) {
+                if human && is_peer_gone() {
                     if pending.take(req_id).is_some() {
                         let _ = app.emit(ABORT_EVENT, AbortEvent { req_id });
                     }

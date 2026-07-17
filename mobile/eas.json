@@ -1,0 +1,25 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "preview": {
+      "//": "An installable APK (not a Play-Store AAB) for sideloading onto your own Android.",
+      "android": { "buildType": "apk" },
+      "distribution": "internal",
+      "channel": "preview"
+    },
+    "development": {
+      "//": "A dev client build (for iterating with hot reload against a local Metro).",
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "//": "Play-Store bundle. Not needed for personal/local use.",
+      "android": { "buildType": "app-bundle" },
+      "autoIncrement": true
+    }
+  }
+}

@@ -42,6 +42,11 @@ tauri-plugin-notification = "2"
 # and Windows. `default-features = false` + `system` keeps it to just the process/system component
 # (no disk/network/components pulled in). Only queried on an explicit poll, never on the flood path.
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+tungstenite = "0.30"
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+getrandom = "0.4.3"
 
 # Windows-only: the inter-pane control bus (M7.5) uses named pipes via raw Win32 FFI in
 # `control_transport.rs`. Target-gated, so the Linux build pulls nothing new and stays
