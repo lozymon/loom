@@ -131,7 +131,9 @@ import { Cmd, PANE_CMD_EVENT, type ControlRequest, type ControlResponse } from "
 import { listClearances, resolveClearance, withdrawClearance, resetClearances } from "../stores/clearances";
 
 const replyInvoke = invoke as unknown as Mock;
-let handler: (event: { payload: { reqId: number; request: string } }) => Promise<void>;
+let handler: (event: {
+  payload: { reqId: number; request: string; origin?: string };
+}) => Promise<void>;
 
 /** Drive a request whose guardrail parks a Clearance: kick it off, answer the Clearance once it
  *  appears, then read the reply. `decide` receives the parked Clearance's id. */
