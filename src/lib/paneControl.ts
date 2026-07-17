@@ -6,7 +6,15 @@
 
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Cmd, PANE_CMD_EVENT, type ControlEvent, type ControlRequest, type ControlResponse } from "../ipc/protocol";
+import {
+  Cmd,
+  PANE_CMD_EVENT,
+  PANE_CMD_ABORT_EVENT,
+  type ControlEvent,
+  type PaneCmdAbortEvent,
+  type ControlRequest,
+  type ControlResponse,
+} from "../ipc/protocol";
 import { countLive, readPane, writeToPanes, paneCwd } from "./paneRegistry";
 import { isDestructiveCommand, sharedFolders } from "./guardrails";
 import {
@@ -30,7 +38,14 @@ import { noteSet, noteGet, noteList, noteDel, ensureNotesLoaded } from "../store
 import { claimFile, holdClaim, releaseFile, listClaims } from "../stores/claims";
 import { addCard, cards, setCardStatus, ensureBoardLoaded, setDrain, drainState } from "../stores/board";
 import { createAsk, awaitAsk, replyAsk, cancelAsk } from "./askRegistry";
-import { noteAttention, clearAttention, setStatus, clearStatus } from "../stores/activity";
+import {
+  noteAttention,
+  clearAttention,
+  setStatus,
+  clearStatus,
+  paneStatus,
+  paneAttention,
+} from "../stores/activity";
 import { recordAudit } from "../stores/audit";
 import {
   sessionStart,
@@ -40,29 +55,58 @@ import {
   taskEnd,
   approvalRequest,
   approvalResolve,
+  paneSessionState,
 } from "../stores/sessions";
 import { detectAgent } from "./agents";
 import type { AgentId, PaneId } from "../ipc/protocol";
 import { notifyAttention } from "./notify";
 import { settings } from "../stores/settings";
+import { requestClearance, withdrawClearance } from "../stores/clearances";
 
-/** Subscribe to relayed requests. Call once at startup; returns the unlisten fn. */
+// Which Clearance (if any) a live request is currently parked on, keyed by the request's `reqId`.
+// Requests run concurrently (each event is its own async dispatch), so a global signal can't tell
+// them apart — an abort must target the right one. A request holds at most one *active* Clearance
+// at a time (a broadcast can park twice, but sequentially), so last-write-wins is correct.
+const parkedByReq = new Map<number, number>();
+
+/** Subscribe to relayed requests. Call once at startup; returns a single unlisten fn covering both
+ *  the request stream and the abort stream (ADR-0012 rule 3.4). */
 export async function initPaneControl(): Promise<() => void> {
-  return listen<ControlEvent>(PANE_CMD_EVENT, async (event) => {
+  // Rust signals that a parked caller left before we replied — withdraw its Clearance so an Approve
+  // can't fire a command nobody is waiting for (the zombie-spawn this whole change kills).
+  const unlistenAbort = await listen<PaneCmdAbortEvent>(PANE_CMD_ABORT_EVENT, (event) => {
+    const clearanceId = parkedByReq.get(event.payload.reqId);
+    if (clearanceId !== undefined) withdrawClearance(clearanceId);
+  });
+
+  const unlistenCmd = await listen<ControlEvent>(PANE_CMD_EVENT, async (event) => {
     const { reqId, request } = event.payload;
     let parsed: ControlRequest | null = null;
     let response: ControlResponse;
     try {
       parsed = JSON.parse(request) as ControlRequest;
-      response = await dispatch(parsed);
+      response = await dispatch(parsed, {
+        onPark: (clearanceId) => {
+          parkedByReq.set(reqId, clearanceId);
+          // Tell Rust to stop counting down its reply deadline — a human may take minutes.
+          void invoke(Cmd.paneCmdParked, { reqId });
+        },
+      });
     } catch (err) {
       response = { ok: false, error: `bad request: ${String(err)}` };
+    } finally {
+      parkedByReq.delete(reqId);
     }
     // Record every relayed command on the audit timeline (ORCHESTRATION-IDEAS §3). Opacity-safe:
     // this logs the command, never pane output. A malformed request (no `parsed`) is skipped.
     if (parsed) recordAudit(parsed, response.ok, response.ok ? undefined : response.error);
     void invoke(Cmd.paneCmdReply, { reqId, response: JSON.stringify(response) });
   });
+
+  return () => {
+    unlistenAbort();
+    unlistenCmd();
+  };
 }
 
 /** Prefix that turns a bus target into a role lookup: `role:reviewer` → every pane tagged reviewer.
@@ -82,9 +126,22 @@ function resolveTargets(target: string): { paneIds: PaneId[] } | { error: string
   return "error" in r ? r : { paneIds: [r.paneId] };
 }
 
-async function dispatch(req: ControlRequest): Promise<ControlResponse> {
+/** Per-request context threaded into the guardrails. `onPark` is called with a Clearance's id when
+ *  one is created, so the bus layer can lift the reply deadline (`pane_cmd_parked`) and map the
+ *  request's `reqId` to the Clearance for a later abort. Absent (e.g. in a direct unit-test call)
+ *  means the guardrails still work; they just don't signal Rust. */
+export interface DispatchCtx {
+  onPark?: (clearanceId: number) => void;
+}
+
+async function dispatch(req: ControlRequest, ctx: DispatchCtx = {}): Promise<ControlResponse> {
   switch (req.op) {
     case "list":
+      // Enrich the layout listing with the agent-pushed signals a remote fleet view needs (Plan 02
+      // P0c): `status`/`attention` from the activity store and the ADR-0008 Session `state`. All are
+      // *pushed* signals, never parsed from output (ADR-0001/0008) — opacity-safe. `FleetPanel` reads
+      // these from the stores in-process; the bus `list` is the first consumer that needs them over
+      // the wire, and it improves `loom list` locally too. Absent fields are omitted, not null.
       return {
         ok: true,
         data: listPanes().map((p) => ({
@@ -94,6 +151,9 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
           live: countLive([p.paneId]) > 0,
           role: p.role,
           gated: p.gated,
+          status: paneStatus(p.paneId) || undefined,
+          attention: paneAttention(p.paneId) || undefined,
+          sessionState: paneSessionState(p.paneId),
         })),
       };
 
@@ -101,7 +161,7 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       const r = resolveTargets(req.target);
       if ("error" in r) return { ok: false, error: r.error };
       // Per-pane input gate (§4a): a gated target needs a human OK before input lands.
-      const gate = applyInputGates(r.paneIds, req.text ?? "");
+      const gate = await applyInputGates(r.paneIds, req.text ?? "", ctx);
       if (gate.deliver.length === 0) {
         return { ok: false, error: `"${req.target}" is gated — delivery declined by operator` };
       }
@@ -119,7 +179,7 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       // spawn, and unlike send/broadcast it runs an arbitrary command in a fresh pane with no
       // visible keystrokes — i.e. a silent-RCE primitive if an untrusted/poisoned agent holds the
       // bus. Require explicit user consent before honouring it (toggleable in Settings → Safety).
-      if (settings.confirmExternalSpawn && !confirmExternalSpawn(command, req.cwd)) {
+      if (settings.confirmExternalSpawn && !(await clearExternalSpawn(command, ctx, req.cwd))) {
         return { ok: false, error: "spawn declined by user" };
       }
       const r = spawnPane({ title: req.name, command, cwd: req.cwd });
@@ -154,13 +214,13 @@ async function dispatch(req: ControlRequest): Promise<ControlResponse> {
       // (or races) whatever they share. Warn the operator first — louder when panes share a folder.
       if (settings.confirmDestructiveBroadcast && ids.length >= 2 && isDestructiveCommand(raw)) {
         const cwds = await Promise.all(ids.map((id) => paneCwd(id).catch(() => null)));
-        if (!confirmDestructiveBroadcast(raw, ids.length, sharedFolders(cwds))) {
+        if (!(await clearDestructiveBroadcast(raw, ids, sharedFolders(cwds), ctx))) {
           return { ok: false, error: "destructive broadcast declined by user" };
         }
       }
       // Per-pane input gates (§4a): any gated pane in the fan-out needs a human OK; open panes
       // still receive the broadcast regardless.
-      const gate = applyInputGates(ids, raw);
+      const gate = await applyInputGates(ids, raw, ctx);
       const text = raw + (req.enter === false ? "" : "\r");
       const n = writeToPanes(gate.deliver, text);
       return { ok: true, data: { count: n, skipped: gate.skipped || undefined } };
@@ -486,44 +546,89 @@ function floorLabel(title: string): string {
   return t.length > 48 ? `${t.slice(0, 47)}…` : t;
 }
 
-/** Block on a native confirm before letting an external pane spawn a command-running pane. Uses
- *  `window.confirm` (as the close-confirm path does) — synchronous, so dispatch's reply waits on
- *  the user's choice and the requesting `loom spawn` only returns once they've decided. */
-function confirmExternalSpawn(command: string, cwd?: string): boolean {
-  const where = cwd ? `\nin: ${cwd}` : "";
-  return window.confirm(
-    `Another pane wants to open a new terminal and run:\n\n${command}${where}\n\nAllow it?`,
-  );
-}
-
 /** Apply per-pane input gates (§4a) to a bus delivery. Open panes always pass; gated panes pass
  *  only if the operator OKs them (one confirm for the whole set). With the honor-holds setting off,
  *  gates are ignored entirely. Returns the ids to actually write to + how many gated panes were
  *  dropped (skipped) on a decline. */
-function applyInputGates(ids: PaneId[], text: string): { deliver: PaneId[]; skipped: number } {
+async function applyInputGates(
+  ids: PaneId[],
+  text: string,
+  ctx: DispatchCtx,
+): Promise<{ deliver: PaneId[]; skipped: number }> {
   if (!settings.honorInputHolds) return { deliver: ids, skipped: 0 };
   const gated = ids.filter((id) => isGated(id));
   if (gated.length === 0) return { deliver: ids, skipped: 0 };
   const names = gated.map((id) => paneSpecById(id)?.title ?? `Pane ${id}`);
-  if (confirmHeldPaneInput(names, text)) return { deliver: ids, skipped: 0 };
+  if (await clearHeldPaneInput(names, gated, text, ctx)) return { deliver: ids, skipped: 0 };
   return { deliver: ids.filter((id) => !isGated(id)), skipped: gated.length };
 }
 
-/** Confirm before bus input reaches a gated pane (§4a). Names the gated pane(s) and shows the text
- *  that would be typed — the operator OK the whole standing-hold enforces. */
-function confirmHeldPaneInput(names: string[], text: string): boolean {
-  const which = names.length === 1 ? `gated pane "${names[0]}"` : `${names.length} gated panes:\n${names.join(", ")}`;
-  const preview = text.trim() ? `\n\nIt would type:\n${text}` : "";
-  return window.confirm(`Bus input is held for ${which} (input gate).${preview}\n\nLet it through?`);
+// ---- Guardrails (ADR-0012 rule 3.4) -------------------------------------------------------------
+// These three park the command as a Clearance and await a decision, rather than calling
+// `window.confirm`. The old `confirm` was synchronous: it blocked the webview thread, so an agent
+// tripping a guardrail on an unattended laptop froze every Pane's rendering — and control.rs gave up
+// on the caller at REPLY_TIMEOUT (10s) regardless, so a later click ran a command nobody awaited.
+// Each returns true only on an explicit `approved`; `denied`/`withdrawn`/`expired` all decline.
+//
+// None of them can name the caller: the bus attaches no caller identity (ADR-0007), which is why
+// the wording is "Another pane…" — see the note on `Clearance` in stores/clearances.ts.
+
+/** Clear an external pane's request to spawn a command-running pane (SECURITY_REVIEW Vuln 2). */
+async function clearExternalSpawn(command: string, ctx: DispatchCtx, cwd?: string): Promise<boolean> {
+  const where = cwd ? ` in ${cwd}` : "";
+  const outcome = await requestClearance(
+    {
+      kind: "spawn",
+      summary: `Another pane wants to open a new terminal${where} and run:`,
+      detail: command,
+    },
+    ctx.onPark,
+  );
+  return outcome === "approved";
 }
 
-/** Confirm before a destructive command fans out to many panes (§4b guardrail). Names the shared
- *  folder(s) when panes overlap — that's the case that runs the command repeatedly on one worktree. */
-function confirmDestructiveBroadcast(command: string, count: number, shared: string[]): boolean {
-  const sharedNote = shared.length
-    ? `\n\n⚠ ${shared.length === 1 ? "These panes share the folder" : "Some panes share folders"}:\n${shared.join("\n")}\n(the command would run on the same worktree more than once).`
-    : "";
-  return window.confirm(
-    `A pane wants to broadcast a destructive command to all ${count} live panes:\n\n${command}${sharedNote}\n\nRun it in every pane?`,
+/** Clear bus input reaching a gated pane (§4a). Names the gated pane(s) and shows what would be
+ *  typed — the operator OK the whole standing-hold enforces. */
+async function clearHeldPaneInput(
+  names: string[],
+  gated: PaneId[],
+  text: string,
+  ctx: DispatchCtx,
+): Promise<boolean> {
+  const which =
+    names.length === 1 ? `gated pane "${names[0]}"` : `${names.length} gated panes: ${names.join(", ")}`;
+  const outcome = await requestClearance(
+    {
+      kind: "gated-input",
+      summary: `Bus input is held for ${which} (input gate). Let it through?`,
+      detail: text.trim() ? text : "",
+      targets: gated,
+    },
+    ctx.onPark,
   );
+  return outcome === "approved";
+}
+
+/** Clear a destructive command fanning out to many panes (§4b). Names the shared folder(s) when
+ *  panes overlap — that's the case that runs the command repeatedly on one worktree. */
+async function clearDestructiveBroadcast(
+  command: string,
+  ids: PaneId[],
+  shared: string[],
+  ctx: DispatchCtx,
+): Promise<boolean> {
+  const note = shared.length
+    ? `⚠ ${shared.length === 1 ? "These panes share the folder" : "Some panes share folders"}: ${shared.join(", ")} — the command would run on the same worktree more than once.`
+    : undefined;
+  const outcome = await requestClearance(
+    {
+      kind: "destructive-broadcast",
+      summary: `A pane wants to broadcast a destructive command to all ${ids.length} live panes. Run it in every pane?`,
+      detail: command,
+      note,
+      targets: ids,
+    },
+    ctx.onPark,
+  );
+  return outcome === "approved";
 }

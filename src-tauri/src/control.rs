@@ -8,8 +8,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, SyncSender};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -22,17 +22,35 @@ use crate::control_transport::{self, Stream};
 /// the transport seam so `pty.rs` keeps a single call site (`control::endpoint()`).
 pub use crate::control_transport::endpoint;
 
-/// How long a parked socket connection waits for the webview's reply before giving up.
+/// How long a parked socket connection waits for the webview's reply before giving up — the
+/// backstop for a genuinely *wedged* frontend. A request that is deliberately waiting on a human
+/// (a Clearance, ADR-0012 rule 3.4) calls `pane_cmd_parked` to lift this deadline; see `wait_reply`.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(10);
+/// While parked on a human decision (no reply deadline), how often to poll the caller's socket for
+/// EOF so a Clearance can be withdrawn the instant its caller stops waiting.
+const LIVENESS_POLL: Duration = Duration::from_millis(200);
 /// The Tauri event the relay emits to the webview for each inbound request.
 const EVENT: &str = "loom://pane-cmd";
+/// Emitted when a parked caller's socket closes before the frontend replied: the frontend must
+/// withdraw any Clearance for this `req_id` (ADR-0012 rule 3.4 — a Clearance must never outlive its
+/// caller, or an Approve would run a command nobody awaits).
+const ABORT_EVENT: &str = "loom://pane-cmd-abort";
+
+/// One parked socket connection: the channel to hand its reply back, plus whether the frontend has
+/// declared it "waiting on a human" (a Clearance). A parked-on-human request drops the reply
+/// deadline; see `wait_reply`.
+struct Parked {
+    tx: SyncSender<String>,
+    /// Set by `pane_cmd_parked`. Shared with the accept thread, which reads it each poll tick.
+    on_human: Arc<AtomicBool>,
+}
 
 /// Socket connections parked while the frontend handles their request, keyed by request id.
-/// The accept thread inserts a sender and blocks on the matching receiver; `pane_cmd_reply`
+/// The accept thread inserts an entry and blocks on the matching receiver; `pane_cmd_reply`
 /// looks the sender up by id and hands the response across.
 #[derive(Default)]
 pub struct PendingReplies {
-    map: Mutex<HashMap<u32, SyncSender<String>>>,
+    map: Mutex<HashMap<u32, Parked>>,
     next_id: AtomicU32,
 }
 
@@ -41,16 +59,35 @@ impl PendingReplies {
         Self::default()
     }
 
-    fn register(&self) -> (u32, mpsc::Receiver<String>) {
+    fn register(&self) -> (u32, mpsc::Receiver<String>, Arc<AtomicBool>) {
         // Previous value + 1, so ids start at 1 and never reuse 0 (a falsy id in JS).
         let id = self.next_id.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
         let (tx, rx) = mpsc::sync_channel(1);
-        self.map.lock().unwrap().insert(id, tx);
-        (id, rx)
+        let on_human = Arc::new(AtomicBool::new(false));
+        self.map.lock().unwrap().insert(
+            id,
+            Parked {
+                tx,
+                on_human: on_human.clone(),
+            },
+        );
+        (id, rx, on_human)
     }
 
     fn take(&self, id: u32) -> Option<SyncSender<String>> {
-        self.map.lock().unwrap().remove(&id)
+        self.map.lock().unwrap().remove(&id).map(|p| p.tx)
+    }
+
+    /// Mark `id` as waiting on a human decision (a Clearance). Returns false if already gone (a
+    /// reply or timeout raced in). Idempotent.
+    fn mark_on_human(&self, id: u32) -> bool {
+        match self.map.lock().unwrap().get(&id) {
+            Some(p) => {
+                p.on_human.store(true, Ordering::Relaxed);
+                true
+            }
+            None => false,
+        }
     }
 }
 
@@ -61,6 +98,14 @@ impl PendingReplies {
 struct ControlEvent {
     req_id: u32,
     request: String,
+}
+
+/// Payload for `loom://pane-cmd-abort`: withdraw any Clearance parked for this request, its caller
+/// having stopped waiting (ADR-0012 rule 3.4).
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct AbortEvent {
+    req_id: u32,
 }
 
 /// Absolute path to the running `loom` binary. The control CLI and the MCP server are subcommands
@@ -117,20 +162,65 @@ fn handle_conn(stream: Stream, app: AppHandle, pending: Arc<PendingReplies>) {
         _ => return, // EOF, blank line, or read error — nothing to relay
     };
 
-    let (req_id, rx) = pending.register();
+    let (req_id, rx, on_human) = pending.register();
     if app.emit(EVENT, ControlEvent { req_id, request }).is_err() {
         pending.take(req_id);
         let _ = control_transport::write_line(&stream, r#"{"ok":false,"error":"app not ready"}"#);
         return;
     }
-    let response = match rx.recv_timeout(REPLY_TIMEOUT) {
-        Ok(r) => r,
-        Err(_) => {
-            pending.take(req_id);
-            r#"{"ok":false,"error":"timed out waiting for app"}"#.to_string()
-        }
-    };
+    let response = wait_reply(&stream, &rx, &on_human, req_id, &app, &pending);
     let _ = control_transport::write_line(&stream, &response);
+}
+
+/// Block for the frontend's reply, honouring two regimes:
+/// - **normal:** give up after `REPLY_TIMEOUT` (a wedged webview must never hang a pane).
+/// - **parked on a human** (`pane_cmd_parked` flipped `on_human`, a Clearance — ADR-0012 rule 3.4):
+///   drop that deadline, but poll the caller's socket every `LIVENESS_POLL`; if the caller stops
+///   waiting, emit `ABORT_EVENT` so the frontend withdraws the Clearance, and stop waiting. This is
+///   what keeps a Clearance from outliving its caller — the invariant behind the zombie-spawn fix.
+fn wait_reply(
+    stream: &Stream,
+    rx: &mpsc::Receiver<String>,
+    on_human: &AtomicBool,
+    req_id: u32,
+    app: &AppHandle,
+    pending: &PendingReplies,
+) -> String {
+    const TIMED_OUT: &str = r#"{"ok":false,"error":"timed out waiting for app"}"#;
+    // Only meaningful before `on_human` is set; a parked-on-human request ignores it.
+    let deadline = std::time::Instant::now() + REPLY_TIMEOUT;
+    loop {
+        let human = on_human.load(Ordering::Relaxed);
+        let tick = if human {
+            LIVENESS_POLL
+        } else {
+            match deadline.checked_duration_since(std::time::Instant::now()) {
+                Some(left) => left.min(LIVENESS_POLL),
+                None => {
+                    pending.take(req_id);
+                    return TIMED_OUT.to_string();
+                }
+            }
+        };
+        match rx.recv_timeout(tick) {
+            Ok(r) => return r,
+            Err(RecvTimeoutError::Disconnected) => {
+                pending.take(req_id);
+                return TIMED_OUT.to_string();
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // Withdraw only once the frontend has parked on a human AND the caller has left,
+                // so a normal in-flight request is never aborted by a transient poll.
+                if human && control_transport::peer_closed(stream) {
+                    if pending.take(req_id).is_some() {
+                        let _ = app.emit(ABORT_EVENT, AbortEvent { req_id });
+                    }
+                    // The caller is gone, so this reply reaches no one — return a total value.
+                    return r#"{"ok":false,"error":"caller withdrew"}"#.to_string();
+                }
+            }
+        }
+    }
 }
 
 /// The frontend's answer to a relayed request. `response` is an opaque JSON string Rust does
@@ -142,16 +232,26 @@ pub fn pane_cmd_reply(pending: State<Arc<PendingReplies>>, req_id: u32, response
     }
 }
 
+/// The frontend declares that `req_id` is now parked on a human decision (a Clearance, ADR-0012
+/// rule 3.4), so its reply deadline should be lifted — a person may take minutes. The relay keeps
+/// the connection alive and polls the caller's socket instead, aborting only if the caller leaves.
+/// A no-op if the request already completed (reply/timeout raced in).
+#[tauri::command]
+pub fn pane_cmd_parked(pending: State<Arc<PendingReplies>>, req_id: u32) {
+    pending.mark_on_human(req_id);
+}
+
 #[cfg(test)]
 mod tests {
     use super::PendingReplies;
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn register_ids_start_at_one_and_increment() {
         // ids are echoed back through JS, where 0 is falsy — so the first id must be 1, not 0.
         let pending = PendingReplies::new();
-        let (id1, _rx1) = pending.register();
-        let (id2, _rx2) = pending.register();
+        let (id1, _rx1, _h1) = pending.register();
+        let (id2, _rx2, _h2) = pending.register();
         assert_eq!(id1, 1, "first request id must be 1 (0 is falsy in JS)");
         assert_eq!(id2, 2, "ids increment per request");
     }
@@ -159,7 +259,7 @@ mod tests {
     #[test]
     fn take_hands_the_reply_across_then_clears_the_slot() {
         let pending = PendingReplies::new();
-        let (id, rx) = pending.register();
+        let (id, rx, _h) = pending.register();
         // `pane_cmd_reply` looks the parked sender up by id and hands the frontend's answer across.
         let tx = pending
             .take(id)
@@ -177,5 +277,22 @@ mod tests {
     fn take_of_unknown_id_is_none() {
         let pending = PendingReplies::new();
         assert!(pending.take(999).is_none());
+    }
+
+    #[test]
+    fn mark_on_human_sets_the_flag_and_is_gone_after_take() {
+        let pending = PendingReplies::new();
+        let (id, _rx, human) = pending.register();
+        assert!(!human.load(Ordering::Relaxed), "starts not parked-on-human");
+        assert!(pending.mark_on_human(id), "marks a live parked request");
+        assert!(
+            human.load(Ordering::Relaxed),
+            "the flag the accept thread polls is set"
+        );
+        pending.take(id);
+        assert!(
+            !pending.mark_on_human(id),
+            "a completed request can't be parked (reply/timeout raced in)"
+        );
     }
 }

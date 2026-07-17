@@ -33,6 +33,8 @@ const h = vi.hoisted(() => ({
   noteAttention: vi.fn(),
   clearAttention: vi.fn(),
   setStatus: vi.fn(),
+  paneStatus: vi.fn((_id: number) => ""),
+  paneAttention: vi.fn((_id: number) => false),
   notifyAttention: vi.fn(),
   noteSet: vi.fn(),
   ensureNotesLoaded: vi.fn(() => Promise.resolve()),
@@ -71,7 +73,7 @@ vi.mock("../stores/workspace", () => ({
   workspaceByName: h.workspaceByName,
   workspaceByPaneName: h.workspaceByPaneName,
 }));
-vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus }));
+vi.mock("../stores/activity", () => ({ noteAttention: h.noteAttention, clearAttention: h.clearAttention, setStatus: h.setStatus, clearStatus: vi.fn(), paneStatus: h.paneStatus, paneAttention: h.paneAttention }));
 vi.mock("../stores/blackboard", () => ({ noteSet: h.noteSet, noteGet: h.noteGet, noteList: h.noteList, noteDel: h.noteDel, ensureNotesLoaded: h.ensureNotesLoaded }));
 vi.mock("../stores/claims", () => ({ claimFile: h.claimFile, releaseFile: h.releaseFile, listClaims: h.listClaims }));
 vi.mock("../stores/inputHolds", () => ({ gatePane: h.gatePane, isGated: h.isGated, releaseGate: h.releaseGate }));
@@ -89,6 +91,8 @@ const {
   activeWorkspace,
   broadcastTargets,
   listPanes,
+  paneStatus,
+  paneAttention,
   resolvePaneByName,
   resolvePanesByRole,
   revealPane,
@@ -122,9 +126,30 @@ const {
 
 import { initPaneControl } from "./paneControl";
 import { Cmd, PANE_CMD_EVENT, type ControlRequest, type ControlResponse } from "../ipc/protocol";
+// The clearances store is deliberately NOT mocked: dispatch's guardrails now park a real Clearance
+// and await a real decision (ADR-0012 rule 3.4), so these tests exercise that seam end to end.
+import { listClearances, resolveClearance, withdrawClearance, resetClearances } from "../stores/clearances";
 
 const replyInvoke = invoke as unknown as Mock;
 let handler: (event: { payload: { reqId: number; request: string } }) => Promise<void>;
+
+/** Drive a request whose guardrail parks a Clearance: kick it off, answer the Clearance once it
+ *  appears, then read the reply. `decide` receives the parked Clearance's id. */
+async function callAndDecide(
+  request: ControlRequest,
+  decide: (id: number) => void,
+  reqId = 1,
+): Promise<ControlResponse> {
+  const inflight = handler({ payload: { reqId, request: JSON.stringify(request) } });
+  // Not synchronous for every op — broadcast awaits paneCwd before reaching its guardrail.
+  await vi.waitFor(() => expect(listClearances()).toHaveLength(1));
+  decide(listClearances()[0].id);
+  await inflight;
+  const calls = replyInvoke.mock.calls;
+  const args = calls[calls.length - 1][1] as { reqId: number; response: string };
+  expect(args.reqId).toBe(reqId);
+  return JSON.parse(args.response) as ControlResponse;
+}
 
 /** Drive one request through the captured listener and return the parsed reply. */
 async function call(request: ControlRequest | string, reqId = 1): Promise<ControlResponse> {
@@ -138,6 +163,7 @@ async function call(request: ControlRequest | string, reqId = 1): Promise<Contro
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  resetClearances();
   settings.confirmExternalSpawn = false;
   settings.confirmDestructiveBroadcast = false;
   settings.honorInputHolds = false;
@@ -178,20 +204,34 @@ describe("initPaneControl", () => {
 });
 
 describe("list", () => {
-  it("maps each pane and derives `live` from the registry", async () => {
+  it("maps each pane, derives `live`, and enriches with pushed status/attention (P0c)", async () => {
     listPanes.mockReturnValue([
       { name: "Cleo", workspace: "main", focused: true, paneId: 1 },
       { name: "Faye", workspace: "main", focused: false, paneId: 2 },
     ]);
     countLive.mockImplementation((ids: number[]) => (ids[0] === 1 ? 1 : 0));
+    // Cleo is working with a status label; Faye has raised its attention border.
+    paneStatus.mockImplementation((id: number) => (id === 1 ? "running tests" : ""));
+    paneAttention.mockImplementation((id: number) => id === 2);
 
     const res = await call({ op: "list" });
     expect(res).toEqual({
       ok: true,
       data: [
-        { name: "Cleo", workspace: "main", focused: true, live: true },
-        { name: "Faye", workspace: "main", focused: false, live: false },
+        { name: "Cleo", workspace: "main", focused: true, live: true, status: "running tests" },
+        { name: "Faye", workspace: "main", focused: false, live: false, attention: true },
       ],
+    });
+  });
+
+  it("omits status/attention when a pane has pushed neither (no null noise)", async () => {
+    listPanes.mockReturnValue([{ name: "Wade", workspace: "main", focused: false, paneId: 3 }]);
+    countLive.mockReturnValue(1);
+    // default mocks: paneStatus -> "", paneAttention -> false
+    const res = await call({ op: "list" });
+    expect(res).toEqual({
+      ok: true,
+      data: [{ name: "Wade", workspace: "main", focused: false, live: true }],
     });
   });
 });
@@ -290,25 +330,53 @@ describe("spawn", () => {
     expect(res).toEqual({ ok: true, data: { name: "Wade" } });
   });
 
-  it("asks for consent when the gate is on and honours a yes", async () => {
+  it("parks a Clearance when the gate is on, and spawns on approve", async () => {
     settings.confirmExternalSpawn = true;
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal("window", { confirm });
     spawnPane.mockReturnValue({ name: "Wade" });
 
-    const res = await call({ op: "spawn", command: "htop" });
-    expect(confirm).toHaveBeenCalled();
+    const res = await callAndDecide({ op: "spawn", command: "htop", cwd: "/work" }, (id) =>
+      resolveClearance(id, true),
+    );
     expect(res.ok).toBe(true);
+    expect(spawnPane).toHaveBeenCalled();
   });
 
-  it("declines the spawn when the gate is on and the user says no", async () => {
+  it("the parked Clearance describes the command, and cannot name the caller", async () => {
+    // The bus attaches no caller identity (ADR-0007), so the wording is "Another pane…" — naming
+    // one would be fiction. See the note on `Clearance` in stores/clearances.ts.
     settings.confirmExternalSpawn = true;
-    vi.stubGlobal("window", { confirm: vi.fn(() => false) });
+    spawnPane.mockReturnValue({ name: "Wade" });
+    const inflight = handler({
+      payload: { reqId: 1, request: JSON.stringify({ op: "spawn", command: "htop", cwd: "/work" }) },
+    });
+    await vi.waitFor(() => expect(listClearances()).toHaveLength(1));
+    const c = listClearances()[0];
+    expect(c.kind).toBe("spawn");
+    expect(c.detail).toBe("htop");
+    expect(c.summary).toContain("/work");
+    expect(c).not.toHaveProperty("asker");
+    resolveClearance(c.id, true);
+    await inflight;
+  });
 
-    const res = await call({ op: "spawn", command: "rm -rf /" });
+  it("declines the spawn when the operator denies the Clearance", async () => {
+    settings.confirmExternalSpawn = true;
+    const res = await callAndDecide({ op: "spawn", command: "rm -rf /" }, (id) =>
+      resolveClearance(id, false),
+    );
     expect(spawnPane).not.toHaveBeenCalled();
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/declined/);
+  });
+
+  it("does NOT spawn when the Clearance is withdrawn — the caller stopped waiting", async () => {
+    // The regression this whole change exists for: `window.confirm` blocked the webview while
+    // control.rs gave up on the caller at REPLY_TIMEOUT (10s), so a later click spawned a pane
+    // nobody awaited. A withdrawn Clearance must decline, never execute.
+    settings.confirmExternalSpawn = true;
+    const res = await callAndDecide({ op: "spawn", command: "htop" }, (id) => withdrawClearance(id));
+    expect(spawnPane).not.toHaveBeenCalled();
+    expect(res.ok).toBe(false);
   });
 
   it("propagates a spawn store error", async () => {
@@ -379,25 +447,25 @@ describe("broadcast", () => {
     activeWorkspace.mockReturnValue({ id: "w1" });
     broadcastTargets.mockReturnValue([1, 2, 3]);
     paneCwd.mockResolvedValue("/repo");
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal("window", { confirm });
-    const res = await call({ op: "broadcast", text: "git reset --hard origin/main" });
-    expect(confirm).toHaveBeenCalled();
+    const res = await callAndDecide({ op: "broadcast", text: "git reset --hard origin/main" }, (id) =>
+      resolveClearance(id, false),
+    );
     expect(writeToPanes).not.toHaveBeenCalled();
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/declined/);
   });
 
-  it("sends a destructive broadcast when the operator confirms", async () => {
+  it("sends a destructive broadcast when the operator approves the Clearance", async () => {
     settings.confirmDestructiveBroadcast = true;
     activeWorkspace.mockReturnValue({ id: "w1" });
-    broadcastTargets.mockReturnValue([1, 2]);
-    writeToPanes.mockReturnValue(2);
+    broadcastTargets.mockReturnValue([1, 2, 3]);
     paneCwd.mockResolvedValue("/repo");
-    vi.stubGlobal("window", { confirm: vi.fn(() => true) });
-    const res = await call({ op: "broadcast", text: "rm -rf build" });
-    expect(writeToPanes).toHaveBeenCalledWith([1, 2], "rm -rf build\r");
-    expect(res).toEqual({ ok: true, data: { count: 2 } });
+    writeToPanes.mockReturnValue(3);
+    const res = await callAndDecide({ op: "broadcast", text: "git reset --hard origin/main" }, (id) =>
+      resolveClearance(id, true),
+    );
+    expect(writeToPanes).toHaveBeenCalledWith([1, 2, 3], "git reset --hard origin/main\r");
+    expect(res.ok).toBe(true);
   });
 
   it("does not prompt for a safe broadcast", async () => {
@@ -444,28 +512,47 @@ describe("gate", () => {
     expect(res).toEqual({ ok: true, data: { entries } });
   });
 
-  it("honors a gate on send: a declined confirm skips the gated pane", async () => {
+  it("honors a gate on send: a denied Clearance skips the gated pane", async () => {
     settings.honorInputHolds = true;
     resolvePaneByName.mockReturnValue({ paneId: 3 });
     isGated.mockReturnValue(true);
     paneSpecById.mockReturnValue({ title: "Cleo" });
-    vi.stubGlobal("window", { confirm: vi.fn(() => false) });
-    const res = await call({ op: "send", target: "Cleo", text: "deploy" });
+    const res = await callAndDecide({ op: "send", target: "Cleo", text: "deploy" }, (id) =>
+      resolveClearance(id, false),
+    );
     expect(writeToPanes).not.toHaveBeenCalled();
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/gated — delivery declined/);
   });
 
-  it("honors a gate on send: an OK lets the input through", async () => {
+  it("honors a gate on send: an approved Clearance lets the input through", async () => {
     settings.honorInputHolds = true;
     resolvePaneByName.mockReturnValue({ paneId: 3 });
     isGated.mockReturnValue(true);
     paneSpecById.mockReturnValue({ title: "Cleo" });
     writeToPanes.mockReturnValue(1);
-    vi.stubGlobal("window", { confirm: vi.fn(() => true) });
-    const res = await call({ op: "send", target: "Cleo", text: "deploy" });
+    const res = await callAndDecide({ op: "send", target: "Cleo", text: "deploy" }, (id) =>
+      resolveClearance(id, true),
+    );
     expect(writeToPanes).toHaveBeenCalledWith([3], "deploy\r");
     expect(res.ok).toBe(true);
+  });
+
+  it("carries the gated pane ids on the Clearance (for the panel to render)", async () => {
+    settings.honorInputHolds = true;
+    resolvePaneByName.mockReturnValue({ paneId: 3 });
+    isGated.mockReturnValue(true);
+    paneSpecById.mockReturnValue({ title: "Cleo" });
+    writeToPanes.mockReturnValue(1);
+    const inflight = handler({
+      payload: { reqId: 1, request: JSON.stringify({ op: "send", target: "Cleo", text: "deploy" }) },
+    });
+    await vi.waitFor(() => expect(listClearances()).toHaveLength(1));
+    const c = listClearances()[0];
+    expect(c.kind).toBe("gated-input");
+    expect(c.targets).toEqual([3]);
+    resolveClearance(c.id, true);
+    await inflight;
   });
 
   it("skips only the gated panes of a broadcast, still reaching the open ones", async () => {
@@ -475,8 +562,9 @@ describe("gate", () => {
     isGated.mockImplementation((id: number) => id === 2);
     paneSpecById.mockReturnValue({ title: "Gated" });
     writeToPanes.mockReturnValue(2);
-    vi.stubGlobal("window", { confirm: vi.fn(() => false) }); // decline the gated one
-    const res = await call({ op: "broadcast", text: "go" });
+    const res = await callAndDecide({ op: "broadcast", text: "go" }, (id) =>
+      resolveClearance(id, false),
+    ); // decline the gated one
     expect(writeToPanes).toHaveBeenCalledWith([1, 3], "go\r"); // pane 2 dropped
     expect(res).toEqual({ ok: true, data: { count: 2, skipped: 1 } });
   });

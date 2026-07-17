@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loom Mobile — Plan 02 Wireframe</title>
+<!--
+  Loom Mobile - Plan 02 wireframe.
+
+  Source of truth for the published artifact at
+  https://claude.ai/code/artifact/5d02a165-e5d5-4f64-9a23-3c06f4430cab
+  The publish form is this file without the doctype/html/head/body skeleton,
+  which the artifact host supplies itself.
+
+  Palette and type are Loom's own tokens, lifted from src/App.css and
+  src/lib/theme.ts rather than invented. Annotations cite
+  docs/adr/0012-remote-fleet-control-dial-out-vps-relay.md.
+-->
+<style>
+  /* Minimal reset - the artifact host provides one; a standalone file must not assume it. */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, p, figure { margin: 0; }
+  img, svg { max-width: 100%; }
+</style>
+<style>
+  /* Tokens lifted from Loom's own design system (src/App.css "frameless tokens"),
+     not invented. :root is dark — matching Loom, whose :root IS the dark theme. */
+  :root {
+    --canvas: #0e0f12;
+    --surface: #191b20;
+    --surface-dead: #141518;
+    --well: #0f1013;
+    --text-bright: #e7e7ea;
+    --text-mid: #9a9da3;
+    --text-dim: #7b7e84;
+    --text-faint: #5f6268;
+    --accent: #22d3ee;
+    --accent-text: #67e8f9;
+    --accent-rgb: 34, 211, 238;
+    --chip: rgba(12, 13, 16, 0.72);
+    --chip-border: rgba(255, 255, 255, 0.07);
+    --hairline: rgba(255, 255, 255, 0.06);
+    --hairline-firm: rgba(255, 255, 255, 0.12);
+    --tint-weak: rgba(255, 255, 255, 0.04);
+    --state-working: #5fb389;
+    --state-idle: #6b6e74;
+    --state-needs: #c89244;
+    --state-needs-rgb: 200, 146, 68;
+    --state-dead: #9a6b6b;
+    --device-shell: #05060a;
+    --shadow-plate: 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+
+    --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --canvas: #eef1f6; --surface: #ffffff; --surface-dead: #f3f4f7; --well: #eef1f6;
+      --text-bright: #1c1e22; --text-mid: #5b616c; --text-dim: #767d89; --text-faint: #aab0bb;
+      --accent: #2f6bff; --accent-text: #2f6bff; --accent-rgb: 47, 107, 255;
+      --chip: rgba(255, 255, 255, 0.82); --chip-border: rgba(0, 0, 0, 0.08);
+      --hairline: rgba(0, 0, 0, 0.07); --hairline-firm: rgba(0, 0, 0, 0.14);
+      --tint-weak: rgba(0, 0, 0, 0.04);
+      --state-working: #2e9e6b; --state-idle: #9aa0ab; --state-needs: #c07d1f;
+      --state-needs-rgb: 192, 125, 31; --state-dead: #c0473f;
+      --device-shell: #c9cfda;
+      --shadow-plate: 0 14px 30px -20px rgba(30, 40, 70, 0.26);
+    }
+  }
+  :root[data-theme="light"] {
+    --canvas: #eef1f6; --surface: #ffffff; --surface-dead: #f3f4f7; --well: #eef1f6;
+    --text-bright: #1c1e22; --text-mid: #5b616c; --text-dim: #767d89; --text-faint: #aab0bb;
+    --accent: #2f6bff; --accent-text: #2f6bff; --accent-rgb: 47, 107, 255;
+    --chip: rgba(255, 255, 255, 0.82); --chip-border: rgba(0, 0, 0, 0.08);
+    --hairline: rgba(0, 0, 0, 0.07); --hairline-firm: rgba(0, 0, 0, 0.14);
+    --tint-weak: rgba(0, 0, 0, 0.04);
+    --state-working: #2e9e6b; --state-idle: #9aa0ab; --state-needs: #c07d1f;
+    --state-needs-rgb: 192, 125, 31; --state-dead: #c0473f;
+    --device-shell: #c9cfda;
+    --shadow-plate: 0 14px 30px -20px rgba(30, 40, 70, 0.26);
+  }
+  :root[data-theme="dark"] {
+    --canvas: #0e0f12; --surface: #191b20; --surface-dead: #141518; --well: #0f1013;
+    --text-bright: #e7e7ea; --text-mid: #9a9da3; --text-dim: #7b7e84; --text-faint: #5f6268;
+    --accent: #22d3ee; --accent-text: #67e8f9; --accent-rgb: 34, 211, 238;
+    --chip: rgba(12, 13, 16, 0.72); --chip-border: rgba(255, 255, 255, 0.07);
+    --hairline: rgba(255, 255, 255, 0.06); --hairline-firm: rgba(255, 255, 255, 0.12);
+    --tint-weak: rgba(255, 255, 255, 0.04);
+    --state-working: #5fb389; --state-idle: #6b6e74; --state-needs: #c89244;
+    --state-needs-rgb: 200, 146, 68; --state-dead: #9a6b6b;
+    --device-shell: #05060a;
+    --shadow-plate: 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  }
+
+  body {
+    background: var(--canvas);
+    color: var(--text-bright);
+    font-family: var(--font-ui);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  /* ---- masthead ---- */
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent-text);
+  }
+  h1 {
+    font-size: clamp(30px, 4.4vw, 46px); line-height: 1.08; letter-spacing: -0.022em;
+    text-wrap: balance; margin: 14px 0 0; font-weight: 640;
+  }
+  .thesis {
+    margin: 18px 0 0; max-width: 60ch; color: var(--text-mid); font-size: 17px;
+  }
+  .thesis strong { color: var(--text-bright); font-weight: 600; }
+  .masthead-note {
+    margin-top: 26px; padding: 14px 16px; border-left: 2px solid var(--state-needs);
+    background: var(--tint-weak); border-radius: 0 6px 6px 0;
+    font-size: 14px; color: var(--text-mid); max-width: 74ch;
+  }
+  .masthead-note strong { color: var(--text-bright); }
+
+  /* ---- section ---- */
+  section { margin-top: 64px; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding-bottom: 12px; border-bottom: 1px solid var(--hairline); margin-bottom: 28px;
+  }
+  .sec-head h2 {
+    font-size: 20px; letter-spacing: -0.01em; margin: 0; font-weight: 620;
+  }
+  .rule-tag {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em;
+    color: var(--text-dim); border: 1px solid var(--chip-border);
+    background: var(--chip); padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  }
+  .sec-head p { margin: 0; color: var(--text-mid); font-size: 14px; flex: 1 1 340px; min-width: 0; }
+
+  /* ---- plates: frame + annotation ---- */
+  .plates { display: flex; flex-wrap: wrap; gap: 34px; align-items: flex-start; }
+  .plate { display: flex; flex-direction: column; gap: 14px; width: 292px; }
+  .plate.hero { width: 320px; }
+  .anno { font-size: 13px; color: var(--text-mid); }
+  .anno b { color: var(--text-bright); font-weight: 600; }
+  .anno code, .mono { font-family: var(--font-mono); font-size: 0.9em; color: var(--accent-text); }
+  .anno-title {
+    font-size: 13px; font-weight: 640; color: var(--text-bright);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+  }
+
+  /* ---- device ---- */
+  .device {
+    background: var(--surface); border: 1px solid var(--hairline-firm);
+    border-radius: 22px; padding: 8px; box-shadow: var(--shadow-plate);
+    outline: 6px solid var(--device-shell); outline-offset: -1px;
+  }
+  .plate.hero .device { border-color: rgba(var(--state-needs-rgb), 0.5); }
+  .screen {
+    background: var(--well); border-radius: 15px; overflow: hidden;
+    height: 552px; display: flex; flex-direction: column;
+    font-size: 13px;
+  }
+  .plate.hero .screen { height: 580px; }
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 14px 5px; font-family: var(--font-mono);
+    font-size: 9.5px; color: var(--text-faint); letter-spacing: 0.04em;
+  }
+  .navbar {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 13px 11px; border-bottom: 1px solid var(--hairline);
+  }
+  .navbar .back { color: var(--text-dim); font-size: 15px; line-height: 1; }
+  .navbar h3 { margin: 0; font-size: 13.5px; font-weight: 620; letter-spacing: -0.005em; }
+  .navbar .host-chip {
+    margin-left: auto; font-family: var(--font-mono); font-size: 9px;
+    color: var(--text-dim); background: var(--chip);
+    border: 1px solid var(--chip-border); padding: 2px 6px; border-radius: 999px;
+  }
+  .body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .scroll { flex: 1; overflow: hidden; }
+
+  /* ---- rows ---- */
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 13px; border-bottom: 1px solid var(--hairline);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 999px; flex: none; }
+  .dot.working { background: var(--state-working); }
+  .dot.idle { background: var(--state-idle); }
+  .dot.needs { background: var(--state-needs); }
+  .dot.dead { background: var(--state-dead); }
+  .row-main { flex: 1; min-width: 0; }
+  .row-name {
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--text-bright);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .row-sub {
+    font-size: 11px; color: var(--text-dim); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .role {
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em;
+    color: var(--text-dim); border: 1px solid var(--chip-border);
+    padding: 0 5px; border-radius: 3px;
+  }
+  .chev { color: var(--text-faint); font-size: 12px; }
+
+  /* ---- clearance card ---- */
+  .clr {
+    padding: 13px; border-bottom: 1px solid var(--hairline);
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .clr.live { background: rgba(var(--state-needs-rgb), 0.07); }
+  .clr-top { display: flex; align-items: center; gap: 7px; }
+  .clr-who { font-family: var(--font-mono); font-size: 12px; color: var(--text-bright); }
+  .clr-host {
+    margin-left: auto; font-family: var(--font-mono); font-size: 9px;
+    color: var(--state-needs); border: 1px solid rgba(var(--state-needs-rgb), 0.35);
+    padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+  }
+  .clr-ask { font-size: 12px; color: var(--text-mid); }
+  .clr-cmd {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-bright);
+    background: var(--surface-dead); border: 1px solid var(--hairline);
+    border-radius: 5px; padding: 7px 8px; overflow-x: auto; white-space: nowrap;
+  }
+  .clr-meta {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10.5px; color: var(--text-dim); font-variant-numeric: tabular-nums;
+  }
+  .timer {
+    font-family: var(--font-mono); color: var(--state-needs); font-size: 10.5px;
+  }
+  .clr-acts { display: flex; gap: 7px; }
+  .btn {
+    flex: 1; text-align: center; padding: 8px 0; border-radius: 6px;
+    font-size: 12px; font-weight: 600; border: 1px solid var(--hairline-firm);
+    color: var(--text-mid); background: transparent;
+  }
+  .btn.approve {
+    border-color: rgba(var(--state-needs-rgb), 0.5);
+    color: var(--state-needs); background: rgba(var(--state-needs-rgb), 0.1);
+  }
+  .btn.deny { color: var(--text-dim); }
+  .btn.primary {
+    border-color: rgba(var(--accent-rgb), 0.5); color: var(--accent-text);
+    background: rgba(var(--accent-rgb), 0.1);
+  }
+
+  .empty {
+    padding: 26px 16px; text-align: center; color: var(--text-faint); font-size: 11.5px;
+  }
+  .sect-label {
+    padding: 9px 13px 5px; font-family: var(--font-mono); font-size: 9px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint);
+  }
+
+  /* ---- pane detail ---- */
+  .term {
+    flex: 1; background: var(--surface-dead); font-family: var(--font-mono);
+    font-size: 10px; line-height: 1.5; padding: 10px 11px;
+    overflow: hidden; color: var(--text-mid); white-space: pre-wrap; word-break: break-all;
+  }
+  .term .g { color: var(--state-working); }
+  .term .a { color: var(--state-needs); }
+  .term .c { color: var(--accent-text); }
+  .term .d { color: var(--text-faint); }
+  .composer {
+    border-top: 1px solid var(--hairline); padding: 9px 10px;
+    display: flex; gap: 7px; align-items: center;
+  }
+  .input {
+    flex: 1; background: var(--surface-dead); border: 1px solid var(--hairline);
+    border-radius: 6px; padding: 7px 9px; font-family: var(--font-mono);
+    font-size: 11px; color: var(--text-dim);
+  }
+  .send-btn {
+    background: rgba(var(--accent-rgb), 0.12); border: 1px solid rgba(var(--accent-rgb), 0.4);
+    color: var(--accent-text); border-radius: 6px; padding: 7px 11px;
+    font-size: 11px; font-weight: 600;
+  }
+
+  /* ---- pane strip (swipe affordance) ---- */
+  .strip {
+    display: flex; gap: 5px; padding: 7px 10px; overflow-x: auto;
+    border-bottom: 1px solid var(--hairline); background: var(--surface-dead);
+    scrollbar-width: none;
+  }
+  .strip::-webkit-scrollbar { display: none; }
+  .strip-chip {
+    display: flex; align-items: center; gap: 5px; flex: none;
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+    border: 1px solid var(--chip-border); background: var(--chip);
+    padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .strip-chip.active {
+    color: var(--text-bright); border-color: rgba(var(--accent-rgb), 0.45);
+    background: rgba(var(--accent-rgb), 0.1);
+  }
+  .strip-chip.dead { color: var(--text-faint); }
+  .strip-chip .dot { width: 5px; height: 5px; }
+  .swipe-hint {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 5px 0 6px; font-size: 9.5px; color: var(--text-faint);
+    font-family: var(--font-mono); letter-spacing: 0.05em;
+    border-top: 1px solid var(--hairline);
+  }
+  .swipe-hint .arrow { color: var(--text-dim); }
+
+  /* read-window banner */
+  .rw-banner {
+    display: flex; align-items: center; gap: 7px; padding: 6px 11px;
+    background: rgba(var(--accent-rgb), 0.08);
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.2);
+    font-size: 10px; color: var(--accent-text); font-family: var(--font-mono);
+  }
+  .rw-banner .rw-time { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  /* ---- pairing ---- */
+  .pair-body {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 16px; padding: 20px;
+  }
+  .qr {
+    width: 150px; height: 150px; border-radius: 8px; position: relative;
+    background-color: var(--text-bright);
+    background-image:
+      repeating-linear-gradient(90deg, var(--well) 0 6px, transparent 6px 12px),
+      repeating-linear-gradient(0deg, var(--well) 0 6px, transparent 6px 12px);
+    background-size: 24px 24px, 24px 24px;
+    background-position: 3px 9px, 9px 3px;
+  }
+  .qr::before, .qr::after {
+    content: ""; position: absolute; width: 34px; height: 34px;
+    border: 7px solid var(--well); background: var(--text-bright);
+    box-shadow: inset 0 0 0 5px var(--text-bright);
+  }
+  .qr::before { top: 8px; left: 8px; }
+  .qr::after { top: 8px; right: 8px; }
+  .pair-copy { text-align: center; font-size: 12px; color: var(--text-mid); max-width: 30ch; }
+  .pair-copy b { color: var(--text-bright); }
+  .fp {
+    font-family: var(--font-mono); font-size: 11px; color: var(--accent-text);
+    letter-spacing: 0.06em;
+  }
+
+  /* ---- host picker ---- */
+  .host-row {
+    display: flex; align-items: center; gap: 10px; padding: 13px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .host-main { flex: 1; min-width: 0; }
+  .host-name { font-size: 13px; font-weight: 600; }
+  .host-fp {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+    margin-top: 2px; letter-spacing: 0.05em;
+  }
+  .host-count {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+    background: var(--chip); border: 1px solid var(--chip-border);
+    padding: 1px 6px; border-radius: 999px;
+  }
+  .host-row.sel { background: var(--tint-weak); box-shadow: inset 2px 0 0 var(--accent); }
+
+  /* ---- absent panel ---- */
+  .absent {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+    gap: 1px; background: var(--hairline); border: 1px solid var(--hairline);
+    border-radius: 10px; overflow: hidden;
+  }
+  .absent-cell { background: var(--surface); padding: 16px 18px; }
+  .absent-op {
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--text-bright);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .strike { color: var(--state-dead); font-size: 11px; }
+  .absent-why { font-size: 12px; color: var(--text-mid); margin-top: 6px; }
+
+  /* ---- legend / footer ---- */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 18px; padding: 14px 16px;
+    border: 1px solid var(--hairline); border-radius: 10px;
+    background: var(--surface); font-size: 12px; color: var(--text-mid);
+  }
+  .legend span { display: flex; align-items: center; gap: 7px; }
+  footer {
+    margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--hairline);
+    font-size: 12.5px; color: var(--text-dim); max-width: 78ch;
+  }
+  footer p { margin: 0 0 9px; }
+  footer code { font-family: var(--font-mono); color: var(--text-mid); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Plan 02 · Wireframe · ADR-0012</div>
+    <h1>Loom Mobile</h1>
+    <p class="thesis">
+      <strong>Your agents ask, your phone answers.</strong> Observe the fleet from anywhere and resolve
+      the things that block it — instead of work stalling until you walk back to the laptop.
+    </p>
+    <div class="masthead-note">
+      <strong>Shaped by the 2026-07-15 grill.</strong> The hero is <strong>answering the Agent that is blocked
+      on you</strong> — an Approval waits indefinitely, so a push reaches you and the work resumes. Driving the
+      fleet (<code class="mono">send</code> / <code class="mono">read</code>) carries nearly the whole risk budget
+      and is <strong>second-class</strong>: it is not what justifies the app. A <strong>Clearance</strong> sits
+      beside it but is mostly a <em>local</em> fix — it dies with its caller in ~2 min (rule 3.5).
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <h2>1 · The trust anchor</h2>
+      <span class="rule-tag">rule 6.2 · 6.3 · 7</span>
+      <p>Pairing is the only place trust enters. The Relay is never a party to it.</p>
+    </div>
+    <div class="plates">
+      <div class="plate">
+        <div class="device"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+          <div class="navbar"><h3>Pair a Host</h3></div>
+          <div class="pair-body">
+            <div class="qr"></div>
+            <div class="pair-copy">
+              Scan the QR on <b>Loom → Settings → Remote</b>. Point the camera at your own screen.
+            </div>
+            <div class="fp">ab12 · cd34 · ef56</div>
+            <div class="pair-copy" style="font-size:11px;color:var(--text-faint)">
+              Check this fingerprint matches the one on the Host.
+            </div>
+          </div>
+        </div></div>
+        <div class="anno">
+          <div class="anno-title">Pair — scan once, in person</div>
+          The QR carries the Host's <b>X25519 public key</b>. A camera pointed at your own screen is an
+          out-of-band channel no network attacker — <b>including a popped VPS</b> — can enter. That single
+          fact is why a misrouting Relay yields an undecryptable frame instead of a breach.
+        </div>
+      </div>
+
+      <div class="plate">
+        <div class="device"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+          <div class="navbar"><h3>Hosts</h3><span class="host-chip">+ pair</span></div>
+          <div class="scroll">
+            <div class="host-row sel">
+              <span class="dot working"></span>
+              <div class="host-main">
+                <div class="host-name">work-laptop</div>
+                <div class="host-fp">ab12·cd34·ef56</div>
+              </div>
+              <span class="host-count">12</span>
+            </div>
+            <div class="host-row">
+              <span class="dot needs"></span>
+              <div class="host-main">
+                <div class="host-name">home-desktop</div>
+                <div class="host-fp">7c9d·1e4f·22ab</div>
+              </div>
+              <span class="host-count">3</span>
+            </div>
+            <div class="host-row">
+              <span class="dot idle"></span>
+              <div class="host-main">
+                <div class="host-name">laptop</div>
+                <div class="host-fp">f0a1·bb73·9d2c</div>
+              </div>
+              <span class="host-count">0</span>
+            </div>
+            <div class="empty">Each Host is a separate Pairing with its own key.</div>
+          </div>
+        </div></div>
+        <div class="anno">
+          <div class="anno-title">Host picker — fingerprints, not just labels</div>
+          One phone, N Hosts. <b>Identity is the Host key; the label is mutable</b> — so the fingerprint
+          is shown, not decoration. Note two entries here are both called some flavour of "laptop": exactly
+          the collision rule 7 predicts. Revoking one Pairing leaves the others untouched.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>2 · Something needs you</h2>
+      <span class="rule-tag">rule 3.4 · 3.5</span>
+      <p>Two different blocks, two different lifetimes. Only one survives a lunch break.</p>
+    </div>
+    <div class="plates">
+      <div class="plate">
+        <div class="device"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+          <div class="navbar"><h3>Clearances</h3><span class="host-chip">2 waiting</span></div>
+          <div class="scroll">
+            <div class="clr live">
+              <div class="clr-top">
+                <span class="dot needs"></span>
+                <span class="clr-who">Cleo</span>
+                <span class="clr-host">work-laptop</span>
+              </div>
+              <div class="clr-ask">wants to spawn a pane</div>
+              <div class="clr-cmd">npm run build --workspace=api</div>
+              <div class="clr-meta"><span class="timer">48s</span><span>· denies automatically</span></div>
+              <div class="clr-acts">
+                <span class="btn deny">Deny</span>
+                <span class="btn approve">Approve</span>
+              </div>
+            </div>
+            <div class="clr">
+              <div class="clr-top">
+                <span class="dot needs"></span>
+                <span class="clr-who">Wade</span>
+                <span class="clr-host">home-desktop</span>
+              </div>
+              <div class="clr-ask">bus input is held — input gate</div>
+              <div class="clr-cmd">git push --force origin main</div>
+              <div class="clr-meta"><span class="timer">12s</span><span>· denies automatically</span></div>
+              <div class="clr-acts">
+                <span class="btn deny">Deny</span>
+                <span class="btn approve">Approve</span>
+              </div>
+            </div>
+            <div class="empty">Nothing else is waiting on you.</div>
+          </div>
+        </div></div>
+        <div class="anno">
+          <div class="anno-title">Clearance inbox — mostly a local fix</div>
+          <b>Loom</b> holding a command, pending your go/no-go. Actor ≠ decider, so it <i>is</i> a real
+          authorization boundary — and each card <b>names its Host</b> (rule 7: an unattributed prompt is
+          unanswerable once two are paired).
+          <br><br>
+          But be honest about the wall clock: <code>loom spawn</code> runs through the Agent's own tool call,
+          which <b>times out at 120s</b>. You will rarely answer one of these from a phone — it's dead before
+          the push lands. So a Clearance is bound to <b>caller liveness, not a timer</b>, and is
+          <b>withdrawn — not denied</b> — when the caller gives up.
+          <br><br>
+          Its real value is <b>local</b>: these guardrails are <code>window.confirm</code> today, which blocks
+          the webview thread and freezes every Pane's rendering until someone walks over. <b>P0b ships that
+          with no phone at all</b> — which is now its main justification.
+        </div>
+      </div>
+
+      <div class="plate hero">
+        <div class="device"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+          <div class="navbar"><span class="back">‹</span><h3>Attention</h3><span class="host-chip">work-laptop</span></div>
+          <div class="scroll">
+            <div class="sect-label">Blocked on you</div>
+            <div class="row">
+              <span class="dot needs"></span>
+              <div class="row-main">
+                <div class="row-name">Faye <span class="role">planner</span></div>
+                <div class="row-sub">Which auth flow should I scaffold?</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="row">
+              <span class="dot needs"></span>
+              <div class="row-main">
+                <div class="row-name">Ines <span class="role">reviewer</span></div>
+                <div class="row-sub">Needs you</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="empty">Raised by the agent, not inferred from output.</div>
+          </div>
+        </div></div>
+        <div class="anno">
+          <div class="anno-title">Attention — <em>this</em> is the hero</div>
+          An <b>Agent</b> blocked on <i>its own stdin</i>, reporting it needs you. It waits
+          <b>indefinitely</b> — so the push reaches you at lunch, you answer, and the work resumes. That is
+          the whole product: <b>your agents ask, your phone answers</b>.
+          <br><br>
+          Answering is a <code>send</code> (<code>y</code>), and it must cost <b>one tap</b> — so the
+          Confirmation fires only when the text is <b>destructive</b> (reusing <code>isDestructiveCommand</code>).
+          A Confirmation stops no attacker anyway; its whole value is typo protection, so it belongs where
+          typos hurt and nowhere else.
+          <br><br>
+          Still a <b>separate list</b> from Clearances: an Agent raises an Approval about <i>its own work</i>;
+          Loom raises a Clearance about <i>a command</i>. Don't merge the inboxes.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>3 · Observe</h2>
+      <span class="rule-tag">rule 3 · allow</span>
+      <p>The whole read surface is one op: <code class="mono">list</code>.</p>
+    </div>
+    <div class="plates">
+      <div class="plate">
+        <div class="device"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+          <div class="navbar"><span class="back">‹</span><h3>Fleet</h3><span class="host-chip">work-laptop</span></div>
+          <div class="scroll">
+            <div class="sect-label">loom-api · 6 panes</div>
+            <div class="row">
+              <span class="dot working"></span>
+              <div class="row-main">
+                <div class="row-name">Faye <span class="role">planner</span></div>
+                <div class="row-sub">running tests</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="row">
+              <span class="dot needs"></span>
+              <div class="row-main">
+                <div class="row-name">Cleo <span class="role">impl</span></div>
+                <div class="row-sub">blocked · needs you</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="row">
+              <span class="dot working"></span>
+              <div class="row-main">
+                <div class="row-name">Wade <span class="role">impl</span></div>
+                <div class="row-sub">refactoring pty.rs</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="row">
+              <span class="dot idle"></span>
+              <div class="row-main">
+                <div class="row-name">Ines <span class="role">reviewer</span></div>
+                <div class="row-sub">idle</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="row">
+              <span class="dot dead"></span>
+              <div class="row-main">
+                <div class="row-name">Otis</div>
+                <div class="row-sub">exited 1</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="sect-label">loom-site · 2 panes</div>
+            <div class="row">
+              <span class="dot working"></span>
+              <div class="row-main">
+                <div class="row-name">Bree</div>
+                <div class="row-sub">astro dev</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+          </div>
+        </div></div>
+        <div class="anno">
+          <div class="anno-title">Fleet — blocked on P0c</div>
+          Mirrors <code>FleetPanel</code>. But <b>this screen cannot be built today</b>: <code>list</code>
+          returns <code>{name, workspace, focused, live, role, gated}</code> — <b>no status, no attention</b>.
+          <code>FleetPanel</code> reads those from the TS store in-process, so nothing ever noticed. Every
+          status line above is fiction until <code>list</code>'s payload grows.
+        </div>
+      </div>
+
+      <div class="plate">
+        <div class="device"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+          <div class="navbar"><span class="back">‹</span><h3>Cleo</h3><span class="host-chip">2 of 6 · loom-api</span></div>
+          <div class="strip">
+            <span class="strip-chip"><span class="dot working"></span>Faye</span>
+            <span class="strip-chip active"><span class="dot needs"></span>Cleo</span>
+            <span class="strip-chip"><span class="dot working"></span>Wade</span>
+            <span class="strip-chip"><span class="dot idle"></span>Ines</span>
+            <span class="strip-chip dead"><span class="dot dead"></span>Otis</span>
+            <span class="strip-chip"><span class="dot working"></span>Bo</span>
+          </div>
+          <div class="rw-banner">
+            <span>read window open</span><span class="rw-time">13:42</span>
+          </div>
+          <div class="term"><span class="d">$ npm test --workspace=api</span>
+<span class="g">✓</span> pty coalescing under flood
+  <span class="d">142ms</span>
+<span class="g">✓</span> layout · buildBalancedTree(12)
+  <span class="d">8ms</span>
+<span class="a">✗</span> paneControl · gate blocks send
+  <span class="d">expected</span> skipped=1
+  <span class="d">got</span> skipped=0
+
+<span class="a">1 failing</span>, 47 passed
+
+<span class="c">?</span> Retry with --update-snapshots?
+  <span class="d">(y/N)</span> <span class="d">▌</span></div>
+          <div class="swipe-hint">
+            <span class="arrow">‹</span> Faye · swipe · Wade <span class="arrow">›</span>
+          </div>
+          <div class="composer">
+            <div class="input">y</div>
+            <span class="send-btn">Send</span>
+          </div>
+        </div></div>
+        <div class="anno">
+          <div class="anno-title">Pane detail — swipe between Panes</div>
+          Swipes <b>within the Workspace, in layout-tree order</b>, so "next" on the phone is the Pane next
+          to it on the laptop. <b>Dead Panes included</b> — Otis's exit code is exactly what you want when an
+          agent died while you were out. The strip is the affordance (a bare gesture is undiscoverable) and
+          doubles as state: you can see Cleo needs you from two Panes away.
+          <br><br>
+          <b>Swipe forces the Read Window.</b> A tap per <code>read</code> would cost six taps to scan this
+          Workspace — so <code>approve</code> resolves once into a 15-minute window (banner, top). Not an
+          unlock: <code>send</code> still Confirms every time, every read is still audited, and the duration
+          is a <b>security parameter</b> — it's how long a stolen unlocked phone reads freely.
+          <br><br>
+          <b>Note the terminal wraps.</b> It must: <code>read</code> returns lines wider than a phone, and a
+          horizontally-panning terminal makes the swipe ambiguous. Decide that before the ANSI renderer gets
+          written — there's no xterm.js on React Native, so it's built from scratch either way.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>4 · Absent by design</h2>
+      <span class="rule-tag">rule 3 · deny</span>
+      <p>An op earns a screen by having a use case — not by existing and looking survivable.</p>
+    </div>
+    <div class="absent">
+      <div class="absent-cell">
+        <div class="absent-op"><span class="strike">✕</span> spawn</div>
+        <div class="absent-why">A silent-RCE primitive. No screen, so it is <b>absent rather than gated</b>.
+        If it's ever wanted it costs a table row <i>and</i> a screen — the right ceremony.</div>
+      </div>
+      <div class="absent-cell">
+        <div class="absent-op"><span class="strike">✕</span> broadcast</div>
+        <div class="absent-why">The human bar was <b>removed 2026-06-25 as unused</b>, and its
+        single-Workspace scope is <i>why</i>. A phone would rebuild that flaw on a worse keyboard.</div>
+      </div>
+      <div class="absent-cell">
+        <div class="absent-op"><span class="strike">✕</span> gate.set</div>
+        <div class="absent-why">Would let a Device drop the gate then <code>send</code> — walking the
+        guardrail in two calls. Closed, not prompted.</div>
+      </div>
+      <div class="absent-cell">
+        <div class="absent-op"><span class="strike">✕</span> status · attention</div>
+        <div class="absent-why"><b>Setters, despite the names.</b> Granting them would let a Device rewrite
+        labels and clear borders fleet-wide. Judge an op by its payload.</div>
+      </div>
+      <div class="absent-cell">
+        <div class="absent-op"><span class="strike">✕</span> prefetch on swipe</div>
+        <div class="absent-why">Not an op — a temptation. Each prefetched neighbour is a <i>real</i>
+        <code>read</code>: scrollback pulled you never looked at, and pressure on the rate limiter.
+        Fetch on settle.</div>
+      </div>
+      <div class="absent-cell">
+        <div class="absent-op"><span class="strike">✕</span> cross-Workspace swipe</div>
+        <div class="absent-why">Swipe stays inside the Workspace — the hierarchy is exactly two levels, and
+        Broadcast doesn't cross either. Use the fleet list to change Workspace.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>5 · Devices</h2>
+      <span class="rule-tag">rule 6.6</span>
+      <p>A lost phone must be cuttable off without the Relay's cooperation.</p>
+    </div>
+    <div class="plates">
+      <div class="plate">
+        <div class="device"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+          <div class="navbar"><span class="back">‹</span><h3>work-laptop</h3></div>
+          <div class="scroll">
+            <div class="sect-label">This device</div>
+            <div class="row">
+              <span class="dot working"></span>
+              <div class="row-main">
+                <div class="row-name">kim-pixel</div>
+                <div class="row-sub">paired 12 Jul · ab12·cd34·ef56</div>
+              </div>
+            </div>
+            <div class="sect-label">Relay</div>
+            <div class="row">
+              <span class="dot working"></span>
+              <div class="row-main">
+                <div class="row-name">relay.loom.furevikstrand.cloud</div>
+                <div class="row-sub">connected · sealed end-to-end</div>
+              </div>
+            </div>
+            <div class="sect-label">Remote surface</div>
+            <div class="row">
+              <div class="row-main">
+                <div class="row-name" style="color:var(--text-mid)">list · send · read</div>
+                <div class="row-sub">everything else denied</div>
+              </div>
+            </div>
+            <div style="padding:13px">
+              <div class="btn" style="border-color:rgba(var(--state-needs-rgb),.45);color:var(--state-needs)">
+                Revoke this pairing
+              </div>
+            </div>
+          </div>
+        </div></div>
+        <div class="anno">
+          <div class="anno-title">Revoke — enforced at the Bridge</div>
+          Deletes the stored public key. The next handshake fails <b>at the Host</b> — so revocation needs
+          neither the Relay's honesty nor its reachability. A compromised Relay can break your uptime; it
+          can never resurrect a revoked Device.
+        </div>
+      </div>
+
+      <div class="plate">
+        <div class="anno" style="border:1px solid var(--hairline);border-radius:10px;padding:16px;background:var(--surface)">
+          <div class="anno-title">State legend</div>
+          <div style="display:flex;flex-direction:column;gap:9px;margin-top:8px">
+            <span style="display:flex;align-items:center;gap:9px"><span class="dot working"></span> working — agent is running</span>
+            <span style="display:flex;align-items:center;gap:9px"><span class="dot needs"></span> needs you — Clearance or Attention</span>
+            <span style="display:flex;align-items:center;gap:9px"><span class="dot idle"></span> idle</span>
+            <span style="display:flex;align-items:center;gap:9px"><span class="dot dead"></span> dead — child exited</span>
+          </div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--hairline);font-size:12px;color:var(--text-dim)">
+            These four are Loom's own <code>--state-*</code> tokens, whose meaning is constant across every
+            theme. The amber carries this app because "needs you" <i>is</i> the product.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><b>Wireframe, not a visual design.</b> Structure, hierarchy and copy are the subject here; nothing
+    below the annotation layer is a final look.</p>
+    <p>Palette and type are Loom's own tokens, lifted from <code>src/App.css</code> and
+    <code>src/lib/theme.ts</code> rather than invented — canvas <code>#0e0f12</code>, warp-cyan accent
+    <code>#22d3ee</code>, and the semantic <code>--state-*</code> family. Type follows the system stacks
+    Loom declares, honouring its "system fonts first, no web-font fetch" rule.</p>
+    <p>Rule references point at <code>docs/adr/0012-remote-fleet-control-dial-out-vps-relay.md</code> as
+    revised on 2026-07-15 (<code>docs/adr-0012-grill</code>, commit <code>f9a9d73</code>).</p>
+  </footer>
+</div>
+</body>
+</html>

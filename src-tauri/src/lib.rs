@@ -159,6 +159,7 @@ pub fn run() {
             clipboard_set_text,
             wsl_distros,
             control::pane_cmd_reply,
+            control::pane_cmd_parked,
             editor::open_editor,
             voce::voce_dictate,
             voce::voce_finish,
@@ -188,6 +189,10 @@ pub fn run() {
             sessionlog::session_log_search,
             sessionlog::session_log_recent,
             sessionlog::session_log_prune,
+            sessionlog::audit_log_save,
+            sessionlog::audit_log_recent,
+            sessionlog::audit_log_prune,
+            sessionlog::audit_log_clear,
         ])
         .setup(move |app| {
             // Start the inter-pane control bus once the app handle exists (ADR-0007).

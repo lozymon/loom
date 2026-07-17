@@ -1146,15 +1146,30 @@ fn print_list(data: Option<&Value>) {
         let ws = p.get("workspace").and_then(Value::as_str).unwrap_or("");
         let live = p.get("live").and_then(Value::as_bool).unwrap_or(false);
         let focused = p.get("focused").and_then(Value::as_bool).unwrap_or(false);
-        let marker = if focused { "*" } else { " " };
-        let status = if live { "live" } else { "dead" };
+        let attention = p.get("attention").and_then(Value::as_bool).unwrap_or(false);
+        // Focus wins the marker column; else flag a pane that has raised "needs you" (P0c).
+        let marker = if focused {
+            "*"
+        } else if attention {
+            "!"
+        } else {
+            " "
+        };
+        let live_col = if live { "live" } else { "dead" };
         let role = p.get("role").and_then(Value::as_str).unwrap_or("");
         let rolecol = if role.is_empty() {
             String::new()
         } else {
             format!("  [{role}]")
         };
-        println!("{marker} {name:<12} {status:<5} {ws}{rolecol}");
+        // The agent-pushed status label, when set — the fleet-dashboard bit (P0c).
+        let status = p.get("status").and_then(Value::as_str).unwrap_or("");
+        let statuscol = if status.is_empty() {
+            String::new()
+        } else {
+            format!("  — {status}")
+        };
+        println!("{marker} {name:<12} {live_col:<5} {ws}{rolecol}{statuscol}");
     }
 }
 
