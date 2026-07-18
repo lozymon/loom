@@ -209,12 +209,14 @@ const styles = StyleSheet.create({
   term: { flex: 1, backgroundColor: C.surfaceDead },
   mono: { color: C.textMid, fontFamily: "monospace", fontSize: 13, lineHeight: 19 },
   note: { color: C.needs, fontSize: 13, paddingHorizontal: 14, paddingVertical: 8 },
-  // Key row for driving TUIs — one compact strip; keys share the width evenly.
-  keys: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingTop: 8 },
+  // Key row for driving TUIs — one compact strip; keys share the width evenly. The single divider
+  // above the input area lives here (the composer no longer has its own top border, which used to
+  // draw a stray line right under these keys).
+  keys: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingTop: 10, borderTopColor: C.hairline, borderTopWidth: 1 },
   key: { flex: 1, minHeight: 42, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   keyText: { color: C.textMid, fontSize: 16, fontWeight: "600" },
   // Comfortable phone touch targets: a ~52px-tall row so the input and both buttons are easy to hit.
-  composer: { flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderTopColor: C.hairline, borderTopWidth: 1 },
+  composer: { flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingVertical: 12 },
   input: { flex: 1, minHeight: 52, backgroundColor: C.surface, color: C.textBright, borderColor: C.hairline, borderWidth: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontFamily: "monospace", fontSize: 16 },
   sendBtn: { minHeight: 52, backgroundColor: C.surface, borderColor: C.accent, borderWidth: 1, borderRadius: 12, paddingHorizontal: 24, alignItems: "center", justifyContent: "center" },
   sendText: { color: C.accentText, fontWeight: "600", fontSize: 16 },
