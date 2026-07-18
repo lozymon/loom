@@ -102,6 +102,47 @@ fn save_psk(app: &AppHandle, psk: &[u8; KEY_LEN]) -> Result<(), String> {
     Ok(())
 }
 
+/// Persisted "remote control was left on" flag + the bound port, so a restart can bring the bridge
+/// back without a trip to Settings — otherwise a laptop reboot silently kills remote access until
+/// someone is at the machine to re-enable it, which defeats the away-from-desk use case.
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct BridgePref {
+    enabled: bool,
+    port: u16,
+}
+
+fn pref_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("lan-bridge.json"))
+}
+
+/// Remember the bridge is enabled (+ its port) so `autostart_if_enabled` restores it next launch.
+fn save_enabled_pref(app: &AppHandle, port: u16) {
+    if let Ok(path) = pref_path(app) {
+        if let Ok(json) = serde_json::to_string(&BridgePref {
+            enabled: true,
+            port,
+        }) {
+            let _ = std::fs::write(path, json);
+        }
+    }
+}
+
+/// Forget the enable (on stop/unpair) so the bridge stays down across restarts until re-enabled.
+fn clear_enabled_pref(app: &AppHandle) {
+    if let Ok(path) = pref_path(app) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// The saved port if remote control was left enabled, else `None`.
+fn load_enabled_pref(app: &AppHandle) -> Option<u16> {
+    let raw = std::fs::read_to_string(pref_path(app).ok()?).ok()?;
+    let pref: BridgePref = serde_json::from_str(&raw).ok()?;
+    pref.enabled.then_some(pref.port)
+}
+
 /// The primary LAN IP, via the UDP-connect trick (no packets are sent — `connect` on a UDP socket
 /// just fixes the local address the kernel would route from).
 fn lan_ip() -> Option<String> {
@@ -138,6 +179,7 @@ pub fn lan_bridge_unpair(state: State<LanBridge>, app: AppHandle) -> Result<(), 
     state.running.store(false, Ordering::Relaxed);
     *state.psk.lock().map_err(|e| e.to_string())? = None;
     let _ = std::fs::remove_file(key_path(&app)?);
+    clear_enabled_pref(&app); // a cut-off device shouldn't auto-start on next launch
     Ok(())
 }
 
@@ -169,8 +211,11 @@ pub fn lan_bridge_enable(
         }
     };
     if !state.running.load(Ordering::Relaxed) {
-        start_on(&state, pending.inner().clone(), app, port, key)?;
+        start_on(&state, pending.inner().clone(), app.clone(), port, key)?;
     }
+    // Persist the enable so a restart auto-starts the bridge (autostart_if_enabled). Use the *bound*
+    // port, which may differ from the requested one if the kernel reassigned it.
+    save_enabled_pref(&app, state.port.load(Ordering::Relaxed));
     Ok(pairing_info(&state, key))
 }
 
@@ -246,8 +291,32 @@ pub fn autostart_from_env(app: &AppHandle, bridge: &LanBridge, pending: Arc<Pend
 }
 
 #[tauri::command]
-pub fn lan_bridge_stop(state: State<LanBridge>) {
+pub fn lan_bridge_stop(state: State<LanBridge>, app: AppHandle) {
     state.running.store(false, Ordering::Relaxed);
+    clear_enabled_pref(&app); // an explicit stop should stay stopped across restarts
+}
+
+/// On launch, restore the bridge if the operator left it enabled and a pairing key still exists.
+/// This is what makes remote access survive a laptop reboot — the missing half of the Settings
+/// toggle (the dev env seam `autostart_from_env` never persisted anything). Best-effort: any failure
+/// just leaves the bridge off, exactly as before.
+pub fn autostart_if_enabled(app: &AppHandle, bridge: &LanBridge, pending: Arc<PendingReplies>) {
+    let Some(port) = load_enabled_pref(app) else {
+        return;
+    };
+    let Some(psk) = load_psk(app) else {
+        return; // enabled but unpaired (key wiped) — nothing to bind for
+    };
+    if let Ok(mut g) = bridge.psk.lock() {
+        *g = Some(psk);
+    }
+    match start_on(bridge, pending, app.clone(), port, psk) {
+        Ok(s) => eprintln!(
+            "loom: LAN bridge restored on 0.0.0.0:{} (was enabled)",
+            s.port
+        ),
+        Err(e) => eprintln!("loom: LAN bridge auto-restore failed ({e})"),
+    }
 }
 
 #[tauri::command]

@@ -212,6 +212,13 @@ pub fn run() {
                 &app.state::<lanbridge::LanBridge>(),
                 pending.clone(),
             );
+            // Restore the LAN bridge if the operator left it enabled (Settings → Remote) — so remote
+            // access survives a laptop reboot instead of needing a manual re-enable each time.
+            lanbridge::autostart_if_enabled(
+                app.handle(),
+                &app.state::<lanbridge::LanBridge>(),
+                pending.clone(),
+            );
             // Open the durable Session/Task history DB (ADR-0009). A failure here is non-fatal —
             // the live in-memory store still works; we just lose persistence/search this run.
             match sessionlog::open(app.handle()) {
