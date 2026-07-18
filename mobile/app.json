@@ -31,7 +31,16 @@
         "expo-build-properties",
         {
           "//": "The LAN bridge is ws:// (cleartext transport) but app-layer sealed (ChaCha20-Poly1305 under the pairing key), so release builds must allow cleartext or the WebSocket fails instantly — debug allowed it via a Metro overlay, masking this until a release build.",
-          "android": { "usesCleartextTraffic": true }
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Loom uses the mic for hold-to-talk dictation into a pane.",
+          "speechRecognitionPermission": "Loom turns your speech into text to send to a pane."
         }
       ]
     ]

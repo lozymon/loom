@@ -6,9 +6,17 @@
 // auto-refreshes every REFRESH_MS once a first read succeeds. Background refreshes are SILENT (no
 // "waiting…" flash), and auto-refresh stops if a read is denied so an untrusted device doesn't spam
 // the laptop with a Clearance every couple of seconds — the operator taps "Approve & always" once.
+//
+// Hold-to-talk: press-and-hold the 🎤 to dictate (on-device recognition, expo-speech-recognition) —
+// the transcript lands in the compose box for you to review, then Send. Typing shell into a phone is
+// the pain this removes; review-before-send is deliberate since a trusted device's send runs at once.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from "react-native";
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 import type { LanBridgeClient } from "../lib/lanClient";
 import type { PaneInfo } from "../protocol";
 import { C } from "../theme";
@@ -29,7 +37,43 @@ export default function PaneScreen({
   const [note, setNote] = useState<string | null>(null);
   // Auto-refresh runs only after a good read; a denial/error stops it (avoids Clearance spam).
   const [live, setLive] = useState(false);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Voice → text. Results (interim + final) stream into the compose box; end/error just drop the
+  // listening state. The transcript is left for review, never auto-sent (a trusted send runs at once).
+  useSpeechRecognitionEvent("result", (e) => {
+    const t = e.results?.[0]?.transcript;
+    if (t != null) setInput(t);
+  });
+  useSpeechRecognitionEvent("end", () => setListening(false));
+  useSpeechRecognitionEvent("error", (e) => {
+    setNote(`voice: ${e.message || e.error}`);
+    setListening(false);
+  });
+
+  async function startDictation() {
+    try {
+      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!perm.granted) {
+        setNote("mic permission denied");
+        return;
+      }
+      setNote(null);
+      setListening(true);
+      ExpoSpeechRecognitionModule.start({ lang: "en-US", interimResults: true, continuous: false });
+    } catch (err) {
+      setNote(`voice: ${(err as Error).message}`);
+      setListening(false);
+    }
+  }
+  function stopDictation() {
+    // Release = stop capturing; the last `result` event has already filled the box for review.
+    ExpoSpeechRecognitionModule.stop();
+    setListening(false);
+  }
+  // Make sure a held mic is released if the screen unmounts mid-utterance.
+  useEffect(() => () => ExpoSpeechRecognitionModule.stop(), []);
 
   const read = useCallback(
     async (silent = false) => {
@@ -101,12 +145,20 @@ export default function PaneScreen({
           style={styles.input}
           value={input}
           onChangeText={setInput}
-          placeholder="send to this pane…"
+          placeholder={listening ? "listening…" : "send to this pane…"}
           placeholderTextColor={C.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
           onSubmitEditing={send}
         />
+        <Pressable
+          style={[styles.micBtn, listening && styles.micBtnOn]}
+          onPressIn={startDictation}
+          onPressOut={stopDictation}
+          hitSlop={8}
+        >
+          <Text style={[styles.micText, listening && styles.micTextOn]}>🎤</Text>
+        </Pressable>
         <Pressable style={styles.sendBtn} onPress={send}>
           <Text style={styles.sendText}>Send</Text>
         </Pressable>
@@ -128,4 +180,8 @@ const styles = StyleSheet.create({
   input: { flex: 1, backgroundColor: C.surface, color: C.textBright, borderColor: C.hairline, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontFamily: "monospace", fontSize: 13 },
   sendBtn: { backgroundColor: C.surface, borderColor: C.accent, borderWidth: 1, borderRadius: 8, paddingHorizontal: 16, justifyContent: "center" },
   sendText: { color: C.accentText, fontWeight: "600" },
+  micBtn: { backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 8, width: 44, alignItems: "center", justifyContent: "center" },
+  micBtnOn: { borderColor: C.needs, backgroundColor: C.surfaceDead },
+  micText: { fontSize: 18, opacity: 0.7 },
+  micTextOn: { opacity: 1 },
 });
