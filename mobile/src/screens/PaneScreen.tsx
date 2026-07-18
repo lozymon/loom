@@ -23,6 +23,21 @@ import { C } from "../theme";
 
 const REFRESH_MS = 2000;
 
+// The keys a TUI prompt needs but a text box can't produce — sent as raw sequences with no trailing
+// Enter, so you can navigate arrow menus, toggle multi-selects (Space), and confirm/cancel from the
+// phone. This is how you "answer" an interactive prompt remotely: keystrokes, not taps.
+const KEYS: { label: string; seq: string }[] = [
+  { label: "Esc", seq: "\x1b" },
+  { label: "Tab", seq: "\t" },
+  { label: "←", seq: "\x1b[D" },
+  { label: "↑", seq: "\x1b[A" },
+  { label: "↓", seq: "\x1b[B" },
+  { label: "→", seq: "\x1b[C" },
+  { label: "␣", seq: " " },
+  { label: "⏎", seq: "\r" },
+  { label: "^C", seq: "\x03" },
+];
+
 export default function PaneScreen({
   client,
   pane,
@@ -120,6 +135,17 @@ export default function PaneScreen({
     }
   }
 
+  // Fire a raw key sequence (no trailing Enter) and pull a fresh tail so the menu's new state shows.
+  async function sendKey(seq: string) {
+    try {
+      const res = await client.call({ op: "send", target: pane.name, text: seq, enter: false });
+      if (res.ok) setTimeout(() => read(true), 200);
+      else setNote(res.error);
+    } catch (e) {
+      setNote((e as Error).message);
+    }
+  }
+
   return (
     <View style={styles.wrap}>
       <View style={styles.bar}>
@@ -140,6 +166,13 @@ export default function PaneScreen({
         <Text style={styles.mono}>{tail || " "}</Text>
       </ScrollView>
       {note && <Text style={styles.note}>{note}</Text>}
+      <View style={styles.keys}>
+        {KEYS.map((k) => (
+          <Pressable key={k.label} style={styles.key} onPress={() => sendKey(k.seq)} hitSlop={4}>
+            <Text style={styles.keyText}>{k.label}</Text>
+          </Pressable>
+        ))}
+      </View>
       <View style={styles.composer}>
         <TextInput
           style={styles.input}
@@ -176,6 +209,10 @@ const styles = StyleSheet.create({
   term: { flex: 1, backgroundColor: C.surfaceDead },
   mono: { color: C.textMid, fontFamily: "monospace", fontSize: 13, lineHeight: 19 },
   note: { color: C.needs, fontSize: 13, paddingHorizontal: 14, paddingVertical: 8 },
+  // Key row for driving TUIs — one compact strip; keys share the width evenly.
+  keys: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingTop: 8 },
+  key: { flex: 1, minHeight: 42, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  keyText: { color: C.textMid, fontSize: 16, fontWeight: "600" },
   // Comfortable phone touch targets: a ~52px-tall row so the input and both buttons are easy to hit.
   composer: { flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderTopColor: C.hairline, borderTopWidth: 1 },
   input: { flex: 1, minHeight: 52, backgroundColor: C.surface, color: C.textBright, borderColor: C.hairline, borderWidth: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontFamily: "monospace", fontSize: 16 },
