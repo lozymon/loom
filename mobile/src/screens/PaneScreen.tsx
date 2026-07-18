@@ -1,13 +1,19 @@
-// Pane detail — read the tail and send input. Both `read` and `send` are `approve` ops (ADR-0012
-// rule 3.2): the laptop parks a Clearance and executes only when the operator approves it there.
-// The app surfaces that honestly — a send shows "waiting for approval on the laptop" until the reply
-// comes back. (The Read Window optimisation — approve once, reads flow — is a later refinement.)
+// Pane detail — read the tail and send input. `read`/`send` are `approve` ops (ADR-0012 rule 3.2):
+// the laptop gates them, EXCEPT when this device is trusted (stores/remoteTrust) — then they flow
+// with no prompt, which is what makes the live view below usable away from the laptop.
+//
+// The terminal sticks to the newest output (scrollToEnd) instead of jumping to the top, and
+// auto-refreshes every REFRESH_MS once a first read succeeds. Background refreshes are SILENT (no
+// "waiting…" flash), and auto-refresh stops if a read is denied so an untrusted device doesn't spam
+// the laptop with a Clearance every couple of seconds — the operator taps "Approve & always" once.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from "react-native";
 import type { LanBridgeClient } from "../lib/lanClient";
 import type { PaneInfo } from "../protocol";
 import { C } from "../theme";
+
+const REFRESH_MS = 2000;
 
 export default function PaneScreen({
   client,
@@ -21,34 +27,50 @@ export default function PaneScreen({
   const [tail, setTail] = useState("");
   const [input, setInput] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  // Auto-refresh runs only after a good read; a denial/error stops it (avoids Clearance spam).
+  const [live, setLive] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const read = useCallback(async () => {
-    setNote("waiting for approval on the laptop…");
-    try {
-      const res = await client.call({ op: "read", target: pane.name, lines: 200 });
-      if (res.ok) {
-        setTail(((res.data as { text?: string }).text ?? "").trimEnd());
-        setNote(null);
-      } else {
-        setNote(res.error);
+  const read = useCallback(
+    async (silent = false) => {
+      if (!silent) setNote("waiting for approval on the laptop…");
+      try {
+        const res = await client.call({ op: "read", target: pane.name, lines: 200 });
+        if (res.ok) {
+          setTail(((res.data as { text?: string }).text ?? "").trimEnd());
+          setNote(null);
+          setLive(true);
+        } else {
+          setNote(res.error);
+          setLive(false);
+        }
+      } catch (e) {
+        setNote((e as Error).message);
+        setLive(false);
       }
-    } catch (e) {
-      setNote((e as Error).message);
-    }
-  }, [client, pane.name]);
+    },
+    [client, pane.name],
+  );
 
   useEffect(() => {
     read();
   }, [read]);
 
+  // Live tail: poll silently once reads are flowing. Stops itself if a read stops succeeding.
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => read(true), REFRESH_MS);
+    return () => clearInterval(t);
+  }, [live, read]);
+
   async function send() {
     const text = input;
     setInput("");
-    setNote("waiting for approval on the laptop…");
+    setNote("sending…");
     try {
       const res = await client.call({ op: "send", target: pane.name, text });
       setNote(res.ok ? null : res.error);
-      if (res.ok) setTimeout(read, 400);
+      if (res.ok) setTimeout(() => read(true), 400);
     } catch (e) {
       setNote((e as Error).message);
     }
@@ -61,11 +83,16 @@ export default function PaneScreen({
           <Text style={styles.back}>‹</Text>
         </Pressable>
         <Text style={styles.name}>{pane.name}</Text>
-        <Pressable onPress={read} hitSlop={12}>
+        <Pressable onPress={() => read()} hitSlop={12}>
           <Text style={styles.refresh}>↻</Text>
         </Pressable>
       </View>
-      <ScrollView style={styles.term} contentContainerStyle={{ padding: 12 }}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.term}
+        contentContainerStyle={{ padding: 12 }}
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+      >
         <Text style={styles.mono}>{tail || " "}</Text>
       </ScrollView>
       {note && <Text style={styles.note}>{note}</Text>}
