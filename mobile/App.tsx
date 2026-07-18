@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LanBridgeClient } from "./src/lib/lanClient";
 import { loadPairing, forgetPairing, type Pairing } from "./src/state/pairing";
 import PairScreen from "./src/screens/PairScreen";
@@ -22,7 +23,18 @@ type Phase =
   | { kind: "error"; message: string }
   | { kind: "ready"; client: LanBridgeClient };
 
+// SafeAreaProvider must wrap the tree so useSafeAreaInsets works. Android 15 draws edge-to-edge,
+// so without this the header sits under the status-bar clock (the overlap bug).
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppRoot />
+    </SafeAreaProvider>
+  );
+}
+
+function AppRoot() {
+  const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [open, setOpen] = useState<PaneInfo | null>(null);
   // The in-flight connection, so Cancel can abort it; `attempt` invalidates a superseded/cancelled
@@ -76,7 +88,7 @@ export default function App() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="light" />
       {phase.kind === "loading" ? (
         <View style={styles.center}>
