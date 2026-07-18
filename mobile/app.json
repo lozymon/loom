@@ -54,7 +54,8 @@
           "photosPermission": "Loom attaches a photo to send to an agent on your laptop.",
           "cameraPermission": "Loom uses the camera to send a photo to an agent on your laptop."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }
