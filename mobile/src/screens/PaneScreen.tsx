@@ -280,15 +280,9 @@ export default function PaneScreen({
             <Feather name="send" size={20} color={C.canvas} />
           </Pressable>
         ) : (
-          <>
-            {/* Bare Enter — confirm a menu selection / answer y·n when there's nothing to type. */}
-            <Pressable style={styles.iconBtn} onPress={() => sendKey("\r")} hitSlop={8}>
-              <Feather name="corner-down-left" size={20} color={C.textDim} />
-            </Pressable>
-            <Pressable style={styles.round} onPress={startDictation}>
-              <Feather name="mic" size={22} color={C.canvas} />
-            </Pressable>
-          </>
+          <Pressable style={styles.round} onPress={startDictation}>
+            <Feather name="mic" size={22} color={C.canvas} />
+          </Pressable>
         )}
       </View>
     </View>
