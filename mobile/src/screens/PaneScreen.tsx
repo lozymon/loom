@@ -36,8 +36,8 @@ const KEYS: { label: string; seq: string }[] = [
   { label: "↓", seq: "\x1b[B" },
   { label: "→", seq: "\x1b[C" },
   { label: "␣", seq: " " },
-  { label: "⏎", seq: "\r" },
   { label: "^C", seq: "\x03" },
+  { label: "⏎", seq: "\r" },
 ];
 
 export default function PaneScreen({
@@ -228,7 +228,12 @@ export default function PaneScreen({
       {keysVisible && (
         <View style={styles.keys}>
           {KEYS.map((k) => (
-            <Pressable key={k.label} style={styles.key} onPress={() => sendKey(k.seq)} hitSlop={4}>
+            <Pressable
+              key={k.label}
+              style={[styles.key, k.seq === "\r" && styles.keyWide]}
+              onPress={() => sendKey(k.seq)}
+              hitSlop={4}
+            >
               <Text style={styles.keyText}>{k.label}</Text>
             </Pressable>
           ))}
@@ -284,10 +289,6 @@ export default function PaneScreen({
             <Feather name="mic" size={22} color={C.canvas} />
           </Pressable>
         )}
-        {/* Big, always-there Enter — the workhorse for confirming interactive menus (↵ = \r). */}
-        <Pressable style={styles.enterBtn} onPress={() => sendKey("\r")} hitSlop={6}>
-          <Feather name="corner-down-left" size={26} color={C.textMid} />
-        </Pressable>
       </View>
     </View>
   );
@@ -306,6 +307,8 @@ const styles = StyleSheet.create({
   // draw a stray line right under these keys).
   keys: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingTop: 10, borderTopColor: C.hairline, borderTopWidth: 1 },
   key: { flex: 1, minHeight: 42, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  // ⏎ Enter is the most-used key (confirming menus) — give it extra width so it's easy to hit.
+  keyWide: { flex: 2.2 },
   keyText: { color: C.textMid, fontSize: 16, fontWeight: "600" },
   // WhatsApp-style compose bar: a rounded pill (keys-toggle + input) and a round action button.
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 10, paddingVertical: 10 },
@@ -315,6 +318,4 @@ const styles = StyleSheet.create({
   round: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
   roundOn: { backgroundColor: C.needs },
   iconBtn: { width: 44, height: 52, alignItems: "center", justifyContent: "center" },
-  // Prominent, always-visible Enter (used constantly to confirm menus) at the end of the bar.
-  enterBtn: { width: 58, height: 52, borderRadius: 14, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, alignItems: "center", justifyContent: "center" },
 });
