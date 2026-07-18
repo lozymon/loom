@@ -195,7 +195,10 @@ export default function PaneScreen({
         <Pressable onPress={onBack} hitSlop={12}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
-        <Text style={styles.name}>{pane.name}</Text>
+        <Text style={styles.name} numberOfLines={1}>
+          <Text style={styles.nameWs}>{pane.workspace} · </Text>
+          {pane.name}
+        </Text>
         <Pressable onPress={() => read()} hitSlop={12}>
           <Text style={styles.refresh}>↻</Text>
         </Pressable>
@@ -271,6 +274,7 @@ const styles = StyleSheet.create({
   bar: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 14, borderBottomColor: C.hairline, borderBottomWidth: 1 },
   back: { color: C.textDim, fontSize: 30, lineHeight: 30 },
   name: { color: C.textBright, fontSize: 19, fontWeight: "600", flex: 1, fontFamily: "monospace" },
+  nameWs: { color: C.textDim, fontWeight: "400" },
   refresh: { color: C.textDim, fontSize: 24 },
   term: { flex: 1, backgroundColor: C.surfaceDead },
   mono: { color: C.textMid, fontFamily: "monospace", fontSize: 13, lineHeight: 19 },
