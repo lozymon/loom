@@ -284,6 +284,10 @@ export default function PaneScreen({
             <Feather name="mic" size={22} color={C.canvas} />
           </Pressable>
         )}
+        {/* Big, always-there Enter — the workhorse for confirming interactive menus (↵ = \r). */}
+        <Pressable style={styles.enterBtn} onPress={() => sendKey("\r")} hitSlop={6}>
+          <Feather name="corner-down-left" size={26} color={C.textMid} />
+        </Pressable>
       </View>
     </View>
   );
@@ -311,4 +315,6 @@ const styles = StyleSheet.create({
   round: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
   roundOn: { backgroundColor: C.needs },
   iconBtn: { width: 44, height: 52, alignItems: "center", justifyContent: "center" },
+  // Prominent, always-visible Enter (used constantly to confirm menus) at the end of the bar.
+  enterBtn: { width: 58, height: 52, borderRadius: 14, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, alignItems: "center", justifyContent: "center" },
 });
