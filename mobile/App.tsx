@@ -33,9 +33,11 @@ export default function App() {
   async function connect(pairing: Pairing) {
     const mine = ++attempt.current;
     setPhase({ kind: "connecting", url: pairing.url });
-    const client = new LanBridgeClient(pairing.url, pairing.key);
-    connecting.current = client;
     try {
+      // Inside the try so a constructor throw (e.g. crypto.getRandomValues missing) surfaces on the
+      // error screen instead of leaving the app stuck on "Connecting…".
+      const client = new LanBridgeClient(pairing.url, pairing.key);
+      connecting.current = client;
       await client.connect();
       if (mine !== attempt.current) return client.close(); // cancelled/superseded
       connecting.current = null;
