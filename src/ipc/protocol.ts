@@ -216,7 +216,13 @@ export type ControlRequest =
   | { op: "task.update"; target: string; files?: string[]; note?: string }
   | { op: "task.end"; target: string; outcome?: TaskOutcome }
   | { op: "approval.request"; target: string; prompt: string; kind?: ApprovalKind }
-  | { op: "approval.resolve"; target: string };
+  | { op: "approval.resolve"; target: string }
+  // ---- Device image upload (ADR-0012) ----
+  // A paired Device (the phone) can't hand a terminal an image, so it uploads one over the sealed
+  // bridge: `data` is base64 image bytes, saved to the laptop's uploads dir; the response carries the
+  // absolute `path` the phone then references to an agent. Governed by the remote policy (approve),
+  // like send/read. `target` names the pane whose workspace this is for (context only for now).
+  | { op: "upload"; target: string; filename: string; data: string };
 
 /** One pane in a `list` response. */
 export interface PaneInfo {

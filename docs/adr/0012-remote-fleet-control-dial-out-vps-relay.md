@@ -44,10 +44,12 @@ So remote authority is **enumerated per op, and fails closed**. An op earns a di
 | Disposition | Ops | Earns it by |
 |---|---|---|
 | **`allow`** — no prompt | `list` (payload extended — see below) | the one reader; feeds the fleet-list screen |
-| **`approve`** — Confirmation (3.3) | `send` (destructive only), `read` (Read Window) | the Pane-detail screen (read tail + send box) |
+| **`approve`** — Confirmation (3.3) | `send` (destructive only), `read` (Read Window), `upload` (image → laptop) | the Pane-detail screen (read tail + send box + attach/camera) |
 | **`deny`** | `spawn`, `broadcast`, `status`, `attention`, `gate.set`, `gate.list`, `role.set`, `focus`, the blackboard, **and everything unlisted — including ops that do not exist yet** | no surface, no articulated need, or actively harmful |
 
 **One reader, two writers, everything else closed** — that is the entire remote surface.
+
+`upload` is the one op that *writes* to the laptop's disk: a Device can't hand a terminal an image, so it sends base64 image bytes that the Rust `save_upload` command writes to a fixed `uploads/` dir (basename sanitized — a hostile name can't escape it) and returns the absolute path, which the phone then references to an agent. It sits in `approve` for the same reason as `send`/`read` — gated by a Clearance or the trusted-device grant, never silent — and is bounded: no arbitrary path, no overwrite outside `uploads/`, no execution.
 
 Note `status` and `attention` are **`deny` despite sounding like reads**: both are *setters* (`{op:"status",target,text}` rewrites a Pane's label; `{op:"attention",target,clear}` raises or clears its border). Granting them would let a Device rewrite labels and clear attention borders fleet-wide, unprompted, through a surface the app does not have. Judge an op by its payload, not its name — an earlier draft of this table got exactly this wrong, and `gate.list` with it (the fleet screen already receives `gated` from `list`).
 

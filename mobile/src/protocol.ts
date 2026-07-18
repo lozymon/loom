@@ -6,7 +6,10 @@
 export type AppRequest =
   | { op: "list" }
   | { op: "read"; target: string; lines?: number }
-  | { op: "send"; target: string; text: string; enter?: boolean };
+  | { op: "send"; target: string; text: string; enter?: boolean }
+  // Upload an image (base64) to the laptop; the reply's `data.path` is where it was saved, which we
+  // then reference to an agent (a terminal can't take an image, but a path it can). ADR-0012 `approve`.
+  | { op: "upload"; target: string; filename: string; data: string };
 
 /** The bridge's reply, mirroring ControlResponse. */
 export type AppResponse =

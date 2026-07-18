@@ -168,6 +168,7 @@ pub fn run() {
             lanbridge::lan_bridge_status,
             lanbridge::lan_bridge_pair,
             lanbridge::lan_bridge_unpair,
+            lanbridge::save_upload,
             editor::open_editor,
             voce::voce_dictate,
             voce::voce_finish,

@@ -143,6 +143,50 @@ fn load_enabled_pref(app: &AppHandle) -> Option<u16> {
     pref.enabled.then_some(pref.port)
 }
 
+/// Save an image a paired Device uploaded over the bridge to `app_data_dir/uploads/`, returning its
+/// absolute path — so the phone can hand an agent a real file to read (a terminal can't take an
+/// image; a path it can). The name is reduced to a sanitized basename (no traversal) prefixed with a
+/// millisecond timestamp for uniqueness. Called from the `upload` bus op in paneControl (TS).
+#[tauri::command]
+pub fn save_upload(app: AppHandle, filename: String, data_b64: String) -> Result<String, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_b64.trim())
+        .map_err(|e| format!("bad image data: {e}"))?;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("uploads");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // Basename only, restricted to a safe charset — a hostile name can't escape the uploads dir.
+    let base = std::path::Path::new(&filename)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("image");
+    let safe: String = base
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let name = if safe.trim_matches('_').is_empty() {
+        format!("{ts}.jpg")
+    } else {
+        format!("{ts}-{safe}")
+    };
+    let path = dir.join(name);
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 /// The primary LAN IP, via the UDP-connect trick (no packets are sent — `connect` on a UDP socket
 /// just fixes the local address the kernel would route from).
 fn lan_ip() -> Option<String> {

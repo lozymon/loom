@@ -47,6 +47,13 @@
           "microphonePermission": "Loom uses the mic for hold-to-talk dictation into a pane.",
           "speechRecognitionPermission": "Loom turns your speech into text to send to a pane."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Loom attaches a photo to send to an agent on your laptop.",
+          "cameraPermission": "Loom uses the camera to send a photo to an agent on your laptop."
+        }
       ]
     ]
   }

@@ -242,6 +242,21 @@ async function dispatch(
       return { ok: true, data: { text } };
     }
 
+    case "upload": {
+      // A Device sent an image (base64) — write it to the laptop's uploads dir and hand back the
+      // absolute path, which the phone references to an agent (a terminal can't take an image, but a
+      // path it can). Rust sanitizes the name into a fixed dir; the approve gate above already ran.
+      try {
+        const path = await invoke<string>("save_upload", {
+          filename: req.filename,
+          dataB64: req.data,
+        });
+        return { ok: true, data: { path } };
+      } catch (e) {
+        return { ok: false, error: `upload failed: ${e}` };
+      }
+    }
+
     case "broadcast": {
       const ws = req.workspace ? workspaceByName(req.workspace) : activeWorkspace();
       if (!ws) return { ok: false, error: `no workspace named "${req.workspace}"` };

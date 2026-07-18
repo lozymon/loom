@@ -17,6 +17,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
+import * as ImagePicker from "expo-image-picker";
 import type { LanBridgeClient } from "../lib/lanClient";
 import type { PaneInfo } from "../protocol";
 import { C } from "../theme";
@@ -137,6 +138,46 @@ export default function PaneScreen({
     }
   }
 
+  // Attach a photo (library or camera) → upload it to the laptop → drop the saved path into the box,
+  // so you can add context ("what's this error?") and Send it to an agent that can read the file.
+  async function pickImage(fromCamera: boolean) {
+    try {
+      const perm = fromCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        setNote(fromCamera ? "camera permission denied" : "photos permission denied");
+        return;
+      }
+      const opts = { quality: 0.4, base64: true, mediaTypes: ["images"] as ImagePicker.MediaType[] };
+      const res = fromCamera
+        ? await ImagePicker.launchCameraAsync(opts)
+        : await ImagePicker.launchImageLibraryAsync(opts);
+      if (res.canceled) return;
+      const asset = res.assets[0];
+      if (!asset?.base64) {
+        setNote("couldn't read that image");
+        return;
+      }
+      setNote("uploading image…");
+      const up = await client.call({
+        op: "upload",
+        target: pane.name,
+        filename: asset.fileName ?? "photo.jpg",
+        data: asset.base64,
+      });
+      if (up.ok) {
+        setNote(null);
+        const path = (up.data as { path?: string }).path ?? "";
+        setInput((cur) => (cur.trim() ? cur.trimEnd() + " " : "") + path + " ");
+      } else {
+        setNote(up.error);
+      }
+    } catch (e) {
+      setNote(`image: ${(e as Error).message}`);
+    }
+  }
+
   // Fire a raw key sequence (no trailing Enter) and pull a fresh tail so the menu's new state shows.
   async function sendKey(seq: string) {
     try {
@@ -194,6 +235,17 @@ export default function PaneScreen({
             onSubmitEditing={send}
             multiline
           />
+          {/* Attach + camera — send a photo to an agent (only when there's no text yet, like WhatsApp). */}
+          {input.trim().length === 0 && (
+            <>
+              <Pressable onPress={() => pickImage(false)} hitSlop={8} style={styles.pillIconBtn}>
+                <Text style={styles.pillIcon}>📎</Text>
+              </Pressable>
+              <Pressable onPress={() => pickImage(true)} hitSlop={8} style={styles.pillIconBtn}>
+                <Text style={styles.pillIcon}>📷</Text>
+              </Pressable>
+            </>
+          )}
         </View>
         {/* Round action button: mic (hold-to-talk) by default, Send once there's text — like WhatsApp. */}
         {input.trim().length > 0 ? (

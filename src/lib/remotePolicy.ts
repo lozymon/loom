@@ -30,6 +30,10 @@ export function remoteDisposition(op: string): RemoteDisposition {
       return "allow";
     case "send":
     case "read":
+    // A Device uploading an image writes a file to the laptop — same trust tier as send/read: gated
+    // by a Clearance (or the trusted-device grant), never silent. The Rust side sanitizes the name
+    // into a fixed uploads dir, so it can't write outside it.
+    case "upload":
       return "approve";
     default:
       return "deny";
