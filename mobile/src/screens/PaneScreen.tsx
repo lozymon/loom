@@ -59,15 +59,20 @@ export default function PaneScreen({
   const [keysVisible, setKeysVisible] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Voice → text. Results (interim + final) stream into the compose box; end/error just drop the
-  // listening state. The transcript is left for review, never auto-sent (a trusted send runs at once).
+  // Tap-to-toggle dictation (hands-free, like a locked WhatsApp voice note): tap the mic to start,
+  // tap again to stop and keep the transcript. `continuous` keeps it listening through pauses instead
+  // of cutting off after the first phrase; results append after whatever was already typed. `cancel`
+  // (trash) aborts and restores what was there before. Never auto-sent — you review, then Send.
+  const dictationBase = useRef("");
+  const cancelled = useRef(false);
+
   useSpeechRecognitionEvent("result", (e) => {
     const t = e.results?.[0]?.transcript;
-    if (t != null) setInput(t);
+    if (t != null && !cancelled.current) setInput(dictationBase.current + t);
   });
   useSpeechRecognitionEvent("end", () => setListening(false));
   useSpeechRecognitionEvent("error", (e) => {
-    setNote(`voice: ${e.message || e.error}`);
+    if (!cancelled.current) setNote(`voice: ${e.message || e.error}`);
     setListening(false);
   });
 
@@ -78,20 +83,27 @@ export default function PaneScreen({
         setNote("mic permission denied");
         return;
       }
+      cancelled.current = false;
+      dictationBase.current = input.trim() ? input.trimEnd() + " " : "";
       setNote(null);
       setListening(true);
-      ExpoSpeechRecognitionModule.start({ lang: "en-US", interimResults: true, continuous: false });
+      ExpoSpeechRecognitionModule.start({ lang: "en-US", interimResults: true, continuous: true });
     } catch (err) {
       setNote(`voice: ${(err as Error).message}`);
       setListening(false);
     }
   }
   function stopDictation() {
-    // Release = stop capturing; the last `result` event has already filled the box for review.
-    ExpoSpeechRecognitionModule.stop();
+    ExpoSpeechRecognitionModule.stop(); // finalize; the transcript stays in the box for review
     setListening(false);
   }
-  // Make sure a held mic is released if the screen unmounts mid-utterance.
+  function cancelDictation() {
+    cancelled.current = true;
+    ExpoSpeechRecognitionModule.abort();
+    setInput(dictationBase.current.trimEnd());
+    setListening(false);
+  }
+  // Stop a live recording if the screen unmounts mid-utterance.
   useEffect(() => () => ExpoSpeechRecognitionModule.stop(), []);
 
   const read = useCallback(
@@ -251,17 +263,23 @@ export default function PaneScreen({
             </>
           )}
         </View>
-        {/* Round action button: mic (hold-to-talk) by default, Send once there's text — like WhatsApp. */}
-        {input.trim().length > 0 ? (
+        {/* Recording: a trash (cancel) + a stop button. Otherwise Send when there's text, else the mic
+            (tap to start hands-free dictation, tap Stop to finish) — WhatsApp-style. */}
+        {listening ? (
+          <>
+            <Pressable style={styles.iconBtn} onPress={cancelDictation} hitSlop={8}>
+              <Feather name="trash-2" size={20} color={C.textDim} />
+            </Pressable>
+            <Pressable style={[styles.round, styles.roundOn]} onPress={stopDictation}>
+              <Feather name="square" size={18} color={C.canvas} />
+            </Pressable>
+          </>
+        ) : input.trim().length > 0 ? (
           <Pressable style={styles.round} onPress={send}>
             <Feather name="send" size={20} color={C.canvas} />
           </Pressable>
         ) : (
-          <Pressable
-            style={[styles.round, listening && styles.roundOn]}
-            onPressIn={startDictation}
-            onPressOut={stopDictation}
-          >
+          <Pressable style={styles.round} onPress={startDictation}>
             <Feather name="mic" size={22} color={C.canvas} />
           </Pressable>
         )}
@@ -291,4 +309,5 @@ const styles = StyleSheet.create({
   pillInput: { flex: 1, color: C.textBright, fontFamily: "monospace", fontSize: 16, paddingVertical: 12, maxHeight: 120 },
   round: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
   roundOn: { backgroundColor: C.needs },
+  iconBtn: { width: 44, height: 52, alignItems: "center", justifyContent: "center" },
 });
