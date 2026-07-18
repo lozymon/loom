@@ -12,7 +12,17 @@
 // the pain this removes; review-before-send is deliberate since a trusted device's send runs at once.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, PanResponder } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  PanResponder,
+  Animated,
+  useWindowDimensions,
+} from "react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -45,11 +55,15 @@ export default function PaneScreen({
   pane,
   onBack,
   onNavigate,
+  hasPrev,
+  hasNext,
 }: {
   client: LanBridgeClient;
   pane: PaneInfo;
   onBack: () => void;
   onNavigate?: (delta: number) => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }) {
   const [tail, setTail] = useState("");
   const [input, setInput] = useState("");
@@ -61,19 +75,47 @@ export default function PaneScreen({
   const [keysVisible, setKeysVisible] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Swipe left → next pane, right → previous. Only claims horizontal-dominant gestures so the
-  // terminal still scrolls vertically. Component remounts on pane change (keyed in App), so the
-  // captured onNavigate stays valid.
+  // Swipe left → next pane, right → previous, with the page following your finger and sliding out /
+  // the next sliding in. Only claims horizontal-dominant gestures so the terminal still scrolls
+  // vertically. Latest nav props live in a ref so the once-created responder never goes stale.
+  const { width } = useWindowDimensions();
+  const translateX = useRef(new Animated.Value(0)).current;
+  const nav = useRef({ onNavigate, hasPrev, hasNext });
+  nav.current = { onNavigate, hasPrev, hasNext };
+
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
-        Math.abs(g.dx) > 28 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+        Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderMove: (_e, g) => {
+        // Follow the finger, but resist dragging toward an edge with no neighbour.
+        const { hasPrev: p, hasNext: n } = nav.current;
+        const dx = (g.dx < 0 && !n) || (g.dx > 0 && !p) ? g.dx * 0.25 : g.dx;
+        translateX.setValue(dx);
+      },
       onPanResponderRelease: (_e, g) => {
-        if (g.dx <= -55) onNavigate?.(1);
-        else if (g.dx >= 55) onNavigate?.(-1);
+        const { onNavigate: go, hasPrev: p, hasNext: n } = nav.current;
+        const goNext = g.dx <= -55 && n;
+        const goPrev = g.dx >= 55 && p;
+        if (goNext || goPrev) {
+          const out = goNext ? -width : width;
+          Animated.timing(translateX, { toValue: out, duration: 130, useNativeDriver: true }).start(() => {
+            go?.(goNext ? 1 : -1); // swap to the neighbour (content changes in place)
+            translateX.setValue(-out); // start the incoming page off the opposite edge…
+            Animated.timing(translateX, { toValue: 0, duration: 160, useNativeDriver: true }).start(); // …and slide it in
+          });
+        } else {
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
       },
     }),
   ).current;
+
+  // Swapping panes in place: clear the old tail so it doesn't flash under the incoming page.
+  useEffect(() => {
+    setTail("");
+    setLive(false);
+  }, [pane.name]);
 
   // Tap-to-toggle dictation (hands-free, like a locked WhatsApp voice note): tap the mic to start,
   // tap again to stop and keep the transcript. `continuous` keeps it listening through pauses instead
@@ -220,6 +262,7 @@ export default function PaneScreen({
 
   return (
     <View style={styles.wrap} {...pan.panHandlers}>
+      <Animated.View style={[styles.page, { transform: [{ translateX }] }]}>
       <View style={styles.bar}>
         <Pressable onPress={onBack} hitSlop={12}>
           <Feather name="chevron-left" size={26} color={C.textDim} />
@@ -306,12 +349,14 @@ export default function PaneScreen({
           </Pressable>
         )}
       </View>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: C.canvas },
+  page: { flex: 1 },
   bar: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 14, borderBottomColor: C.hairline, borderBottomWidth: 1 },
   name: { color: C.textBright, fontSize: 19, fontWeight: "600", flex: 1, fontFamily: "monospace" },
   nameWs: { color: C.textDim, fontWeight: "400" },

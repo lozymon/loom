@@ -126,10 +126,11 @@ function AppRoot() {
         </View>
       ) : open ? (
         <PaneScreen
-          key={open.list[open.index].name}
           client={phase.client}
           pane={open.list[open.index]}
           onBack={() => setOpen(null)}
+          hasPrev={open.index > 0}
+          hasNext={open.index < open.list.length - 1}
           onNavigate={(delta) =>
             setOpen((o) => {
               if (!o) return o;
