@@ -88,7 +88,13 @@ function AppRoot() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View
+      style={[
+        styles.root,
+        // All four insets — landscape puts the notch/nav bar on the sides too.
+        { paddingTop: insets.top, paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right },
+      ]}
+    >
       <StatusBar style="light" />
       {phase.kind === "loading" ? (
         <View style={styles.center}>
