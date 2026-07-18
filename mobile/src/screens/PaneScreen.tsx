@@ -35,6 +35,10 @@ import { C } from "../theme";
 
 const REFRESH_MS = 2000;
 
+// Last-seen terminal tail per pane, so swiping to a pane shows its content instantly instead of a
+// blank page that only fills once its read returns. Neighbours are pre-fetched into this on open.
+const tailCache = new Map<string, string>();
+
 // The keys a TUI prompt needs but a text box can't produce — sent as raw sequences with no trailing
 // Enter, so you can navigate arrow menus, toggle multi-selects (Space), and confirm/cancel from the
 // phone. This is how you "answer" an interactive prompt remotely: keystrokes, not taps.
@@ -57,6 +61,7 @@ export default function PaneScreen({
   onNavigate,
   hasPrev,
   hasNext,
+  neighbors,
 }: {
   client: LanBridgeClient;
   pane: PaneInfo;
@@ -64,6 +69,8 @@ export default function PaneScreen({
   onNavigate?: (delta: number) => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  /** Adjacent pane names to pre-fetch so a swipe lands on ready content, not a blank page. */
+  neighbors?: string[];
 }) {
   const [tail, setTail] = useState("");
   const [input, setInput] = useState("");
@@ -111,9 +118,10 @@ export default function PaneScreen({
     }),
   ).current;
 
-  // Swapping panes in place: clear the old tail so it doesn't flash under the incoming page.
+  // Swapping panes in place: show this pane's cached tail immediately (if any) so the incoming page
+  // isn't blank, then the read below refreshes it. Missing = "" only for a never-seen pane.
   useEffect(() => {
-    setTail("");
+    setTail(tailCache.get(pane.name) ?? "");
     setLive(false);
   }, [pane.name]);
 
@@ -170,7 +178,9 @@ export default function PaneScreen({
       try {
         const res = await client.call({ op: "read", target: pane.name, lines: 200 });
         if (res.ok) {
-          setTail(((res.data as { text?: string }).text ?? "").trimEnd());
+          const text = ((res.data as { text?: string }).text ?? "").trimEnd();
+          tailCache.set(pane.name, text);
+          setTail(text);
           setNote(null);
           setLive(true);
         } else {
@@ -195,6 +205,20 @@ export default function PaneScreen({
     const t = setInterval(() => read(true), REFRESH_MS);
     return () => clearInterval(t);
   }, [live, read]);
+
+  // Pre-fetch adjacent panes' tails once reads are confirmed flowing (so this never spams an
+  // untrusted laptop with Clearances). Then swiping to a neighbour lands on ready content.
+  useEffect(() => {
+    if (!live || !neighbors) return;
+    for (const n of neighbors) {
+      client
+        .call({ op: "read", target: n, lines: 200 })
+        .then((res) => {
+          if (res.ok) tailCache.set(n, ((res.data as { text?: string }).text ?? "").trimEnd());
+        })
+        .catch(() => {});
+    }
+  }, [live, neighbors, client]);
 
   async function send() {
     const text = input;

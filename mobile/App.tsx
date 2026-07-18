@@ -131,6 +131,9 @@ function AppRoot() {
           onBack={() => setOpen(null)}
           hasPrev={open.index > 0}
           hasNext={open.index < open.list.length - 1}
+          neighbors={[open.list[open.index - 1]?.name, open.list[open.index + 1]?.name].filter(
+            (n): n is string => !!n,
+          )}
           onNavigate={(delta) =>
             setOpen((o) => {
               if (!o) return o;
