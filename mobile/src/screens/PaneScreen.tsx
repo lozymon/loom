@@ -53,6 +53,8 @@ export default function PaneScreen({
   // Auto-refresh runs only after a good read; a denial/error stops it (avoids Clearance spam).
   const [live, setLive] = useState(false);
   const [listening, setListening] = useState(false);
+  // The TUI key row is off by default (most sends are plain text); toggle it from the compose bar.
+  const [keysVisible, setKeysVisible] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   // Voice → text. Results (interim + final) stream into the compose box; end/error just drop the
@@ -166,35 +168,47 @@ export default function PaneScreen({
         <Text style={styles.mono}>{tail || " "}</Text>
       </ScrollView>
       {note && <Text style={styles.note}>{note}</Text>}
-      <View style={styles.keys}>
-        {KEYS.map((k) => (
-          <Pressable key={k.label} style={styles.key} onPress={() => sendKey(k.seq)} hitSlop={4}>
-            <Text style={styles.keyText}>{k.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {keysVisible && (
+        <View style={styles.keys}>
+          {KEYS.map((k) => (
+            <Pressable key={k.label} style={styles.key} onPress={() => sendKey(k.seq)} hitSlop={4}>
+              <Text style={styles.keyText}>{k.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <View style={styles.composer}>
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder={listening ? "listening…" : "send to this pane…"}
-          placeholderTextColor={C.textFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          onSubmitEditing={send}
-        />
-        <Pressable
-          style={[styles.micBtn, listening && styles.micBtnOn]}
-          onPressIn={startDictation}
-          onPressOut={stopDictation}
-          hitSlop={8}
-        >
-          <Text style={[styles.micText, listening && styles.micTextOn]}>🎤</Text>
-        </Pressable>
-        <Pressable style={styles.sendBtn} onPress={send}>
-          <Text style={styles.sendText}>Send</Text>
-        </Pressable>
+        {/* Rounded pill: a keys-toggle on the left (show/hide the TUI key row), then the input. */}
+        <View style={styles.pill}>
+          <Pressable onPress={() => setKeysVisible((v) => !v)} hitSlop={8} style={styles.pillIconBtn}>
+            <Text style={[styles.pillIcon, keysVisible && styles.pillIconOn]}>⌨</Text>
+          </Pressable>
+          <TextInput
+            style={styles.pillInput}
+            value={input}
+            onChangeText={setInput}
+            placeholder={listening ? "listening…" : "Message"}
+            placeholderTextColor={C.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            onSubmitEditing={send}
+            multiline
+          />
+        </View>
+        {/* Round action button: mic (hold-to-talk) by default, Send once there's text — like WhatsApp. */}
+        {input.trim().length > 0 ? (
+          <Pressable style={styles.round} onPress={send}>
+            <Text style={styles.roundIcon}>➤</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.round, listening && styles.roundOn]}
+            onPressIn={startDictation}
+            onPressOut={stopDictation}
+          >
+            <Text style={styles.roundIcon}>🎤</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -215,13 +229,14 @@ const styles = StyleSheet.create({
   keys: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingTop: 10, borderTopColor: C.hairline, borderTopWidth: 1 },
   key: { flex: 1, minHeight: 42, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   keyText: { color: C.textMid, fontSize: 16, fontWeight: "600" },
-  // Comfortable phone touch targets: a ~52px-tall row so the input and both buttons are easy to hit.
-  composer: { flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingVertical: 12 },
-  input: { flex: 1, minHeight: 52, backgroundColor: C.surface, color: C.textBright, borderColor: C.hairline, borderWidth: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontFamily: "monospace", fontSize: 16 },
-  sendBtn: { minHeight: 52, backgroundColor: C.surface, borderColor: C.accent, borderWidth: 1, borderRadius: 12, paddingHorizontal: 24, alignItems: "center", justifyContent: "center" },
-  sendText: { color: C.accentText, fontWeight: "600", fontSize: 16 },
-  micBtn: { minHeight: 52, width: 60, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  micBtnOn: { borderColor: C.needs, backgroundColor: C.surfaceDead },
-  micText: { fontSize: 24, opacity: 0.7 },
-  micTextOn: { opacity: 1 },
+  // WhatsApp-style compose bar: a rounded pill (keys-toggle + input) and a round action button.
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 10, paddingVertical: 10 },
+  pill: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 52, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 26, paddingLeft: 10, paddingRight: 14 },
+  pillIconBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  pillIcon: { fontSize: 20, color: C.textDim },
+  pillIconOn: { color: C.accentText },
+  pillInput: { flex: 1, color: C.textBright, fontFamily: "monospace", fontSize: 16, paddingVertical: 12, maxHeight: 120 },
+  round: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
+  roundOn: { backgroundColor: C.needs },
+  roundIcon: { fontSize: 22, color: C.canvas },
 });
