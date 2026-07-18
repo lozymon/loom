@@ -5,6 +5,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "loom",
+    "icon": "./assets/icon.png",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -13,6 +14,10 @@
     },
     "android": {
       "package": "cloud.furevikstrand.loom",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0e1116"
+      },
       "permissions": [
         "CAMERA"
       ]
