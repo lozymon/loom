@@ -18,6 +18,7 @@ import {
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 import * as ImagePicker from "expo-image-picker";
+import { Feather } from "@expo/vector-icons";
 import type { LanBridgeClient } from "../lib/lanClient";
 import type { PaneInfo } from "../protocol";
 import { C } from "../theme";
@@ -193,14 +194,14 @@ export default function PaneScreen({
     <View style={styles.wrap}>
       <View style={styles.bar}>
         <Pressable onPress={onBack} hitSlop={12}>
-          <Text style={styles.back}>‹</Text>
+          <Feather name="chevron-left" size={26} color={C.textDim} />
         </Pressable>
         <Text style={styles.name} numberOfLines={1}>
           <Text style={styles.nameWs}>{pane.workspace} · </Text>
           {pane.name}
         </Text>
         <Pressable onPress={() => read()} hitSlop={12}>
-          <Text style={styles.refresh}>↻</Text>
+          <Feather name="rotate-cw" size={19} color={C.textDim} />
         </Pressable>
       </View>
       <ScrollView
@@ -225,7 +226,7 @@ export default function PaneScreen({
         {/* Rounded pill: a keys-toggle on the left (show/hide the TUI key row), then the input. */}
         <View style={styles.pill}>
           <Pressable onPress={() => setKeysVisible((v) => !v)} hitSlop={8} style={styles.pillIconBtn}>
-            <Text style={[styles.pillIcon, keysVisible && styles.pillIconOn]}>⌨</Text>
+            <Feather name="terminal" size={19} color={keysVisible ? C.accentText : C.textDim} />
           </Pressable>
           <TextInput
             style={styles.pillInput}
@@ -242,10 +243,10 @@ export default function PaneScreen({
           {input.trim().length === 0 && (
             <>
               <Pressable onPress={() => pickImage(false)} hitSlop={8} style={styles.pillIconBtn}>
-                <Text style={styles.pillIcon}>📎</Text>
+                <Feather name="paperclip" size={19} color={C.textDim} />
               </Pressable>
               <Pressable onPress={() => pickImage(true)} hitSlop={8} style={styles.pillIconBtn}>
-                <Text style={styles.pillIcon}>📷</Text>
+                <Feather name="camera" size={19} color={C.textDim} />
               </Pressable>
             </>
           )}
@@ -253,7 +254,7 @@ export default function PaneScreen({
         {/* Round action button: mic (hold-to-talk) by default, Send once there's text — like WhatsApp. */}
         {input.trim().length > 0 ? (
           <Pressable style={styles.round} onPress={send}>
-            <Text style={styles.roundIcon}>➤</Text>
+            <Feather name="send" size={20} color={C.canvas} />
           </Pressable>
         ) : (
           <Pressable
@@ -261,7 +262,7 @@ export default function PaneScreen({
             onPressIn={startDictation}
             onPressOut={stopDictation}
           >
-            <Text style={styles.roundIcon}>🎤</Text>
+            <Feather name="mic" size={22} color={C.canvas} />
           </Pressable>
         )}
       </View>
@@ -272,10 +273,8 @@ export default function PaneScreen({
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: C.canvas },
   bar: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 14, borderBottomColor: C.hairline, borderBottomWidth: 1 },
-  back: { color: C.textDim, fontSize: 30, lineHeight: 30 },
   name: { color: C.textBright, fontSize: 19, fontWeight: "600", flex: 1, fontFamily: "monospace" },
   nameWs: { color: C.textDim, fontWeight: "400" },
-  refresh: { color: C.textDim, fontSize: 24 },
   term: { flex: 1, backgroundColor: C.surfaceDead },
   mono: { color: C.textMid, fontFamily: "monospace", fontSize: 13, lineHeight: 19 },
   note: { color: C.needs, fontSize: 13, paddingHorizontal: 14, paddingVertical: 8 },
@@ -289,10 +288,7 @@ const styles = StyleSheet.create({
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 10, paddingVertical: 10 },
   pill: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 52, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 26, paddingLeft: 10, paddingRight: 14 },
   pillIconBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
-  pillIcon: { fontSize: 20, color: C.textDim },
-  pillIconOn: { color: C.accentText },
   pillInput: { flex: 1, color: C.textBright, fontFamily: "monospace", fontSize: 16, paddingVertical: 12, maxHeight: 120 },
   round: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
   roundOn: { backgroundColor: C.needs },
-  roundIcon: { fontSize: 22, color: C.canvas },
 });
