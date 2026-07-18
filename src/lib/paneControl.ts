@@ -63,6 +63,7 @@ import { notifyAttention } from "./notify";
 import { settings } from "../stores/settings";
 import { requestClearance, withdrawClearance } from "../stores/clearances";
 import { remoteDisposition } from "./remotePolicy";
+import { isRemoteTrusted } from "../stores/remoteTrust";
 
 /** For a remote Clearance card: the pane/target the command names, if any. */
 function remoteTargetOf(req: ControlRequest): string | undefined {
@@ -162,9 +163,11 @@ async function dispatch(
     if (disp === "deny") {
       return { ok: false, error: `"${req.op}" is not permitted from a device` };
     }
-    if (disp === "approve") {
+    if (disp === "approve" && !isRemoteTrusted(origin)) {
       // Flow A Confirmation (rule 3.2): park a Clearance on the operator before executing. A
       // Confirmation stops typos, not a thief — its real security is pairing + this table + audit.
+      // A *trusted* device (stores/remoteTrust — the operator's "drive it while I'm away" opt-in)
+      // skips this one-time; it still passes the deny-by-default table above, and is still audited.
       const outcome = await requestClearance(
         {
           kind: "remote-command",

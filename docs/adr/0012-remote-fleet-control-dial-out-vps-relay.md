@@ -114,6 +114,18 @@ So: **Approvals are the remote payoff** — which is what Plan 02 said before th
 
 *(Note `approval.resolve` is **already a bus op** and does **not** answer anything — it marks the Task unblocked and clears attention. Answering still means `send`. A future `approval.answer` taking one of an Agent's offered choices would need ADR-0008's Approval to carry a `choices` list, which it does not; that is a separate arc, not v1.)*
 
+#### 3.6 Trusted device — the Confirmation collapses to a one-time grant (implemented)
+
+The Read Window (3.3) already conceded that a Confirmation *per read* makes the app unusable. Follow that logic to its end: **3.3 established the Flow-A Confirmation is typo protection, not an authorization boundary** — "it stops no attacker; whoever holds the unlocked phone taps Approve." A control whose entire value is catching your own fat-fingers is one the operator should be able to switch off for a device they've decided to drive unattended — which is the actual product ("answer the Agent waiting on you") the moment nobody is at the laptop to tap.
+
+So a paired Device can be **trusted** (`stores/remoteTrust`): the operator taps **"Approve & always"** once on a `remote-command` Clearance, and thereafter that device's `approve` ops (`read`/`send`) execute without parking a Clearance. This **does not touch rule 3's table** — `list` stays `allow`, everything unlisted stays `deny`, and every trusted op is still **audited (rule 4)** and rate-limited (rule 5). Trust is:
+
+- **opt-in** — default off; the deny-by-default posture is unchanged until the operator acts;
+- **per standing pairing** — it is the "I trust this phone" decision pairing (rule 6) already implies, made explicit and revocable;
+- **revoked on unpair** — a wiped key (6.6) cuts the device off, so its trust is dropped with it; a re-pair mints a fresh key that must re-earn trust. (Trust *persists* across app restarts, unlike a Clearance — the Clearance's caller dies with the app, ADR-0002; a Device does not.)
+
+This supersedes the narrower time-boxed Read Window for the single-keeper case: instead of a 15-minute read-only window that still re-prompts and still needs a tap to start, trust is a standing read+send grant the operator sets once. The Read Window remains the right shape if a future multi-Host model wants per-session, per-Host scoping rather than a single trust bit.
+
 ### 4. Audit records Origin — mandatory, not optional
 
 `AuditEntry` gains an `origin` field (`local` | `device:<name>`); `recordAudit` is called for remote-injected commands on the same timeline as local ones. A remote `broadcast` is visible, attributable, and distinguishable from a local one — both live in the Fleet panel and in the after-the-fact record. Without this the feature is unauditable, so it is a hard requirement of accepting this ADR, not a nice-to-have.

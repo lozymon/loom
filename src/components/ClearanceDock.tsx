@@ -18,6 +18,7 @@ import {
   type Clearance,
   type ClearanceKind,
 } from "../stores/clearances";
+import { trustRemoteDevice } from "../stores/remoteTrust";
 
 const KIND_LABEL: Record<ClearanceKind, string> = {
   spawn: "New terminal",
@@ -83,8 +84,24 @@ export default function ClearanceDock() {
                     class="clearance-btn approve"
                     onClick={() => resolveClearance(c.id, true)}
                   >
-                    Approve
+                    Approve once
                   </button>
+                  {/* Remote (Device) commands can be trusted standing, so the paired phone drives the
+                      fleet without a prompt each time — the "I'm away from the laptop" path (ADR-0012
+                      trusted device). Revoke by unpairing (or in Settings → Remote). */}
+                  <Show when={c.kind === "remote-command"}>
+                    <button
+                      type="button"
+                      class="clearance-btn approve"
+                      title="Approve this and stop asking for this device (until you unpair)"
+                      onClick={() => {
+                        trustRemoteDevice();
+                        resolveClearance(c.id, true);
+                      }}
+                    >
+                      Approve &amp; always
+                    </button>
+                  </Show>
                 </div>
               </div>
             );

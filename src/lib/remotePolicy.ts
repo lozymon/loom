@@ -15,6 +15,11 @@
 // `status`/`attention` are DENY despite sounding like reads: they are setters (a Device must not
 // rewrite labels or clear borders fleet-wide). `spawn` is absent, not gated — the silent-RCE
 // primitive has no remote surface. Judge an op by what it does, not its name.
+//
+// This table is unchanged by "trust this device" (stores/remoteTrust): trust only collapses the
+// per-op Confirmation for `approve` ops into a one-time grant, so a paired phone is drivable when
+// nobody is at the laptop. `allow` stays promptless, `deny` stays closed, and trusted ops are still
+// audited (rule 4). Trust is the operator's opt-in tradeoff, revoked by unpairing.
 
 export type RemoteDisposition = "allow" | "approve" | "deny";
 

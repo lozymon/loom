@@ -34,6 +34,7 @@ import {
 import type { DockedPanelKind } from "./stores/workspace";
 import { initTheme } from "./stores/theme";
 import { initSettings, settings } from "./stores/settings";
+import { initRemoteTrust } from "./stores/remoteTrust";
 import { applyGlobalHotkey } from "./lib/globalHotkey";
 import { redock } from "./lib/detach";
 import { openEditorForActivePane } from "./lib/editor";
@@ -95,7 +96,7 @@ export default function App() {
   onCleanup(() => setSessionSink(null));
 
   onMount(async () => {
-    await Promise.all([initTheme(), initSettings(), init()]);
+    await Promise.all([initTheme(), initSettings(), initRemoteTrust(), init()]);
     startPersistence();
     // Seed the audit timeline from its durable trail (ADR-0012 rule 4) so it survives restart.
     void loadAuditHistory();

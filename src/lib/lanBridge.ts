@@ -3,6 +3,7 @@
 // key, bind the LAN), show the QR the phone scans, and revoke.
 
 import { invoke } from "@tauri-apps/api/core";
+import { revokeRemoteTrust } from "../stores/remoteTrust";
 
 /** Default LAN-bridge port. The QR carries it, so the phone uses whatever we bound. */
 export const LAN_BRIDGE_PORT = 8788;
@@ -28,8 +29,13 @@ export const enableBridge = (port = LAN_BRIDGE_PORT): Promise<PairingInfo> =>
 /** Stop listening (keeps the pairing — a re-enable reuses the same key). */
 export const stopBridge = (): Promise<void> => invoke<void>("lan_bridge_stop");
 
-/** Revoke pairing entirely (stop + wipe the key). A paired phone is cut off. */
-export const unpairBridge = (): Promise<void> => invoke<void>("lan_bridge_unpair");
+/** Revoke pairing entirely (stop + wipe the key). A paired phone is cut off — and any standing
+ *  trust for it (stores/remoteTrust) is dropped, since a re-pair mints a fresh key that must re-earn
+ *  trust from scratch. */
+export const unpairBridge = async (): Promise<void> => {
+  await invoke<void>("lan_bridge_unpair");
+  revokeRemoteTrust();
+};
 
 export const bridgeStatus = (): Promise<BridgeStatus> => invoke<BridgeStatus>("lan_bridge_status");
 
