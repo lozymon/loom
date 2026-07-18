@@ -275,7 +275,8 @@ export default function PaneScreen({
             </Pressable>
           </>
         ) : input.trim().length > 0 ? (
-          <Pressable style={styles.round} onPress={send}>
+          // Tap sends; hold to dictate MORE onto what's already typed (or an attached image path).
+          <Pressable style={styles.round} onPress={send} onLongPress={startDictation} delayLongPress={350}>
             <Feather name="send" size={20} color={C.canvas} />
           </Pressable>
         ) : (
