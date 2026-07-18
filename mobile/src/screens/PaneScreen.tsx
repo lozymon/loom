@@ -12,7 +12,7 @@
 // the pain this removes; review-before-send is deliberate since a trusted device's send runs at once.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from "react-native";
+import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, PanResponder } from "react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -44,10 +44,12 @@ export default function PaneScreen({
   client,
   pane,
   onBack,
+  onNavigate,
 }: {
   client: LanBridgeClient;
   pane: PaneInfo;
   onBack: () => void;
+  onNavigate?: (delta: number) => void;
 }) {
   const [tail, setTail] = useState("");
   const [input, setInput] = useState("");
@@ -58,6 +60,20 @@ export default function PaneScreen({
   // The TUI key row is off by default (most sends are plain text); toggle it from the compose bar.
   const [keysVisible, setKeysVisible] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Swipe left → next pane, right → previous. Only claims horizontal-dominant gestures so the
+  // terminal still scrolls vertically. Component remounts on pane change (keyed in App), so the
+  // captured onNavigate stays valid.
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 28 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx <= -55) onNavigate?.(1);
+        else if (g.dx >= 55) onNavigate?.(-1);
+      },
+    }),
+  ).current;
 
   // Tap-to-toggle dictation (hands-free, like a locked WhatsApp voice note): tap the mic to start,
   // tap again to stop and keep the transcript. `continuous` keeps it listening through pauses instead
@@ -203,7 +219,7 @@ export default function PaneScreen({
   }
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} {...pan.panHandlers}>
       <View style={styles.bar}>
         <Pressable onPress={onBack} hitSlop={12}>
           <Feather name="chevron-left" size={26} color={C.textDim} />

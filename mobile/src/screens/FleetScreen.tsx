@@ -13,7 +13,7 @@ export default function FleetScreen({
   onOpen,
 }: {
   client: LanBridgeClient;
-  onOpen: (pane: PaneInfo) => void;
+  onOpen: (list: PaneInfo[], index: number) => void;
 }) {
   const [panes, setPanes] = useState<PaneInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +50,8 @@ export default function FleetScreen({
         data={panes}
         keyExtractor={(p) => `${p.workspace}/${p.name}`}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.accent} />}
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => onOpen(item)}>
+        renderItem={({ item, index }) => (
+          <Pressable style={styles.row} onPress={() => onOpen(panes, index)}>
             <View style={[styles.dot, { backgroundColor: stateColor(item) }]} />
             <View style={styles.main}>
               <Text style={styles.name}>

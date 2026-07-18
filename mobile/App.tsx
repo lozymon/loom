@@ -36,7 +36,9 @@ export default function App() {
 function AppRoot() {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
-  const [open, setOpen] = useState<PaneInfo | null>(null);
+  // The open pane, plus its fleet list + index so PaneScreen can swipe to neighbours without a
+  // round-trip back to the list.
+  const [open, setOpen] = useState<{ list: PaneInfo[]; index: number } | null>(null);
   // The in-flight connection, so Cancel can abort it; `attempt` invalidates a superseded/cancelled
   // connect so its late resolve/reject can't clobber a newer phase.
   const connecting = useRef<LanBridgeClient | null>(null);
@@ -123,9 +125,21 @@ function AppRoot() {
           </Pressable>
         </View>
       ) : open ? (
-        <PaneScreen client={phase.client} pane={open} onBack={() => setOpen(null)} />
+        <PaneScreen
+          key={open.list[open.index].name}
+          client={phase.client}
+          pane={open.list[open.index]}
+          onBack={() => setOpen(null)}
+          onNavigate={(delta) =>
+            setOpen((o) => {
+              if (!o) return o;
+              const next = o.index + delta;
+              return next >= 0 && next < o.list.length ? { ...o, index: next } : o;
+            })
+          }
+        />
       ) : (
-        <FleetScreen client={phase.client} onOpen={setOpen} />
+        <FleetScreen client={phase.client} onOpen={(list, index) => setOpen({ list, index })} />
       )}
     </View>
   );
