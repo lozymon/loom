@@ -206,7 +206,9 @@ export default function PaneScreen({
   );
 
   useEffect(() => {
-    read();
+    // Silent when we already have this pane cached (a swipe) so no "waiting…" note flashes and
+    // resizes the view; only a never-seen pane shows the first-read note.
+    read(tailCache.has(pane.name));
   }, [read]);
 
   // Live tail: poll silently once reads are flowing. Stops itself if a read stops succeeding.
@@ -360,8 +362,14 @@ export default function PaneScreen({
           {renderPage(pane, tail, scrollRef, true, "cur")}
           {renderPage(nextPane, nextTail, nextScrollRef, false, "next")}
         </Animated.View>
+        {/* Floated over the terminal's bottom edge, so a transient message never resizes the view
+            (which used to jolt the terminal on every swipe). */}
+        {note && (
+          <View style={styles.noteOverlay} pointerEvents="none">
+            <Text style={styles.note}>{note}</Text>
+          </View>
+        )}
       </View>
-      {note && <Text style={styles.note}>{note}</Text>}
       {keysVisible && (
         <View style={styles.keys}>
           {KEYS.map((k) => (
@@ -443,7 +451,9 @@ const styles = StyleSheet.create({
   nameWs: { color: C.textDim, fontWeight: "400" },
   term: { flex: 1, backgroundColor: C.surfaceDead },
   mono: { color: C.textMid, fontFamily: "monospace", fontSize: 13, lineHeight: 19 },
-  note: { color: C.needs, fontSize: 13, paddingHorizontal: 14, paddingVertical: 8 },
+  // A floating toast, not an in-flow row — absolute so it never reflows the terminal above it.
+  noteOverlay: { position: "absolute", left: 0, right: 0, bottom: 8, alignItems: "center" },
+  note: { color: C.needs, fontSize: 12, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 14, overflow: "hidden" },
   // Key row for driving TUIs — one compact strip; keys share the width evenly. The single divider
   // above the input area lives here (the composer no longer has its own top border, which used to
   // draw a stray line right under these keys).
