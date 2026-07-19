@@ -3,13 +3,36 @@
     "name": "Loom",
     "slug": "loom-mobile",
     "version": "0.1.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "scheme": "loom",
+    "icon": "./assets/icon.png",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
     "android": {
       "package": "cloud.furevikstrand.loom",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0e1116"
+      },
       "permissions": [
         "CAMERA"
       ]
+    },
+    "ios": {
+      "//": "Build-ready config (no iOS build shipped yet — needs an Apple Developer account to sign).",
+      "bundleIdentifier": "cloud.furevikstrand.loom",
+      "supportsTablet": true,
+      "infoPlist": {
+        "//": "The LAN bridge is cleartext ws:// on the local network; iOS blocks that under ATS unless we opt into local networking, and iOS 14+ requires a local-network usage string.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "Loom connects to your laptop's Loom over your local network to drive and observe your fleet."
+      }
     },
     "plugins": [
       [
@@ -20,7 +43,38 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "//": "The LAN bridge is ws:// (cleartext transport) but app-layer sealed (ChaCha20-Poly1305 under the pairing key), so release builds must allow cleartext or the WebSocket fails instantly — debug allowed it via a Metro overlay, masking this until a release build.",
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Loom uses the mic for hold-to-talk dictation into a pane.",
+          "speechRecognitionPermission": "Loom turns your speech into text to send to a pane."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Loom attaches a photo to send to an agent on your laptop.",
+          "cameraPermission": "Loom uses the camera to send a photo to an agent on your laptop."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#22d3ee"
+        }
+      ],
+      "expo-font"
     ]
   }
 }

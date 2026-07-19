@@ -1200,6 +1200,12 @@ fn hook_profile() -> Vec<(&'static str, Value)> {
             "PostToolUse",
             matched("Edit|Write|MultiEdit|NotebookEdit", "loom hook post-tool"),
         ),
+        // AskUserQuestion carries the real question + options in its tool_input → push them as a
+        // `choice` Approval so the dock (and the phone) show the actual buttons, not a guessed y/n.
+        (
+            "PreToolUse",
+            matched("AskUserQuestion", "loom hook pre-ask"),
+        ),
         // Claude needs input / permission → the Task blocks on you (the rich Approval + the border).
         ("Notification", matched("", "loom hook notification")),
         // Turn finished → the Task ends, the Session goes idle.
@@ -1267,6 +1273,39 @@ fn run_hook_emit(args: &[String]) {
                 "question"
             };
             json!({ "op": "approval.request", "target": pane, "prompt": msg, "kind": kind })
+        }
+        "pre-ask" => {
+            // AskUserQuestion's tool_input carries the real question(s) + options. Push the first
+            // question's choices so Loom shows the actual buttons; the label is what the user reads,
+            // and selecting one sends its 1-based ordinal (the menu's number-key selection). No
+            // options (or a shape we don't recognise) → nothing to add over the Notification hook.
+            let q0 = payload
+                .get("tool_input")
+                .and_then(|t| t.get("questions"))
+                .and_then(Value::as_array)
+                .and_then(|qs| qs.first());
+            let Some(q0) = q0 else { return };
+            let prompt = q0.get("question").and_then(Value::as_str).unwrap_or("");
+            let options: Vec<Value> = q0
+                .get("options")
+                .and_then(Value::as_array)
+                .map(|opts| {
+                    opts.iter()
+                        .filter_map(|o| {
+                            let label = o.get("label").and_then(Value::as_str)?;
+                            let mut m = json!({ "label": label });
+                            if let Some(d) = o.get("description").and_then(Value::as_str) {
+                                m["description"] = json!(d);
+                            }
+                            Some(m)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if options.is_empty() {
+                return;
+            }
+            json!({ "op": "approval.request", "target": pane, "prompt": prompt, "kind": "choice", "options": options })
         }
         "stop" => json!({ "op": "task.end", "target": pane, "outcome": "done" }),
         _ => return,

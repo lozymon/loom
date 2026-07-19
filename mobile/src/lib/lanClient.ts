@@ -20,6 +20,11 @@ const INFO = new TextEncoder().encode("loom-lan-v1");
 const DIR_CLIENT_TO_SERVER = 0;
 const DIR_SERVER_TO_CLIENT = 1;
 
+/** How long to wait for the WebSocket + salt handshake before giving up. A stale/unreachable
+ *  address leaves the socket in CONNECTING with no onerror/onclose for a long time (the SYN just
+ *  goes unanswered), so without this the app hangs on "Connecting to Loom…" forever. */
+const CONNECT_TIMEOUT_MS = 8000;
+
 /** 12-byte nonce: [dir][counter big-endian (8)][0,0,0]. */
 function nonce(dir: number, ctr: number): Uint8Array {
   const n = new Uint8Array(12);
@@ -77,17 +82,23 @@ export class LanBridgeClient {
   private pending: Array<{ resolve: (r: AppResponse) => void; reject: (e: Error) => void }> = [];
   private onSaltResolve: (() => void) | null = null;
   private onSaltReject: ((e: Error) => void) | null = null;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private url: string,
     private psk: Uint8Array,
   ) {}
 
-  /** Connect and complete the salt handshake. Resolves once the channel is sealed and ready. */
+  /** Connect and complete the salt handshake. Resolves once the channel is sealed and ready.
+   *  Rejects (not hangs) if the bridge can't be reached within CONNECT_TIMEOUT_MS. */
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.onSaltResolve = resolve;
       this.onSaltReject = reject;
+      this.connectTimer = setTimeout(
+        () => this.fail(new BridgeError(`couldn't reach Loom at ${this.url} (timed out)`)),
+        CONNECT_TIMEOUT_MS,
+      );
       const ws = new WebSocket(this.url);
       ws.binaryType = "arraybuffer";
       this.ws = ws;
@@ -98,12 +109,20 @@ export class LanBridgeClient {
     });
   }
 
+  private clearConnectTimer() {
+    if (this.connectTimer !== null) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
+  }
+
   private onMessage(frame: Uint8Array) {
     if (!this.cipherKey) {
       // Handshake: this frame is the server_salt.
       if (frame.length !== 32) return this.fail(new BridgeError("bad server salt"));
       const salt = concat(this.clientSalt, frame);
       this.cipherKey = hkdf(sha256, this.psk, salt, INFO, 32);
+      this.clearConnectTimer();
       const r = this.onSaltResolve;
       this.onSaltResolve = null;
       this.onSaltReject = null;
@@ -137,11 +156,16 @@ export class LanBridgeClient {
     });
   }
 
+  /** Tear the connection down. Safe to call while still connecting — it aborts the in-flight
+   *  handshake (so a "Cancel" on the connecting screen resolves immediately) as well as on teardown. */
   close() {
+    this.clearConnectTimer();
     this.ws?.close();
+    this.fail(new BridgeError("cancelled"));
   }
 
   private fail(err: Error) {
+    this.clearConnectTimer();
     this.onSaltReject?.(err);
     this.onSaltResolve = null;
     this.onSaltReject = null;

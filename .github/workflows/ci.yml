@@ -22,10 +22,12 @@ name: CI
 #   • build         — full release build + .deb and .AppImage bundles (uploaded as artifacts)
 #   • windows-build — full NSIS bundle on a real windows-latest runner (the priciest runner)
 #   • macos-build   — full .dmg bundle on a macos-latest runner (unsigned until notarization)
+#   • mobile-apk    — installable Android APK of the mobile/ app (sideload; debug-keystore signed)
 #
 #   Release tags (`v*`) only:
 #   • release       — create the GitHub Release and attach the .deb + .AppImage + Windows installer
-#                     + macOS dmg as permanent, public assets (workflow artifacts expire off Releases)
+#                     + macOS dmg + Android APK as permanent, public assets (workflow artifacts expire
+#                     off Releases). No iOS asset yet — an installable iPhone build needs Apple signing.
 #
 # The full bundles are gated because they're expensive and don't add merge-gating signal
 # the lint/check tier doesn't already give: rust-lint compiles the whole tree (clippy
@@ -499,6 +501,58 @@ jobs:
           path: src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
+  mobile-apk:
+    name: Build Android APK (release asset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Same release/dispatch gate as the desktop bundles — heavy, and only wanted for installers.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      # React Native 0.76 / AGP needs JDK 17.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install JS deps
+        working-directory: mobile
+        run: npm ci
+
+      # Generate the native android/ project from app.json (config plugins run here).
+      - name: Expo prebuild (android)
+        working-directory: mobile
+        run: npx expo prebuild --platform android --no-install
+
+      # RELEASE variant on purpose: it embeds the JS bundle (self-contained, no Metro) and is
+      # debug-keystore-signed by Expo's prebuild defaults, so it sideloads without a custom key.
+      - name: Gradle assembleRelease
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      # Name it like the other release assets (version in the filename) for the Releases page.
+      - name: Stage APK as a release asset
+        run: |
+          mkdir -p apk-out
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk \
+            "apk-out/Loom-${GITHUB_REF_NAME}-android.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: loom-android-apk
+          path: apk-out/*.apk
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-22.04
@@ -507,7 +561,7 @@ jobs:
     # pulls the .deb + AppImage, the Windows installer, and the macOS dmg that build/windows-build/
     # macos-build uploaded as workflow artifacts and attaches them to the Release as permanent,
     # public assets (workflow artifacts otherwise expire and aren't visible on the Releases page).
-    needs: [build, windows-build, macos-build]
+    needs: [build, windows-build, macos-build, mobile-apk]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write # create the release + upload assets (overrides the read-only default)
@@ -534,6 +588,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: loom-macos-dmg
+          path: dist
+
+      - name: Download Android APK
+        uses: actions/download-artifact@v8
+        with:
+          name: loom-android-apk
           path: dist
 
       - name: Publish release

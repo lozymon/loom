@@ -4,37 +4,114 @@
 // State is intentionally simple (hooks, no nav lib) for a single-Host keeper. Multi-Host (rule 7)
 // and the Clearance/attention inbox are the next slices; the transport + observe/drive core is here.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import * as Notifications from "expo-notifications";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LanBridgeClient } from "./src/lib/lanClient";
 import { loadPairing, forgetPairing, type Pairing } from "./src/state/pairing";
 import PairScreen from "./src/screens/PairScreen";
 import FleetScreen from "./src/screens/FleetScreen";
 import PaneScreen from "./src/screens/PaneScreen";
 import type { PaneInfo } from "./src/protocol";
+import { useFleet } from "./src/state/fleet";
+import { initNotifications } from "./src/lib/notify";
+import { registerFleetTask } from "./src/tasks/fleetTask";
 import { C } from "./src/theme";
 
 type Phase =
   | { kind: "loading" }
   | { kind: "unpaired" }
-  | { kind: "connecting" }
+  | { kind: "connecting"; url: string }
   | { kind: "error"; message: string }
   | { kind: "ready"; client: LanBridgeClient };
 
+// SafeAreaProvider must wrap the tree so useSafeAreaInsets works. Android 15 draws edge-to-edge,
+// so without this the header sits under the status-bar clock (the overlap bug).
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppRoot />
+    </SafeAreaProvider>
+  );
+}
+
+function AppRoot() {
+  const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
-  const [open, setOpen] = useState<PaneInfo | null>(null);
+  // The open pane, plus its fleet list + index so PaneScreen can swipe to neighbours without a
+  // round-trip back to the list.
+  const [open, setOpen] = useState<{ list: PaneInfo[]; index: number } | null>(null);
+  // A pane a tapped notification asked us to open, resolved against the fleet once it's loaded.
+  const [pendingTarget, setPendingTarget] = useState<{ workspace: string; name: string } | null>(null);
+  // The in-flight connection, so Cancel can abort it; `attempt` invalidates a superseded/cancelled
+  // connect so its late resolve/reject can't clobber a newer phase.
+  const connecting = useRef<LanBridgeClient | null>(null);
+  const attempt = useRef(0);
+
+  // The fleet poll lives here (not FleetScreen) so it keeps running — and keeps firing notifications —
+  // even while a pane is open. FleetScreen just renders the result.
+  const fleet = useFleet(phase.kind === "ready" ? phase.client : null);
+
+  // One-time: notification permission + Android channel, and register the background fleet-watch task.
+  useEffect(() => {
+    initNotifications();
+    registerFleetTask();
+  }, []);
+
+  // Tapping a fleet notification should jump to the pane it's about. The notification carries
+  // {workspace, name} in its data; capture it here (both the cold-start tap that launched the app and
+  // taps while it's already running), then the effect below opens that pane once the fleet is loaded.
+  useEffect(() => {
+    Notifications.getLastNotificationResponseAsync().then((resp) => {
+      const d = resp?.notification.request.content.data as { workspace?: string; name?: string } | undefined;
+      if (d?.name) setPendingTarget({ workspace: d.workspace ?? "", name: d.name });
+    });
+    const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+      const d = resp.notification.request.content.data as { workspace?: string; name?: string };
+      if (d?.name) setPendingTarget({ workspace: d.workspace ?? "", name: d.name });
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Resolve a pending notification target against the live fleet: open that pane, or drop the target
+  // if the pane is gone. Waits until we're connected and the fleet list has arrived.
+  useEffect(() => {
+    if (!pendingTarget || phase.kind !== "ready" || fleet.panes.length === 0) return;
+    const i = fleet.panes.findIndex(
+      (p) => p.name === pendingTarget.name && (!pendingTarget.workspace || p.workspace === pendingTarget.workspace),
+    );
+    if (i >= 0) setOpen({ list: fleet.panes, index: i });
+    setPendingTarget(null);
+  }, [pendingTarget, phase.kind, fleet.panes]);
 
   async function connect(pairing: Pairing) {
-    setPhase({ kind: "connecting" });
-    const client = new LanBridgeClient(pairing.url, pairing.key);
+    const mine = ++attempt.current;
+    setPhase({ kind: "connecting", url: pairing.url });
     try {
+      // Inside the try so a constructor throw (e.g. crypto.getRandomValues missing) surfaces on the
+      // error screen instead of leaving the app stuck on "Connecting…".
+      const client = new LanBridgeClient(pairing.url, pairing.key);
+      connecting.current = client;
       await client.connect();
+      if (mine !== attempt.current) return client.close(); // cancelled/superseded
+      connecting.current = null;
       setPhase({ kind: "ready", client });
     } catch (e) {
+      if (mine !== attempt.current) return; // cancelled — leave the phase Cancel chose
+      connecting.current = null;
       setPhase({ kind: "error", message: (e as Error).message });
     }
+  }
+
+  /** Bail out of a stuck "Connecting…" — abort the socket and drop to the error screen (Retry /
+   *  Forget), so a wrong/stale address can never trap the user on the spinner. */
+  function cancelConnect() {
+    attempt.current++; // invalidate the in-flight attempt so its rejection is ignored
+    connecting.current?.close();
+    connecting.current = null;
+    setPhase({ kind: "error", message: "Cancelled — Loom wasn't reachable at that address." });
   }
 
   useEffect(() => {
@@ -46,18 +123,35 @@ export default function App() {
   }, []);
 
   async function unpair() {
+    attempt.current++;
+    connecting.current?.close();
+    connecting.current = null;
     await forgetPairing();
     setOpen(null);
     setPhase({ kind: "unpaired" });
   }
 
   return (
-    <View style={styles.root}>
+    <View
+      style={[
+        styles.root,
+        // All four insets — landscape puts the notch/nav bar on the sides too.
+        { paddingTop: insets.top, paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right },
+      ]}
+    >
       <StatusBar style="light" />
-      {phase.kind === "loading" || phase.kind === "connecting" ? (
+      {phase.kind === "loading" ? (
         <View style={styles.center}>
           <ActivityIndicator color={C.accent} />
-          <Text style={styles.dim}>{phase.kind === "connecting" ? "Connecting to Loom…" : ""}</Text>
+        </View>
+      ) : phase.kind === "connecting" ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={C.accent} />
+          <Text style={styles.dim}>Connecting to Loom…</Text>
+          <Text style={styles.faint}>{phase.url}</Text>
+          <Pressable style={styles.btn} onPress={cancelConnect}>
+            <Text style={styles.btnText}>Cancel</Text>
+          </Pressable>
         </View>
       ) : phase.kind === "unpaired" ? (
         <PairScreen onPaired={connect} />
@@ -73,9 +167,27 @@ export default function App() {
           </Pressable>
         </View>
       ) : open ? (
-        <PaneScreen client={phase.client} pane={open} onBack={() => setOpen(null)} />
+        <PaneScreen
+          client={phase.client}
+          list={open.list}
+          index={open.index}
+          onBack={() => setOpen(null)}
+          onIndexChange={(index) => setOpen((o) => (o ? { ...o, index } : o))}
+          // The live approval for the open pane (matched by name against the polling fleet), so a
+          // block that appears after opening still surfaces its real choices.
+          approval={(() => {
+            const p = open.list[open.index];
+            return fleet.panes.find((q) => q.name === p.name && q.workspace === p.workspace)?.approval;
+          })()}
+        />
       ) : (
-        <FleetScreen client={phase.client} onOpen={setOpen} />
+        <FleetScreen
+          panes={fleet.panes}
+          error={fleet.error}
+          refreshing={fleet.refreshing}
+          onRefresh={fleet.refresh}
+          onOpen={(list, index) => setOpen({ list, index })}
+        />
       )}
     </View>
   );
@@ -85,6 +197,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.canvas },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
   dim: { color: C.textDim, fontSize: 14, textAlign: "center" },
+  faint: { color: C.textDim, fontSize: 12, opacity: 0.7, fontFamily: "monospace", textAlign: "center" },
   err: { color: C.textBright, fontSize: 18, fontWeight: "600" },
   btn: { borderColor: C.hairline, borderWidth: 1, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
   btnText: { color: C.textMid, fontWeight: "600" },

@@ -5206,6 +5206,27 @@ body,
   border-color: var(--state-needs);
   color: #1a0808;
 }
+/* Real pushed choices (e.g. AskUserQuestion) — one button per option, ordinal + label. Wraps so a
+   long option list stays readable; selecting sends the option's number to the pane. */
+.fa-opt {
+  max-width: 260px;
+  padding: 5px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-bright);
+  font: 12px var(--font-mono);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fa-opt:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 .fa-input {
   width: 220px;
   padding: 5px 9px;

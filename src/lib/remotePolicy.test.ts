@@ -9,9 +9,10 @@ describe("remoteDisposition", () => {
     expect(remoteDisposition("list")).toBe("allow");
   });
 
-  it("gates the two writers behind approval", () => {
+  it("gates the writers behind approval (send/read + image upload)", () => {
     expect(remoteDisposition("send")).toBe("approve");
     expect(remoteDisposition("read")).toBe("approve");
+    expect(remoteDisposition("upload")).toBe("approve");
   });
 
   it("denies setters that merely sound like reads", () => {

@@ -168,6 +168,7 @@ pub fn run() {
             lanbridge::lan_bridge_status,
             lanbridge::lan_bridge_pair,
             lanbridge::lan_bridge_unpair,
+            lanbridge::save_upload,
             editor::open_editor,
             voce::voce_dictate,
             voce::voce_finish,
@@ -208,6 +209,13 @@ pub fn run() {
             // Dev seam (Plan 02 L1b): start the LAN bridge at boot if $LOOM_LAN_BRIDGE_PORT is set.
             // Localhost-only, off unless the env var is present; the Settings toggle arrives in L1c.
             lanbridge::autostart_from_env(
+                app.handle(),
+                &app.state::<lanbridge::LanBridge>(),
+                pending.clone(),
+            );
+            // Restore the LAN bridge if the operator left it enabled (Settings → Remote) — so remote
+            // access survives a laptop reboot instead of needing a manual re-enable each time.
+            lanbridge::autostart_if_enabled(
                 app.handle(),
                 &app.state::<lanbridge::LanBridge>(),
                 pending.clone(),

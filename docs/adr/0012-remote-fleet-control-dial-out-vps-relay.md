@@ -44,10 +44,12 @@ So remote authority is **enumerated per op, and fails closed**. An op earns a di
 | Disposition | Ops | Earns it by |
 |---|---|---|
 | **`allow`** — no prompt | `list` (payload extended — see below) | the one reader; feeds the fleet-list screen |
-| **`approve`** — Confirmation (3.3) | `send` (destructive only), `read` (Read Window) | the Pane-detail screen (read tail + send box) |
+| **`approve`** — Confirmation (3.3) | `send` (destructive only), `read` (Read Window), `upload` (image → laptop) | the Pane-detail screen (read tail + send box + attach/camera) |
 | **`deny`** | `spawn`, `broadcast`, `status`, `attention`, `gate.set`, `gate.list`, `role.set`, `focus`, the blackboard, **and everything unlisted — including ops that do not exist yet** | no surface, no articulated need, or actively harmful |
 
 **One reader, two writers, everything else closed** — that is the entire remote surface.
+
+`upload` is the one op that *writes* to the laptop's disk: a Device can't hand a terminal an image, so it sends base64 image bytes that the Rust `save_upload` command writes to a fixed `uploads/` dir (basename sanitized — a hostile name can't escape it) and returns the absolute path, which the phone then references to an agent. It sits in `approve` for the same reason as `send`/`read` — gated by a Clearance or the trusted-device grant, never silent — and is bounded: no arbitrary path, no overwrite outside `uploads/`, no execution.
 
 Note `status` and `attention` are **`deny` despite sounding like reads**: both are *setters* (`{op:"status",target,text}` rewrites a Pane's label; `{op:"attention",target,clear}` raises or clears its border). Granting them would let a Device rewrite labels and clear attention borders fleet-wide, unprompted, through a surface the app does not have. Judge an op by its payload, not its name — an earlier draft of this table got exactly this wrong, and `gate.list` with it (the fleet screen already receives `gated` from `list`).
 
@@ -113,6 +115,18 @@ An earlier draft of 3.4 called Flow B "the feature." That over-reached, and the 
 So: **Approvals are the remote payoff** — which is what Plan 02 said before this ADR muddied it — and **Clearances are principally a *local* fix.** That does not lower P0b's priority: a synchronous modal freezing every Pane's rendering is a defect on its own merits, and Clearances remain the right shape. It changes what the *app* is for. "Type commands into your fleet from a phone" (`send`/`read`, and the whole risk budget) stays **optional**; the hero is answering the Agent that is patiently waiting on you.
 
 *(Note `approval.resolve` is **already a bus op** and does **not** answer anything — it marks the Task unblocked and clears attention. Answering still means `send`. A future `approval.answer` taking one of an Agent's offered choices would need ADR-0008's Approval to carry a `choices` list, which it does not; that is a separate arc, not v1.)*
+
+#### 3.6 Trusted device — the Confirmation collapses to a one-time grant (implemented)
+
+The Read Window (3.3) already conceded that a Confirmation *per read* makes the app unusable. Follow that logic to its end: **3.3 established the Flow-A Confirmation is typo protection, not an authorization boundary** — "it stops no attacker; whoever holds the unlocked phone taps Approve." A control whose entire value is catching your own fat-fingers is one the operator should be able to switch off for a device they've decided to drive unattended — which is the actual product ("answer the Agent waiting on you") the moment nobody is at the laptop to tap.
+
+So a paired Device can be **trusted** (`stores/remoteTrust`): the operator taps **"Approve & always"** once on a `remote-command` Clearance, and thereafter that device's `approve` ops (`read`/`send`) execute without parking a Clearance. This **does not touch rule 3's table** — `list` stays `allow`, everything unlisted stays `deny`, and every trusted op is still **audited (rule 4)** and rate-limited (rule 5). Trust is:
+
+- **opt-in** — default off; the deny-by-default posture is unchanged until the operator acts;
+- **per standing pairing** — it is the "I trust this phone" decision pairing (rule 6) already implies, made explicit and revocable;
+- **revoked on unpair** — a wiped key (6.6) cuts the device off, so its trust is dropped with it; a re-pair mints a fresh key that must re-earn trust. (Trust *persists* across app restarts, unlike a Clearance — the Clearance's caller dies with the app, ADR-0002; a Device does not.)
+
+This supersedes the narrower time-boxed Read Window for the single-keeper case: instead of a 15-minute read-only window that still re-prompts and still needs a tap to start, trust is a standing read+send grant the operator sets once. The Read Window remains the right shape if a future multi-Host model wants per-session, per-Host scoping rather than a single trust bit.
 
 ### 4. Audit records Origin — mandatory, not optional
 

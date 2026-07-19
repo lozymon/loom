@@ -22,7 +22,9 @@ import type {
   Task,
   TaskId,
   TaskOutcome,
+  Approval,
   ApprovalKind,
+  ApprovalOption,
 } from "../ipc/protocol";
 
 const [sessions, setSessions] = createStore<Record<SessionId, Session>>({});
@@ -225,10 +227,13 @@ export function approvalRequest(
   agentId: AgentId,
   prompt: string,
   kind: ApprovalKind = "question",
+  options?: ApprovalOption[],
 ): void {
   const id = ensureActiveTask(paneId, agentId);
   setTasks(id, "state", "blocked");
-  setTasks(id, "approval", { prompt: prompt.trim(), kind });
+  const approval: Approval = { prompt: prompt.trim(), kind };
+  if (options && options.length) approval.options = options;
+  setTasks(id, "approval", approval);
   const sid = tasks[id].sessionId;
   setSessions(sid, "state", "blocked");
   persistTask(id);

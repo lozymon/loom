@@ -56,6 +56,7 @@ import {
   approvalRequest,
   approvalResolve,
   paneSessionState,
+  paneActiveTask,
 } from "../stores/sessions";
 import { detectAgent } from "./agents";
 import type { AgentId, Origin, PaneId } from "../ipc/protocol";
@@ -63,6 +64,7 @@ import { notifyAttention } from "./notify";
 import { settings } from "../stores/settings";
 import { requestClearance, withdrawClearance } from "../stores/clearances";
 import { remoteDisposition } from "./remotePolicy";
+import { isRemoteTrusted } from "../stores/remoteTrust";
 
 /** For a remote Clearance card: the pane/target the command names, if any. */
 function remoteTargetOf(req: ControlRequest): string | undefined {
@@ -162,9 +164,11 @@ async function dispatch(
     if (disp === "deny") {
       return { ok: false, error: `"${req.op}" is not permitted from a device` };
     }
-    if (disp === "approve") {
+    if (disp === "approve" && !isRemoteTrusted(origin)) {
       // Flow A Confirmation (rule 3.2): park a Clearance on the operator before executing. A
       // Confirmation stops typos, not a thief — its real security is pairing + this table + audit.
+      // A *trusted* device (stores/remoteTrust — the operator's "drive it while I'm away" opt-in)
+      // skips this one-time; it still passes the deny-by-default table above, and is still audited.
       const outcome = await requestClearance(
         {
           kind: "remote-command",
@@ -187,17 +191,31 @@ async function dispatch(
       // the wire, and it improves `loom list` locally too. Absent fields are omitted, not null.
       return {
         ok: true,
-        data: listPanes().map((p) => ({
-          name: p.name,
-          workspace: p.workspace,
-          focused: p.focused,
-          live: countLive([p.paneId]) > 0,
-          role: p.role,
-          gated: p.gated,
-          status: paneStatus(p.paneId) || undefined,
-          attention: paneAttention(p.paneId) || undefined,
-          sessionState: paneSessionState(p.paneId),
-        })),
+        data: listPanes().map((p) => {
+          // A blocked Task's approval rides along so a remote fleet view can show the real prompt +
+          // choices and answer it (never y/n-guessing). Only when actually blocked.
+          const task = paneActiveTask(p.paneId);
+          const approval =
+            task?.state === "blocked" && task.approval
+              ? {
+                  prompt: task.approval.prompt,
+                  kind: task.approval.kind,
+                  options: task.approval.options,
+                }
+              : undefined;
+          return {
+            name: p.name,
+            workspace: p.workspace,
+            focused: p.focused,
+            live: countLive([p.paneId]) > 0,
+            role: p.role,
+            gated: p.gated,
+            status: paneStatus(p.paneId) || undefined,
+            attention: paneAttention(p.paneId) || undefined,
+            sessionState: paneSessionState(p.paneId),
+            approval,
+          };
+        }),
       };
 
     case "send": {
@@ -237,6 +255,21 @@ async function dispatch(
       const text = readPane(r.paneId, lines);
       if (text === null) return { ok: false, error: `pane "${req.target}" is not available` };
       return { ok: true, data: { text } };
+    }
+
+    case "upload": {
+      // A Device sent an image (base64) — write it to the laptop's uploads dir and hand back the
+      // absolute path, which the phone references to an agent (a terminal can't take an image, but a
+      // path it can). Rust sanitizes the name into a fixed dir; the approve gate above already ran.
+      try {
+        const path = await invoke<string>("save_upload", {
+          filename: req.filename,
+          dataB64: req.data,
+        });
+        return { ok: true, data: { path } };
+      } catch (e) {
+        return { ok: false, error: `upload failed: ${e}` };
+      }
     }
 
     case "broadcast": {
@@ -523,7 +556,10 @@ async function dispatch(
       const r = resolvePaneByName(req.target);
       if ("error" in r) return { ok: false, error: r.error };
       const prompt = (req.prompt ?? "").trim();
-      approvalRequest(r.paneId, paneAgentId(r.paneId), prompt, req.kind ?? "question");
+      const options = req.options && req.options.length ? req.options : undefined;
+      // Options present ⇒ a real multi-choice question, not a y/n permission (the whole point).
+      const kind = req.kind ?? (options ? "choice" : "question");
+      approvalRequest(r.paneId, paneAgentId(r.paneId), prompt, kind, options);
       // A fresh raise fires the OS notification (mirrors the `attention` op).
       if (noteAttention(r.paneId)) void notifyAttention(req.target, prompt.slice(0, 80));
       return { ok: true, data: { name: req.target } };

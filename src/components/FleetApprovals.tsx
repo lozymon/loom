@@ -87,9 +87,29 @@ function ApprovalRow(props: { row: BlockedRow; onAnswer: (id: PaneId, text: stri
       <span class="fa-prompt" title={approval().prompt}>{approval().prompt}</span>
 
       <div class="fa-actions">
-        <Show when={approval().kind === "permission"}>
-          <button class="fa-yn fa-yes" title="Answer yes" onClick={() => send("y")}>y</button>
-          <button class="fa-yn fa-no" title="Answer no" onClick={() => send("n")}>n</button>
+        {/* When the agent pushed the real choices (e.g. AskUserQuestion), show them as buttons —
+            selecting sends the option's 1-based ordinal, the menu's own number-key selection — instead
+            of guessing y/n. y/n stays only for a genuine permission prompt with no options. */}
+        <Show
+          when={approval().options?.length}
+          fallback={
+            <Show when={approval().kind === "permission"}>
+              <button class="fa-yn fa-yes" title="Answer yes" onClick={() => send("y")}>y</button>
+              <button class="fa-yn fa-no" title="Answer no" onClick={() => send("n")}>n</button>
+            </Show>
+          }
+        >
+          <For each={approval().options}>
+            {(opt, i) => (
+              <button
+                class="fa-opt"
+                title={opt.description ?? opt.label}
+                onClick={() => send(String(i() + 1))}
+              >
+                {i() + 1}. {opt.label}
+              </button>
+            )}
+          </For>
         </Show>
         <input
           class="fa-input"

@@ -1,47 +1,24 @@
-// Fleet screen — the home view. Polls `list` (the one allow op) and shows each pane with its P0c
-// state (status label, attention, session state). Tap a pane to open it. This is the "observe" half;
-// it never prompts.
+// Fleet screen — the home view. Shows each pane with its P0c state (status label, attention, session
+// state); tap a pane to open it. The `list` poll lives in App now (state/fleet) so it keeps running —
+// and keeps notifications flowing — even while you're inside a pane; this screen just renders it.
 
-import { useCallback, useEffect, useState } from "react";
 import { View, Text, FlatList, Pressable, RefreshControl, StyleSheet } from "react-native";
-import type { LanBridgeClient } from "../lib/lanClient";
 import type { PaneInfo } from "../protocol";
 import { C, stateColor } from "../theme";
 
 export default function FleetScreen({
-  client,
+  panes,
+  error,
+  refreshing,
+  onRefresh,
   onOpen,
 }: {
-  client: LanBridgeClient;
-  onOpen: (pane: PaneInfo) => void;
+  panes: PaneInfo[];
+  error: string | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onOpen: (list: PaneInfo[], index: number) => void;
 }) {
-  const [panes, setPanes] = useState<PaneInfo[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const res = await client.call({ op: "list" });
-      if (res.ok) {
-        setPanes(res.data as PaneInfo[]);
-        setError(null);
-      } else {
-        setError(res.error);
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [client]);
-
-  useEffect(() => {
-    refresh();
-    const t = setInterval(refresh, 4000); // the fleet dashboard; `list` is cheap + unprompted
-    return () => clearInterval(t);
-  }, [refresh]);
-
   return (
     <View style={styles.wrap}>
       <Text style={styles.header}>Fleet</Text>
@@ -49,9 +26,9 @@ export default function FleetScreen({
       <FlatList
         data={panes}
         keyExtractor={(p) => `${p.workspace}/${p.name}`}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.accent} />}
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => onOpen(item)}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
+        renderItem={({ item, index }) => (
+          <Pressable style={styles.row} onPress={() => onOpen(panes, index)}>
             <View style={[styles.dot, { backgroundColor: stateColor(item) }]} />
             <View style={styles.main}>
               <Text style={styles.name}>
