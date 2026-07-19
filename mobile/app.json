@@ -55,6 +55,12 @@
           "cameraPermission": "Loom uses the camera to send a photo to an agent on your laptop."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0e1116"
+        }
+      ],
       "expo-font"
     ]
   }

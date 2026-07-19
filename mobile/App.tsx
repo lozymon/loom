@@ -14,6 +14,9 @@ import PairScreen from "./src/screens/PairScreen";
 import FleetScreen from "./src/screens/FleetScreen";
 import PaneScreen from "./src/screens/PaneScreen";
 import type { PaneInfo } from "./src/protocol";
+import { useFleet } from "./src/state/fleet";
+import { initNotifications } from "./src/lib/notify";
+import { registerFleetTask } from "./src/tasks/fleetTask";
 import { C } from "./src/theme";
 
 type Phase =
@@ -43,6 +46,16 @@ function AppRoot() {
   // connect so its late resolve/reject can't clobber a newer phase.
   const connecting = useRef<LanBridgeClient | null>(null);
   const attempt = useRef(0);
+
+  // The fleet poll lives here (not FleetScreen) so it keeps running — and keeps firing notifications —
+  // even while a pane is open. FleetScreen just renders the result.
+  const fleet = useFleet(phase.kind === "ready" ? phase.client : null);
+
+  // One-time: notification permission + Android channel, and register the background fleet-watch task.
+  useEffect(() => {
+    initNotifications();
+    registerFleetTask();
+  }, []);
 
   async function connect(pairing: Pairing) {
     const mine = ++attempt.current;
@@ -133,7 +146,13 @@ function AppRoot() {
           onIndexChange={(index) => setOpen((o) => (o ? { ...o, index } : o))}
         />
       ) : (
-        <FleetScreen client={phase.client} onOpen={(list, index) => setOpen({ list, index })} />
+        <FleetScreen
+          panes={fleet.panes}
+          error={fleet.error}
+          refreshing={fleet.refreshing}
+          onRefresh={fleet.refresh}
+          onOpen={(list, index) => setOpen({ list, index })}
+        />
       )}
     </View>
   );
