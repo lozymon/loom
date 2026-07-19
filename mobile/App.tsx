@@ -129,11 +129,8 @@ function AppRoot() {
           client={phase.client}
           pane={open.list[open.index]}
           onBack={() => setOpen(null)}
-          hasPrev={open.index > 0}
-          hasNext={open.index < open.list.length - 1}
-          neighbors={[open.list[open.index - 1]?.name, open.list[open.index + 1]?.name].filter(
-            (n): n is string => !!n,
-          )}
+          prevPane={open.list[open.index - 1]}
+          nextPane={open.list[open.index + 1]}
           onNavigate={(delta) =>
             setOpen((o) => {
               if (!o) return o;

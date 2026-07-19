@@ -11,7 +11,7 @@
 // the transcript lands in the compose box for you to review, then Send. Typing shell into a phone is
 // the pain this removes; review-before-send is deliberate since a trusted device's send runs at once.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   View,
   Text,
@@ -59,18 +59,16 @@ export default function PaneScreen({
   pane,
   onBack,
   onNavigate,
-  hasPrev,
-  hasNext,
-  neighbors,
+  prevPane,
+  nextPane,
 }: {
   client: LanBridgeClient;
   pane: PaneInfo;
   onBack: () => void;
   onNavigate?: (delta: number) => void;
-  hasPrev?: boolean;
-  hasNext?: boolean;
-  /** Adjacent pane names to pre-fetch so a swipe lands on ready content, not a blank page. */
-  neighbors?: string[];
+  /** Adjacent panes, rendered off-screen so a swipe slides into their content, not black canvas. */
+  prevPane?: PaneInfo;
+  nextPane?: PaneInfo;
 }) {
   const [tail, setTail] = useState("");
   const [input, setInput] = useState("");
@@ -80,46 +78,58 @@ export default function PaneScreen({
   const [listening, setListening] = useState(false);
   // The TUI key row is off by default (most sends are plain text); toggle it from the compose bar.
   const [keysVisible, setKeysVisible] = useState(false);
+  // Cached neighbour tails as state so the off-screen preview pages re-render as pre-fetch fills them.
+  const [neighborTails, setNeighborTails] = useState<Record<string, string>>({});
   const scrollRef = useRef<ScrollView>(null);
+  const prevScrollRef = useRef<ScrollView>(null);
+  const nextScrollRef = useRef<ScrollView>(null);
 
-  // Swipe left → next pane, right → previous, with the page following your finger and sliding out /
-  // the next sliding in. Only claims horizontal-dominant gestures so the terminal still scrolls
-  // vertically. Latest nav props live in a ref so the once-created responder never goes stale.
+  const hasPrev = !!prevPane;
+  const hasNext = !!nextPane;
+
+  // A 3-page strip [prev | current | next], each a screen wide, translated so `current` is centred
+  // (base = -width). A swipe drags the strip so you actually slide onto the neighbour's page — which
+  // already shows its cached tail — instead of the current page sliding over black. On release past
+  // the threshold we finish the slide, then `onNavigate` re-centres the strip on the new pane (the
+  // vacated slot held the same content, so the re-centre is seamless). Only claims horizontal-dominant
+  // gestures so the terminal still scrolls vertically; latest props live in a ref to stay fresh.
   const { width } = useWindowDimensions();
-  const translateX = useRef(new Animated.Value(0)).current;
-  const nav = useRef({ onNavigate, hasPrev, hasNext });
-  nav.current = { onNavigate, hasPrev, hasNext };
+  const slideX = useRef(new Animated.Value(-width)).current;
+  useEffect(() => {
+    slideX.setValue(-width); // re-centre on rotation / width change
+  }, [width, slideX]);
+  const nav = useRef({ onNavigate, hasPrev, hasNext, width });
+  nav.current = { onNavigate, hasPrev, hasNext, width };
 
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
         Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
       onPanResponderMove: (_e, g) => {
-        // Follow the finger, but resist dragging toward an edge with no neighbour.
-        const { hasPrev: p, hasNext: n } = nav.current;
+        // Follow the finger from the centred base, resisting a drag toward an edge with no neighbour.
+        const { hasPrev: p, hasNext: n, width: w } = nav.current;
         const dx = (g.dx < 0 && !n) || (g.dx > 0 && !p) ? g.dx * 0.25 : g.dx;
-        translateX.setValue(dx);
+        slideX.setValue(-w + dx);
       },
       onPanResponderRelease: (_e, g) => {
-        const { onNavigate: go, hasPrev: p, hasNext: n } = nav.current;
+        const { onNavigate: go, hasPrev: p, hasNext: n, width: w } = nav.current;
         const goNext = g.dx <= -55 && n;
         const goPrev = g.dx >= 55 && p;
         if (goNext || goPrev) {
-          const out = goNext ? -width : width;
-          Animated.timing(translateX, { toValue: out, duration: 130, useNativeDriver: true }).start(() => {
-            go?.(goNext ? 1 : -1); // swap to the neighbour (content changes in place)
-            translateX.setValue(-out); // start the incoming page off the opposite edge…
-            Animated.timing(translateX, { toValue: 0, duration: 160, useNativeDriver: true }).start(); // …and slide it in
+          const to = goNext ? -w * 2 : 0; // finish sliding the strip to the neighbour's slot
+          Animated.timing(slideX, { toValue: to, duration: 150, useNativeDriver: true }).start(() => {
+            go?.(goNext ? 1 : -1); // re-centre: current becomes the neighbour, strip rebuilds
+            slideX.setValue(-w); // the vacated slot held identical content, so this is seamless
           });
         } else {
-          Animated.spring(translateX, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+          Animated.spring(slideX, { toValue: -w, useNativeDriver: true, bounciness: 4 }).start();
         }
       },
     }),
   ).current;
 
-  // Swapping panes in place: show this pane's cached tail immediately (if any) so the incoming page
-  // isn't blank, then the read below refreshes it. Missing = "" only for a never-seen pane.
+  // Swapping panes in place: show this pane's cached tail immediately (if any) so the page isn't
+  // blank, then the read below refreshes it. Missing = "" only for a never-seen pane.
   useEffect(() => {
     setTail(tailCache.get(pane.name) ?? "");
     setLive(false);
@@ -207,18 +217,25 @@ export default function PaneScreen({
   }, [live, read]);
 
   // Pre-fetch adjacent panes' tails once reads are confirmed flowing (so this never spams an
-  // untrusted laptop with Clearances). Then swiping to a neighbour lands on ready content.
+  // untrusted laptop with Clearances). Fills the cache + state so the off-screen preview pages show
+  // real content, and a swipe slides straight onto it.
+  const prevName = prevPane?.name;
+  const nextName = nextPane?.name;
   useEffect(() => {
-    if (!live || !neighbors) return;
-    for (const n of neighbors) {
+    if (!live) return;
+    for (const n of [prevName, nextName]) {
+      if (!n) continue;
       client
         .call({ op: "read", target: n, lines: 200 })
         .then((res) => {
-          if (res.ok) tailCache.set(n, ((res.data as { text?: string }).text ?? "").trimEnd());
+          if (!res.ok) return;
+          const t = ((res.data as { text?: string }).text ?? "").trimEnd();
+          tailCache.set(n, t);
+          setNeighborTails((cur) => (cur[n] === t ? cur : { ...cur, [n]: t }));
         })
         .catch(() => {});
     }
-  }, [live, neighbors, client]);
+  }, [live, prevName, nextName, client]);
 
   async function send() {
     const text = input;
@@ -284,29 +301,66 @@ export default function PaneScreen({
     }
   }
 
-  return (
-    <View style={styles.wrap} {...pan.panHandlers}>
-      <Animated.View style={[styles.page, { transform: [{ translateX }] }]}>
+  // One page of the strip: a header + terminal tail, a screen wide. The current page is interactive
+  // (back/refresh + live tail); the off-screen prev/next preview a cached tail so a swipe slides onto
+  // real content. Each keeps its own scroll pinned to the bottom (newest output).
+  const renderPage = (
+    p: PaneInfo | undefined,
+    tailText: string,
+    ref: RefObject<ScrollView>,
+    isCurrent: boolean,
+    key: string,
+  ) => (
+    <View style={[styles.pageCol, { width }]} key={key}>
       <View style={styles.bar}>
-        <Pressable onPress={onBack} hitSlop={12}>
-          <Feather name="chevron-left" size={26} color={C.textDim} />
-        </Pressable>
+        {isCurrent ? (
+          <Pressable onPress={onBack} hitSlop={12}>
+            <Feather name="chevron-left" size={26} color={C.textDim} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 26 }} />
+        )}
         <Text style={styles.name} numberOfLines={1}>
-          <Text style={styles.nameWs}>{pane.workspace} · </Text>
-          {pane.name}
+          {p ? (
+            <>
+              <Text style={styles.nameWs}>{p.workspace} · </Text>
+              {p.name}
+            </>
+          ) : (
+            ""
+          )}
         </Text>
-        <Pressable onPress={() => read()} hitSlop={12}>
-          <Feather name="rotate-cw" size={19} color={C.textDim} />
-        </Pressable>
+        {isCurrent ? (
+          <Pressable onPress={() => read()} hitSlop={12}>
+            <Feather name="rotate-cw" size={19} color={C.textDim} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 19 }} />
+        )}
       </View>
       <ScrollView
-        ref={scrollRef}
+        ref={ref}
         style={styles.term}
         contentContainerStyle={{ padding: 12 }}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => ref.current?.scrollToEnd({ animated: false })}
       >
-        <Text style={styles.mono}>{tail || " "}</Text>
+        <Text style={styles.mono}>{tailText || " "}</Text>
       </ScrollView>
+    </View>
+  );
+
+  const prevTail = prevName ? neighborTails[prevName] ?? tailCache.get(prevName) ?? "" : "";
+  const nextTail = nextName ? neighborTails[nextName] ?? tailCache.get(nextName) ?? "" : "";
+
+  return (
+    <View style={styles.wrap} {...pan.panHandlers}>
+      <View style={styles.viewport}>
+        <Animated.View style={[styles.strip, { width: width * 3, transform: [{ translateX: slideX }] }]}>
+          {renderPage(prevPane, prevTail, prevScrollRef, false, "prev")}
+          {renderPage(pane, tail, scrollRef, true, "cur")}
+          {renderPage(nextPane, nextTail, nextScrollRef, false, "next")}
+        </Animated.View>
+      </View>
       {note && <Text style={styles.note}>{note}</Text>}
       {keysVisible && (
         <View style={styles.keys}>
@@ -373,14 +427,17 @@ export default function PaneScreen({
           </Pressable>
         )}
       </View>
-      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: C.canvas },
-  page: { flex: 1 },
+  // The pager viewport clips the 3-wide strip; the strip is a row of full-screen-width pages so a
+  // swipe slides between them.
+  viewport: { flex: 1, overflow: "hidden" },
+  strip: { flexDirection: "row", height: "100%" },
+  pageCol: { height: "100%" },
   bar: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 14, borderBottomColor: C.hairline, borderBottomWidth: 1 },
   name: { color: C.textBright, fontSize: 19, fontWeight: "600", flex: 1, fontFamily: "monospace" },
   nameWs: { color: C.textDim, fontWeight: "400" },
