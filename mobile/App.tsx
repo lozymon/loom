@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import * as Notifications from "expo-notifications";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LanBridgeClient } from "./src/lib/lanClient";
 import { loadPairing, forgetPairing, type Pairing } from "./src/state/pairing";
@@ -42,6 +43,8 @@ function AppRoot() {
   // The open pane, plus its fleet list + index so PaneScreen can swipe to neighbours without a
   // round-trip back to the list.
   const [open, setOpen] = useState<{ list: PaneInfo[]; index: number } | null>(null);
+  // A pane a tapped notification asked us to open, resolved against the fleet once it's loaded.
+  const [pendingTarget, setPendingTarget] = useState<{ workspace: string; name: string } | null>(null);
   // The in-flight connection, so Cancel can abort it; `attempt` invalidates a superseded/cancelled
   // connect so its late resolve/reject can't clobber a newer phase.
   const connecting = useRef<LanBridgeClient | null>(null);
@@ -56,6 +59,32 @@ function AppRoot() {
     initNotifications();
     registerFleetTask();
   }, []);
+
+  // Tapping a fleet notification should jump to the pane it's about. The notification carries
+  // {workspace, name} in its data; capture it here (both the cold-start tap that launched the app and
+  // taps while it's already running), then the effect below opens that pane once the fleet is loaded.
+  useEffect(() => {
+    Notifications.getLastNotificationResponseAsync().then((resp) => {
+      const d = resp?.notification.request.content.data as { workspace?: string; name?: string } | undefined;
+      if (d?.name) setPendingTarget({ workspace: d.workspace ?? "", name: d.name });
+    });
+    const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+      const d = resp.notification.request.content.data as { workspace?: string; name?: string };
+      if (d?.name) setPendingTarget({ workspace: d.workspace ?? "", name: d.name });
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Resolve a pending notification target against the live fleet: open that pane, or drop the target
+  // if the pane is gone. Waits until we're connected and the fleet list has arrived.
+  useEffect(() => {
+    if (!pendingTarget || phase.kind !== "ready" || fleet.panes.length === 0) return;
+    const i = fleet.panes.findIndex(
+      (p) => p.name === pendingTarget.name && (!pendingTarget.workspace || p.workspace === pendingTarget.workspace),
+    );
+    if (i >= 0) setOpen({ list: fleet.panes, index: i });
+    setPendingTarget(null);
+  }, [pendingTarget, phase.kind, fleet.panes]);
 
   async function connect(pairing: Pairing) {
     const mine = ++attempt.current;
