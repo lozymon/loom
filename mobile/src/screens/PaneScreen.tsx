@@ -7,11 +7,16 @@
 // "waiting…" flash), and auto-refresh stops if a read is denied so an untrusted device doesn't spam
 // the laptop with a Clearance every couple of seconds — the operator taps "Approve & always" once.
 //
+// Swipe left/right to move between panes: the whole fleet is one horizontal strip and we translate
+// to the active index. Each pane sits at a FIXED offset, so sliding onto it shows its (pre-fetched)
+// content and it stays put — nothing swaps under the viewport, so there's no flash of the previous
+// pane's text when a slide lands (the bug a re-centring 3-page pager had).
+//
 // Hold-to-talk: press-and-hold the 🎤 to dictate (on-device recognition, expo-speech-recognition) —
 // the transcript lands in the compose box for you to review, then Send. Typing shell into a phone is
 // the pain this removes; review-before-send is deliberate since a trusted device's send runs at once.
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -56,21 +61,21 @@ const KEYS: { label: string; seq: string }[] = [
 
 export default function PaneScreen({
   client,
-  pane,
+  list,
+  index,
   onBack,
-  onNavigate,
-  prevPane,
-  nextPane,
+  onIndexChange,
 }: {
   client: LanBridgeClient;
-  pane: PaneInfo;
+  /** The whole fleet (snapshot from when the pane was opened) — rendered as one swipeable strip. */
+  list: PaneInfo[];
+  /** Which pane is active (front-and-centre, live-polled). */
+  index: number;
   onBack: () => void;
-  onNavigate?: (delta: number) => void;
-  /** Adjacent panes, rendered off-screen so a swipe slides into their content, not black canvas. */
-  prevPane?: PaneInfo;
-  nextPane?: PaneInfo;
+  /** Report a swipe-driven index change up so the parent's state stays in sync. */
+  onIndexChange: (index: number) => void;
 }) {
-  const [tail, setTail] = useState("");
+  const pane = list[index];
   const [input, setInput] = useState("");
   const [note, setNote] = useState<string | null>(null);
   // Auto-refresh runs only after a good read; a denial/error stops it (avoids Clearance spam).
@@ -78,62 +83,57 @@ export default function PaneScreen({
   const [listening, setListening] = useState(false);
   // The TUI key row is off by default (most sends are plain text); toggle it from the compose bar.
   const [keysVisible, setKeysVisible] = useState(false);
-  // Cached neighbour tails as state so the off-screen preview pages re-render as pre-fetch fills them.
-  const [neighborTails, setNeighborTails] = useState<Record<string, string>>({});
-  const scrollRef = useRef<ScrollView>(null);
-  const prevScrollRef = useRef<ScrollView>(null);
-  const nextScrollRef = useRef<ScrollView>(null);
+  // One tail per pane name, so every page of the strip renders its own content and re-renders as
+  // reads/pre-fetch fill it. Seeded from the module cache so a re-open is instant.
+  const [tails, setTails] = useState<Record<string, string>>({});
+  // Per-page scroll refs (keyed by pane name) so each terminal can pin itself to the newest output.
+  const scrollRefs = useRef<Record<string, ScrollView | null>>({});
 
-  const hasPrev = !!prevPane;
-  const hasNext = !!nextPane;
-
-  // A 3-page strip [prev | current | next], each a screen wide, translated so `current` is centred
-  // (base = -width). A swipe drags the strip so you actually slide onto the neighbour's page — which
-  // already shows its cached tail — instead of the current page sliding over black. On release past
-  // the threshold we finish the slide, then `onNavigate` re-centres the strip on the new pane (the
-  // vacated slot held the same content, so the re-centre is seamless). Only claims horizontal-dominant
-  // gestures so the terminal still scrolls vertically; latest props live in a ref to stay fresh.
+  // The strip is `list.length` pages wide; translate to `-index * width` to bring the active pane
+  // under the viewport. Because each pane owns a fixed slot, a swipe just slides the strip — no page
+  // ever changes identity mid-transition, so nothing flashes when a slide lands.
   const { width } = useWindowDimensions();
-  const slideX = useRef(new Animated.Value(-width)).current;
+  const tx = useRef(new Animated.Value(-index * width)).current;
+  // Keep the latest index/width/list-length in a ref so the once-created PanResponder never goes stale.
+  const nav = useRef({ index, width, count: list.length, onIndexChange, activeName: pane.name });
+  nav.current = { index, width, count: list.length, onIndexChange, activeName: pane.name };
+
+  // Re-anchor the strip when the active index or width changes for a reason other than an in-flight
+  // swipe (e.g. rotation, or a programmatic open). A swipe animates `tx` itself and then calls
+  // onIndexChange, so by the time index updates `tx` is already at the right place — snapping here is
+  // a no-op in that case and a correcting move otherwise.
   useEffect(() => {
-    slideX.setValue(-width); // re-centre on rotation / width change
-  }, [width, slideX]);
-  const nav = useRef({ onNavigate, hasPrev, hasNext, width });
-  nav.current = { onNavigate, hasPrev, hasNext, width };
+    tx.setValue(-index * width);
+  }, [index, width, tx]);
 
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
         Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
       onPanResponderMove: (_e, g) => {
-        // Follow the finger from the centred base, resisting a drag toward an edge with no neighbour.
-        const { hasPrev: p, hasNext: n, width: w } = nav.current;
-        const dx = (g.dx < 0 && !n) || (g.dx > 0 && !p) ? g.dx * 0.25 : g.dx;
-        slideX.setValue(-w + dx);
+        const { index: i, width: w, count } = nav.current;
+        // Follow the finger, resisting a drag past either end of the fleet.
+        const atEnd = (g.dx < 0 && i >= count - 1) || (g.dx > 0 && i <= 0);
+        const dx = atEnd ? g.dx * 0.25 : g.dx;
+        tx.setValue(-i * w + dx);
       },
       onPanResponderRelease: (_e, g) => {
-        const { onNavigate: go, hasPrev: p, hasNext: n, width: w } = nav.current;
-        const goNext = g.dx <= -55 && n;
-        const goPrev = g.dx >= 55 && p;
-        if (goNext || goPrev) {
-          const to = goNext ? -w * 2 : 0; // finish sliding the strip to the neighbour's slot
-          Animated.timing(slideX, { toValue: to, duration: 150, useNativeDriver: true }).start(() => {
-            go?.(goNext ? 1 : -1); // re-centre: current becomes the neighbour, strip rebuilds
-            slideX.setValue(-w); // the vacated slot held identical content, so this is seamless
-          });
-        } else {
-          Animated.spring(slideX, { toValue: -w, useNativeDriver: true, bounciness: 4 }).start();
-        }
+        const { index: i, width: w, count, onIndexChange: report } = nav.current;
+        const goNext = g.dx <= -55 && i < count - 1;
+        const goPrev = g.dx >= 55 && i > 0;
+        const target = goNext ? i + 1 : goPrev ? i - 1 : i;
+        Animated.timing(tx, {
+          toValue: -target * w,
+          duration: 160,
+          useNativeDriver: true,
+        }).start(() => {
+          // The strip is already sitting on the target slot (which shows that pane), so reporting the
+          // new index changes only which pane polls live — the visible content doesn't move.
+          if (target !== i) report(target);
+        });
       },
     }),
   ).current;
-
-  // Swapping panes in place: show this pane's cached tail immediately (if any) so the page isn't
-  // blank, then the read below refreshes it. Missing = "" only for a never-seen pane.
-  useEffect(() => {
-    setTail(tailCache.get(pane.name) ?? "");
-    setLive(false);
-  }, [pane.name]);
 
   // Tap-to-toggle dictation (hands-free, like a locked WhatsApp voice note): tap the mic to start,
   // tap again to stop and keep the transcript. `continuous` keeps it listening through pauses instead
@@ -182,62 +182,62 @@ export default function PaneScreen({
   // Stop a live recording if the screen unmounts mid-utterance.
   useEffect(() => () => ExpoSpeechRecognitionModule.stop(), []);
 
-  const read = useCallback(
-    async (silent = false) => {
+  // Read a pane's tail into the cache + state. `silent` skips the "waiting…" note (used for the
+  // active pane's first read only when it's a never-seen pane; swipes are always silent).
+  const readPane = useCallback(
+    async (name: string, silent: boolean) => {
       if (!silent) setNote("waiting for approval on the laptop…");
       try {
-        const res = await client.call({ op: "read", target: pane.name, lines: 200 });
+        const res = await client.call({ op: "read", target: name, lines: 200 });
         if (res.ok) {
           const text = ((res.data as { text?: string }).text ?? "").trimEnd();
-          tailCache.set(pane.name, text);
-          setTail(text);
-          setNote(null);
-          setLive(true);
-        } else {
-          setNote(res.error);
-          setLive(false);
+          tailCache.set(name, text);
+          setTails((cur) => (cur[name] === text ? cur : { ...cur, [name]: text }));
+          if (name === nav.current.activeName) setNote(null); // clear the note only for the active pane
+          return true;
         }
-      } catch (e) {
-        setNote((e as Error).message);
-        setLive(false);
+        return false;
+      } catch {
+        return false;
       }
     },
-    [client, pane.name],
+    [client],
   );
 
+  // Active pane: read on open/swap (silent when cached), then poll silently. A failed read stops the
+  // poll (avoids Clearance spam) and shows the error.
   useEffect(() => {
-    // Silent when we already have this pane cached (a swipe) so no "waiting…" note flashes and
-    // resizes the view; only a never-seen pane shows the first-read note.
-    read(tailCache.has(pane.name));
-  }, [read]);
+    let stop = false;
+    (async () => {
+      const ok = await readPane(pane.name, tailCache.has(pane.name));
+      if (stop) return;
+      if (ok) setLive(true);
+      else {
+        setLive(false);
+        setNote("couldn't read that pane — approve it on the laptop, or Retry");
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [pane.name, readPane]);
 
-  // Live tail: poll silently once reads are flowing. Stops itself if a read stops succeeding.
   useEffect(() => {
     if (!live) return;
-    const t = setInterval(() => read(true), REFRESH_MS);
+    const t = setInterval(() => {
+      readPane(pane.name, true).then((ok) => !ok && setLive(false));
+    }, REFRESH_MS);
     return () => clearInterval(t);
-  }, [live, read]);
+  }, [live, pane.name, readPane]);
 
-  // Pre-fetch adjacent panes' tails once reads are confirmed flowing (so this never spams an
-  // untrusted laptop with Clearances). Fills the cache + state so the off-screen preview pages show
-  // real content, and a swipe slides straight onto it.
-  const prevName = prevPane?.name;
-  const nextName = nextPane?.name;
+  // Pre-fetch the immediate neighbours once reads are flowing, so a swipe lands on ready content
+  // (never spams an untrusted laptop — gated on `live`).
+  const prevName = list[index - 1]?.name;
+  const nextName = list[index + 1]?.name;
   useEffect(() => {
     if (!live) return;
-    for (const n of [prevName, nextName]) {
-      if (!n) continue;
-      client
-        .call({ op: "read", target: n, lines: 200 })
-        .then((res) => {
-          if (!res.ok) return;
-          const t = ((res.data as { text?: string }).text ?? "").trimEnd();
-          tailCache.set(n, t);
-          setNeighborTails((cur) => (cur[n] === t ? cur : { ...cur, [n]: t }));
-        })
-        .catch(() => {});
-    }
-  }, [live, prevName, nextName, client]);
+    for (const n of [prevName, nextName]) if (n) readPane(n, true);
+  }, [live, prevName, nextName, readPane]);
 
   async function send() {
     const text = input;
@@ -246,7 +246,7 @@ export default function PaneScreen({
     try {
       const res = await client.call({ op: "send", target: pane.name, text });
       setNote(res.ok ? null : res.error);
-      if (res.ok) setTimeout(() => read(true), 400);
+      if (res.ok) setTimeout(() => readPane(pane.name, true), 400);
     } catch (e) {
       setNote((e as Error).message);
     }
@@ -296,71 +296,51 @@ export default function PaneScreen({
   async function sendKey(seq: string) {
     try {
       const res = await client.call({ op: "send", target: pane.name, text: seq, enter: false });
-      if (res.ok) setTimeout(() => read(true), 200);
+      if (res.ok) setTimeout(() => readPane(pane.name, true), 200);
       else setNote(res.error);
     } catch (e) {
       setNote((e as Error).message);
     }
   }
 
-  // One page of the strip: a header + terminal tail, a screen wide. The current page is interactive
-  // (back/refresh + live tail); the off-screen prev/next preview a cached tail so a swipe slides onto
-  // real content. Each keeps its own scroll pinned to the bottom (newest output).
-  const renderPage = (
-    p: PaneInfo | undefined,
-    tailText: string,
-    ref: RefObject<ScrollView>,
-    isCurrent: boolean,
-    key: string,
-  ) => (
-    <View style={[styles.pageCol, { width }]} key={key}>
-      <View style={styles.bar}>
-        {isCurrent ? (
-          <Pressable onPress={onBack} hitSlop={12}>
-            <Feather name="chevron-left" size={26} color={C.textDim} />
-          </Pressable>
-        ) : (
-          <View style={{ width: 26 }} />
-        )}
-        <Text style={styles.name} numberOfLines={1}>
-          {p ? (
-            <>
-              <Text style={styles.nameWs}>{p.workspace} · </Text>
-              {p.name}
-            </>
-          ) : (
-            ""
-          )}
-        </Text>
-        {isCurrent ? (
-          <Pressable onPress={() => read()} hitSlop={12}>
-            <Feather name="rotate-cw" size={19} color={C.textDim} />
-          </Pressable>
-        ) : (
-          <View style={{ width: 19 }} />
-        )}
-      </View>
-      <ScrollView
-        ref={ref}
-        style={styles.term}
-        contentContainerStyle={{ padding: 12 }}
-        onContentSizeChange={() => ref.current?.scrollToEnd({ animated: false })}
-      >
-        <Text style={styles.mono}>{tailText || " "}</Text>
-      </ScrollView>
-    </View>
-  );
-
-  const prevTail = prevName ? neighborTails[prevName] ?? tailCache.get(prevName) ?? "" : "";
-  const nextTail = nextName ? neighborTails[nextName] ?? tailCache.get(nextName) ?? "" : "";
-
   return (
     <View style={styles.wrap} {...pan.panHandlers}>
       <View style={styles.viewport}>
-        <Animated.View style={[styles.strip, { width: width * 3, transform: [{ translateX: slideX }] }]}>
-          {renderPage(prevPane, prevTail, prevScrollRef, false, "prev")}
-          {renderPage(pane, tail, scrollRef, true, "cur")}
-          {renderPage(nextPane, nextTail, nextScrollRef, false, "next")}
+        <Animated.View
+          style={[styles.strip, { width: width * list.length, transform: [{ translateX: tx }] }]}
+        >
+          {list.map((p, i) => {
+            const tailText = tails[p.name] ?? tailCache.get(p.name) ?? "";
+            const active = i === index;
+            return (
+              <View style={[styles.pageCol, { width }]} key={`${p.workspace}/${p.name}`}>
+                <View style={styles.bar}>
+                  <Pressable onPress={onBack} hitSlop={12}>
+                    <Feather name="chevron-left" size={26} color={C.textDim} />
+                  </Pressable>
+                  <Text style={styles.name} numberOfLines={1}>
+                    <Text style={styles.nameWs}>{p.workspace} · </Text>
+                    {p.name}
+                  </Text>
+                  <Pressable onPress={() => readPane(p.name, active)} hitSlop={12}>
+                    <Feather name="rotate-cw" size={19} color={C.textDim} />
+                  </Pressable>
+                </View>
+                <ScrollView
+                  ref={(el) => {
+                    scrollRefs.current[p.name] = el;
+                  }}
+                  style={styles.term}
+                  contentContainerStyle={{ padding: 12 }}
+                  onContentSizeChange={() =>
+                    scrollRefs.current[p.name]?.scrollToEnd({ animated: false })
+                  }
+                >
+                  <Text style={styles.mono}>{tailText || " "}</Text>
+                </ScrollView>
+              </View>
+            );
+          })}
         </Animated.View>
         {/* Floated over the terminal's bottom edge, so a transient message never resizes the view
             (which used to jolt the terminal on every swipe). */}
@@ -441,7 +421,7 @@ export default function PaneScreen({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: C.canvas },
-  // The pager viewport clips the 3-wide strip; the strip is a row of full-screen-width pages so a
+  // The pager viewport clips the fleet-wide strip; the strip is a row of full-screen-width pages so a
   // swipe slides between them.
   viewport: { flex: 1, overflow: "hidden" },
   strip: { flexDirection: "row", height: "100%" },

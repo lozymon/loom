@@ -127,17 +127,10 @@ function AppRoot() {
       ) : open ? (
         <PaneScreen
           client={phase.client}
-          pane={open.list[open.index]}
+          list={open.list}
+          index={open.index}
           onBack={() => setOpen(null)}
-          prevPane={open.list[open.index - 1]}
-          nextPane={open.list[open.index + 1]}
-          onNavigate={(delta) =>
-            setOpen((o) => {
-              if (!o) return o;
-              const next = o.index + delta;
-              return next >= 0 && next < o.list.length ? { ...o, index: next } : o;
-            })
-          }
+          onIndexChange={(index) => setOpen((o) => (o ? { ...o, index } : o))}
         />
       ) : (
         <FleetScreen client={phase.client} onOpen={(list, index) => setOpen({ list, index })} />
