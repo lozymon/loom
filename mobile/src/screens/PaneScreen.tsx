@@ -353,22 +353,42 @@ export default function PaneScreen({
           </View>
         )}
       </View>
-      {/* When the active pane is blocked on a pushed multi-choice question, show the real options as
-          tappable chips — tapping sends that option's number to the menu. Beats hunting the key row. */}
+      {/* When the active pane is blocked on a pushed multi-choice question, show the real options as a
+          vertical select list — the recommended one (badged) is first, each row carries its
+          description. Tapping sends that option's number to the menu. Beats hunting the key row. */}
       {approval?.options?.length ? (
         <View style={styles.optsWrap}>
           <Text style={styles.optsPrompt} numberOfLines={2}>
             {approval.prompt}
           </Text>
-          <View style={styles.optsRow}>
-            {approval.options.map((o, i) => (
-              <Pressable key={i} style={styles.opt} onPress={() => sendKey(`${i + 1}\r`)}>
-                <Text style={styles.optText} numberOfLines={1}>
-                  {i + 1}. {o.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <ScrollView style={styles.optsList} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {approval.options.map((o, i) => {
+              const rec = /\(\s*recommended\s*\)/i.test(o.label);
+              const label = o.label.replace(/\s*\(\s*recommended\s*\)\s*/i, "").trim();
+              return (
+                <Pressable
+                  key={i}
+                  style={[styles.optRow, rec && styles.optRowRec]}
+                  onPress={() => sendKey(`${i + 1}\r`)}
+                >
+                  <Text style={styles.optNum}>{i + 1}</Text>
+                  <View style={styles.optBody}>
+                    <View style={styles.optLabelRow}>
+                      <Text style={styles.optLabel} numberOfLines={1}>
+                        {label}
+                      </Text>
+                      {rec ? <Text style={styles.optBadge}>Recommended</Text> : null}
+                    </View>
+                    {o.description ? (
+                      <Text style={styles.optDesc} numberOfLines={2}>
+                        {o.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </View>
       ) : null}
       {keysVisible && (
@@ -458,9 +478,15 @@ const styles = StyleSheet.create({
   // Pushed multi-choice answer bar — the real options as wrapping chips, above the key row.
   optsWrap: { paddingHorizontal: 12, paddingTop: 8, gap: 8, borderTopColor: C.hairline, borderTopWidth: 1 },
   optsPrompt: { color: C.textDim, fontSize: 13 },
-  optsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  opt: { maxWidth: "100%", backgroundColor: C.surface, borderColor: C.accent, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
-  optText: { color: C.textBright, fontSize: 14, fontWeight: "600" },
+  optsList: { maxHeight: 240 },
+  optRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8 },
+  optRowRec: { borderColor: C.accent }, // the recommended row reads as the default
+  optNum: { width: 22, height: 22, borderRadius: 6, backgroundColor: C.canvas, color: C.textMid, textAlign: "center", lineHeight: 22, fontSize: 12, fontWeight: "700", overflow: "hidden" },
+  optBody: { flex: 1, gap: 3 },
+  optLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  optLabel: { color: C.textBright, fontSize: 15, fontWeight: "600", flexShrink: 1 },
+  optBadge: { fontSize: 10, color: C.accent, borderColor: C.accent, borderWidth: 1, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1, overflow: "hidden", fontWeight: "700" },
+  optDesc: { color: C.textFaint, fontSize: 12 },
   // Key row for driving TUIs — one compact strip; keys share the width evenly. The single divider
   // above the input area lives here (the composer no longer has its own top border, which used to
   // draw a stray line right under these keys).
