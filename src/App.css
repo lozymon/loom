@@ -5125,6 +5125,23 @@ body,
 .fa-flag {
   font-size: 13px;
 }
+/* Dismiss-everything affordance in the strip header — pushed to the right, quiet until hovered. */
+.fa-clear-all {
+  margin-left: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  font: 600 9.5px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.fa-clear-all:hover {
+  color: var(--text-bright);
+  border-color: var(--state-needs);
+}
 .fa-rows {
   display: flex;
   flex-direction: column;
@@ -5252,6 +5269,24 @@ body,
 .fa-send:disabled {
   opacity: 0.4;
   cursor: default;
+}
+/* Per-row dismiss — clears the alert from the strip without answering. The pane keeps its amber
+   border, so nothing is silently lost; this only reclaims the triage space. */
+.fa-dismiss {
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fa-dismiss:hover {
+  color: var(--text-bright);
+  border-color: var(--hairline);
+  background: var(--tint-weak);
 }
 
 /* ---- Clearance dock (ADR-0012 rule 3.4) --------------------------------------------------------
