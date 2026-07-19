@@ -20,10 +20,23 @@ interface BlockedRow {
   task: Task;
 }
 
+/** Identity of one alert: its pane, task, and exact prompt. Dismissing keys on this so re-answering
+ *  the *same* prompt stays hidden but a fresh/different approval re-surfaces the row. */
+function rowKey(paneId: PaneId, task: Task): string {
+  return `${paneId}:${task.id}:${task.approval?.prompt ?? ""}`;
+}
+
 export default function FleetApprovals() {
-  // The blocked panes of the active workspace, with their live blocked Task. Reactive: reads the
-  // sessions store (paneActiveTask) and the active workspace's tree/panes.
-  const blocked = (): BlockedRow[] => {
+  // Alerts the operator dismissed without answering (UI-only): keyed by rowKey so a new approval on
+  // the same pane reappears. The pane keeps its amber border — the agent is still genuinely blocked;
+  // this only clears it out of the triage strip.
+  const [dismissed, setDismissed] = createSignal(new Set<string>());
+  const dismiss = (key: string) =>
+    setDismissed((prev) => new Set(prev).add(key));
+  const dismissAll = () => setDismissed((prev) => new Set([...prev, ...allKeys()]));
+
+  // Every blocked row in the active workspace, before dismissal filtering (used to "clear all").
+  const allRows = (): BlockedRow[] => {
     const ws = activeWorkspace();
     if (!ws) return [];
     const out: BlockedRow[] = [];
@@ -40,6 +53,14 @@ export default function FleetApprovals() {
     }
     return out;
   };
+  const allKeys = () => allRows().map((r) => rowKey(r.paneId, r.task));
+
+  // The blocked panes still worth showing (not dismissed). Reactive: reads the sessions store
+  // (paneActiveTask), the active workspace's tree/panes, and the dismissed set.
+  const blocked = (): BlockedRow[] => {
+    const gone = dismissed();
+    return allRows().filter((r) => !gone.has(rowKey(r.paneId, r.task)));
+  };
 
   /** Write the answer to the blocked pane only, then resolve so the row clears. */
   function answer(paneId: PaneId, text: string) {
@@ -55,16 +76,35 @@ export default function FleetApprovals() {
       <aside class="fleet-approvals" aria-label="Agents needing you">
         <div class="fa-head">
           <span class="fa-flag">⚑</span> NEEDS YOU · {blocked().length}
+          <button
+            class="fa-clear-all"
+            title="Dismiss all alerts (panes stay flagged)"
+            onClick={dismissAll}
+          >
+            clear all
+          </button>
         </div>
         <div class="fa-rows">
-          <For each={blocked()}>{(b) => <ApprovalRow row={b} onAnswer={answer} />}</For>
+          <For each={blocked()}>
+            {(b) => (
+              <ApprovalRow
+                row={b}
+                onAnswer={answer}
+                onDismiss={() => dismiss(rowKey(b.paneId, b.task))}
+              />
+            )}
+          </For>
         </div>
       </aside>
     </Show>
   );
 }
 
-function ApprovalRow(props: { row: BlockedRow; onAnswer: (id: PaneId, text: string) => void }) {
+function ApprovalRow(props: {
+  row: BlockedRow;
+  onAnswer: (id: PaneId, text: string) => void;
+  onDismiss: () => void;
+}) {
   const [draft, setDraft] = createSignal("");
   const approval = () => props.row.task.approval!;
   const send = (text: string) => {
@@ -126,6 +166,14 @@ function ApprovalRow(props: { row: BlockedRow; onAnswer: (id: PaneId, text: stri
         />
         <button class="fa-send" disabled={!draft().trim()} onClick={() => send(draft())}>
           Send ▸
+        </button>
+        <button
+          class="fa-dismiss"
+          title="Dismiss this alert (the pane stays flagged until the agent unblocks)"
+          aria-label="Dismiss alert"
+          onClick={() => props.onDismiss()}
+        >
+          ✕
         </button>
       </div>
     </div>
