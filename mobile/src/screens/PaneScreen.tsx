@@ -35,7 +35,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
 import type { LanBridgeClient } from "../lib/lanClient";
-import type { PaneInfo } from "../protocol";
+import type { PaneInfo, PaneApproval } from "../protocol";
 import { C } from "../theme";
 
 const REFRESH_MS = 2000;
@@ -65,6 +65,7 @@ export default function PaneScreen({
   index,
   onBack,
   onIndexChange,
+  approval,
 }: {
   client: LanBridgeClient;
   /** The whole fleet (snapshot from when the pane was opened) — rendered as one swipeable strip. */
@@ -74,6 +75,8 @@ export default function PaneScreen({
   onBack: () => void;
   /** Report a swipe-driven index change up so the parent's state stays in sync. */
   onIndexChange: (index: number) => void;
+  /** The active pane's live blocked-approval, if any — its real prompt + choices to answer. */
+  approval?: PaneApproval;
 }) {
   const pane = list[index];
   const [input, setInput] = useState("");
@@ -350,6 +353,24 @@ export default function PaneScreen({
           </View>
         )}
       </View>
+      {/* When the active pane is blocked on a pushed multi-choice question, show the real options as
+          tappable chips — tapping sends that option's number to the menu. Beats hunting the key row. */}
+      {approval?.options?.length ? (
+        <View style={styles.optsWrap}>
+          <Text style={styles.optsPrompt} numberOfLines={2}>
+            {approval.prompt}
+          </Text>
+          <View style={styles.optsRow}>
+            {approval.options.map((o, i) => (
+              <Pressable key={i} style={styles.opt} onPress={() => sendKey(`${i + 1}\r`)}>
+                <Text style={styles.optText} numberOfLines={1}>
+                  {i + 1}. {o.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
       {keysVisible && (
         <View style={styles.keys}>
           {KEYS.map((k) => (
@@ -434,6 +455,12 @@ const styles = StyleSheet.create({
   // A floating toast, not an in-flow row — absolute so it never reflows the terminal above it.
   noteOverlay: { position: "absolute", left: 0, right: 0, bottom: 8, alignItems: "center" },
   note: { color: C.needs, fontSize: 12, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: C.surface, borderColor: C.hairline, borderWidth: 1, borderRadius: 14, overflow: "hidden" },
+  // Pushed multi-choice answer bar — the real options as wrapping chips, above the key row.
+  optsWrap: { paddingHorizontal: 12, paddingTop: 8, gap: 8, borderTopColor: C.hairline, borderTopWidth: 1 },
+  optsPrompt: { color: C.textDim, fontSize: 13 },
+  optsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  opt: { maxWidth: "100%", backgroundColor: C.surface, borderColor: C.accent, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  optText: { color: C.textBright, fontSize: 14, fontWeight: "600" },
   // Key row for driving TUIs — one compact strip; keys share the width evenly. The single divider
   // above the input area lives here (the composer no longer has its own top border, which used to
   // draw a stray line right under these keys).

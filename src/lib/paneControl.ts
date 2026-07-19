@@ -56,6 +56,7 @@ import {
   approvalRequest,
   approvalResolve,
   paneSessionState,
+  paneActiveTask,
 } from "../stores/sessions";
 import { detectAgent } from "./agents";
 import type { AgentId, Origin, PaneId } from "../ipc/protocol";
@@ -190,17 +191,31 @@ async function dispatch(
       // the wire, and it improves `loom list` locally too. Absent fields are omitted, not null.
       return {
         ok: true,
-        data: listPanes().map((p) => ({
-          name: p.name,
-          workspace: p.workspace,
-          focused: p.focused,
-          live: countLive([p.paneId]) > 0,
-          role: p.role,
-          gated: p.gated,
-          status: paneStatus(p.paneId) || undefined,
-          attention: paneAttention(p.paneId) || undefined,
-          sessionState: paneSessionState(p.paneId),
-        })),
+        data: listPanes().map((p) => {
+          // A blocked Task's approval rides along so a remote fleet view can show the real prompt +
+          // choices and answer it (never y/n-guessing). Only when actually blocked.
+          const task = paneActiveTask(p.paneId);
+          const approval =
+            task?.state === "blocked" && task.approval
+              ? {
+                  prompt: task.approval.prompt,
+                  kind: task.approval.kind,
+                  options: task.approval.options,
+                }
+              : undefined;
+          return {
+            name: p.name,
+            workspace: p.workspace,
+            focused: p.focused,
+            live: countLive([p.paneId]) > 0,
+            role: p.role,
+            gated: p.gated,
+            status: paneStatus(p.paneId) || undefined,
+            attention: paneAttention(p.paneId) || undefined,
+            sessionState: paneSessionState(p.paneId),
+            approval,
+          };
+        }),
       };
 
     case "send": {
@@ -541,7 +556,10 @@ async function dispatch(
       const r = resolvePaneByName(req.target);
       if ("error" in r) return { ok: false, error: r.error };
       const prompt = (req.prompt ?? "").trim();
-      approvalRequest(r.paneId, paneAgentId(r.paneId), prompt, req.kind ?? "question");
+      const options = req.options && req.options.length ? req.options : undefined;
+      // Options present ⇒ a real multi-choice question, not a y/n permission (the whole point).
+      const kind = req.kind ?? (options ? "choice" : "question");
+      approvalRequest(r.paneId, paneAgentId(r.paneId), prompt, kind, options);
       // A fresh raise fires the OS notification (mirrors the `attention` op).
       if (noteAttention(r.paneId)) void notifyAttention(req.target, prompt.slice(0, 80));
       return { ok: true, data: { name: req.target } };

@@ -215,7 +215,7 @@ export type ControlRequest =
   | { op: "task.begin"; target: string; title: string }
   | { op: "task.update"; target: string; files?: string[]; note?: string }
   | { op: "task.end"; target: string; outcome?: TaskOutcome }
-  | { op: "approval.request"; target: string; prompt: string; kind?: ApprovalKind }
+  | { op: "approval.request"; target: string; prompt: string; kind?: ApprovalKind; options?: ApprovalOption[] }
   | { op: "approval.resolve"; target: string }
   // ---- Device image upload (ADR-0012) ----
   // A paired Device (the phone) can't hand a terminal an image, so it uploads one over the sealed
@@ -234,6 +234,16 @@ export interface PaneInfo {
   role?: string;
   /** True when the pane's inbound bus input is gated (AGENTIC §4a) — absent/false otherwise. */
   gated?: boolean;
+  /** When the pane's active Task is blocked, the approval it carries — so a remote fleet view (the
+   *  phone) can show the *actual* prompt + choices and answer it, not guess y/n. Absent otherwise. */
+  approval?: PaneApproval;
+}
+
+/** The blocked-approval slice a `list` row carries (a projection of {@link Approval}). */
+export interface PaneApproval {
+  prompt: string;
+  kind: ApprovalKind;
+  options?: ApprovalOption[];
 }
 
 /** Uniform reply shape. `data` is op-specific (PaneInfo[] for list, {count}/{name}…). */
@@ -282,11 +292,21 @@ export type TaskState = "running" | "blocked" | "done" | "failed";
 /** What kind of thing the user is being asked, when a Task blocks. */
 export type ApprovalKind = "permission" | "question" | "choice";
 
+/** One selectable answer for a `choice` approval — the real options an agent pushed (e.g. Claude
+ *  Code's AskUserQuestion), so we can render them instead of guessing y/n. `label` is what shows;
+ *  selecting it sends its 1-based ordinal to the pane (the menu's own number-key selection). */
+export interface ApprovalOption {
+  label: string;
+  description?: string;
+}
+
 /** The structured "needs you" a Task carries while blocked — the rich form of the `attention` flag. */
 export interface Approval {
   /** The agent's actual prompt, e.g. "Run `rm -rf build`?". Pushed by the agent, never scraped. */
   prompt: string;
   kind: ApprovalKind;
+  /** The real choices, when the agent pushed them (`choice` kind) — e.g. a multi-option question. */
+  options?: ApprovalOption[];
   /** Set when the agent signals it's unblocked (or the user answers). */
   resolvedAt?: number;
 }

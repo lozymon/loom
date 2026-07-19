@@ -173,6 +173,12 @@ function AppRoot() {
           index={open.index}
           onBack={() => setOpen(null)}
           onIndexChange={(index) => setOpen((o) => (o ? { ...o, index } : o))}
+          // The live approval for the open pane (matched by name against the polling fleet), so a
+          // block that appears after opening still surfaces its real choices.
+          approval={(() => {
+            const p = open.list[open.index];
+            return fleet.panes.find((q) => q.name === p.name && q.workspace === p.workspace)?.approval;
+          })()}
         />
       ) : (
         <FleetScreen
