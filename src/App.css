@@ -5149,7 +5149,7 @@ body,
 }
 .fa-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* a choice list makes actions tall — top-align the pane/prompt to it */
   gap: 10px;
   padding: 7px 9px;
   border-radius: 9px;
@@ -5199,9 +5199,16 @@ body,
 }
 .fa-actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end; /* the answer row (input/send) sits right; the option list stretches */
   gap: 6px;
   flex: 0 0 auto;
+}
+/* The type-your-answer row (y/n for a plain permission, plus the free-text input + send + dismiss). */
+.fa-answer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .fa-yn {
   width: 24px;
@@ -5223,26 +5230,76 @@ body,
   border-color: var(--state-needs);
   color: #1a0808;
 }
-/* Real pushed choices (e.g. AskUserQuestion) — one button per option, ordinal + label. Wraps so a
-   long option list stays readable; selecting sends the option's number to the pane. */
+/* Real pushed choices (e.g. AskUserQuestion) rendered as a vertical select list — the recommended
+   option (badged) is first (the author's convention), each row carries its description, and selecting
+   sends the option's 1-based ordinal to the pane's own numbered menu. */
+.fa-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-self: stretch;
+  min-width: 300px;
+  max-width: 460px;
+}
 .fa-opt {
-  max-width: 260px;
-  padding: 5px 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
   border: 1px solid var(--hairline);
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-bright);
-  font: 12px var(--font-mono);
   cursor: pointer;
   text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .fa-opt:hover {
-  background: var(--accent);
+  background: var(--tint-weak);
   border-color: var(--accent);
-  color: #fff;
+}
+.fa-opt-rec {
+  border-color: var(--accent); /* the recommended row reads as the default */
+}
+.fa-opt-num {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: var(--tint-weak);
+  font: 600 10px var(--font-mono);
+  color: var(--text-mid);
+  margin-top: 1px;
+}
+.fa-opt-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fa-opt-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 12px var(--font-mono);
+}
+.fa-opt-badge {
+  flex: 0 0 auto;
+  font: 9px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.fa-opt-desc {
+  font: 11px var(--font-mono);
+  color: var(--text-faint);
+  white-space: normal;
 }
 .fa-input {
   width: 220px;

@@ -127,54 +127,71 @@ function ApprovalRow(props: {
       <span class="fa-prompt" title={approval().prompt}>{approval().prompt}</span>
 
       <div class="fa-actions">
-        {/* When the agent pushed the real choices (e.g. AskUserQuestion), show them as buttons —
-            selecting sends the option's 1-based ordinal, the menu's own number-key selection — instead
-            of guessing y/n. y/n stays only for a genuine permission prompt with no options. */}
-        <Show
-          when={approval().options?.length}
-          fallback={
-            <Show when={approval().kind === "permission"}>
-              <button class="fa-yn fa-yes" title="Answer yes" onClick={() => send("y")}>y</button>
-              <button class="fa-yn fa-no" title="Answer no" onClick={() => send("n")}>n</button>
-            </Show>
-          }
-        >
-          <For each={approval().options}>
-            {(opt, i) => (
-              <button
-                class="fa-opt"
-                title={opt.description ?? opt.label}
-                onClick={() => send(String(i() + 1))}
-              >
-                {i() + 1}. {opt.label}
-              </button>
-            )}
-          </For>
+        {/* When the agent pushed the real choices (e.g. AskUserQuestion), show them as a vertical
+            select list — the recommended one (labelled "(Recommended)", which the author puts first)
+            gets a badge, and each row carries its description. Selecting sends the option's 1-based
+            ordinal, the menu's own number-key selection. y/n stays only for an options-less permission. */}
+        <Show when={approval().options?.length}>
+          <div class="fa-opts" role="listbox">
+            <For each={approval().options}>
+              {(opt, i) => {
+                const rec = /\(\s*recommended\s*\)/i.test(opt.label);
+                const label = opt.label.replace(/\s*\(\s*recommended\s*\)\s*/i, "").trim();
+                return (
+                  <button
+                    class="fa-opt"
+                    classList={{ "fa-opt-rec": rec }}
+                    role="option"
+                    onClick={() => send(String(i() + 1))}
+                  >
+                    <span class="fa-opt-num">{i() + 1}</span>
+                    <span class="fa-opt-main">
+                      <span class="fa-opt-label">
+                        {label}
+                        <Show when={rec}>
+                          <span class="fa-opt-badge">Recommended</span>
+                        </Show>
+                      </span>
+                      <Show when={opt.description}>
+                        <span class="fa-opt-desc">{opt.description}</span>
+                      </Show>
+                    </span>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
         </Show>
-        <input
-          class="fa-input"
-          type="text"
-          placeholder="answer…"
-          value={draft()}
-          onInput={(e) => setDraft(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && draft().trim()) {
-              e.preventDefault();
-              send(draft());
-            }
-          }}
-        />
-        <button class="fa-send" disabled={!draft().trim()} onClick={() => send(draft())}>
-          Send ▸
-        </button>
-        <button
-          class="fa-dismiss"
-          title="Dismiss this alert (the pane stays flagged until the agent unblocks)"
-          aria-label="Dismiss alert"
-          onClick={() => props.onDismiss()}
-        >
-          ✕
-        </button>
+        <div class="fa-answer">
+          <Show when={!approval().options?.length && approval().kind === "permission"}>
+            <button class="fa-yn fa-yes" title="Answer yes" onClick={() => send("y")}>y</button>
+            <button class="fa-yn fa-no" title="Answer no" onClick={() => send("n")}>n</button>
+          </Show>
+          <input
+            class="fa-input"
+            type="text"
+            placeholder="answer…"
+            value={draft()}
+            onInput={(e) => setDraft(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && draft().trim()) {
+                e.preventDefault();
+                send(draft());
+              }
+            }}
+          />
+          <button class="fa-send" disabled={!draft().trim()} onClick={() => send(draft())}>
+            Send ▸
+          </button>
+          <button
+            class="fa-dismiss"
+            title="Dismiss this alert (the pane stays flagged until the agent unblocks)"
+            aria-label="Dismiss alert"
+            onClick={() => props.onDismiss()}
+          >
+            ✕
+          </button>
+        </div>
       </div>
     </div>
   );
