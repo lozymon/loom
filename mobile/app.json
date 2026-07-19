@@ -22,6 +22,18 @@
         "CAMERA"
       ]
     },
+    "ios": {
+      "//": "Build-ready config (no iOS build shipped yet — needs an Apple Developer account to sign).",
+      "bundleIdentifier": "cloud.furevikstrand.loom",
+      "supportsTablet": true,
+      "infoPlist": {
+        "//": "The LAN bridge is cleartext ws:// on the local network; iOS blocks that under ATS unless we opt into local networking, and iOS 14+ requires a local-network usage string.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "Loom connects to your laptop's Loom over your local network to drive and observe your fleet."
+      }
+    },
     "plugins": [
       [
         "expo-camera",

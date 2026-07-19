@@ -6,6 +6,20 @@ versioning.
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-07-19
+
+Answer your agents from your pocket, and stop guessing y/n at multi-choice prompts.
+
+- **Mobile fleet notifications.** The phone alerts you when an agent needs you
+  (blocked/attention), finishes, or fails — foreground instantly, or via a
+  background sweep while backgrounded on the same network. Branded notification
+  icon; tapping one opens the pane that needs you.
+- **Real multi-choice prompts, not y/n.** A `PreToolUse` hook on Claude Code's
+  AskUserQuestion pushes the actual options; the NEEDS YOU dock and the phone
+  render them as one-tap buttons instead of guessing a binary permission.
+- **Mobile pane pager.** Swipe between panes as one fixed strip — no black
+  panel, no jump, no flash of the previous pane's output on landing.
+
 ## [1.13.0] — 2026-07-17
 
 Drive your fleet from your phone, and never let a permission prompt freeze the app again.
