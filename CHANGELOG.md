@@ -6,6 +6,18 @@ versioning.
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-07-25
+
+`loom doctor` can now fix what it finds.
+
+- **`loom doctor --fix`.** Turns diagnosis into repair for the safe, self-
+  contained checks: it installs the Claude hooks into `~/.claude/settings.json`
+  and adds the `loom` MCP server to a project `.mcp.json` — naming each change and
+  asking first. `--yes` applies them unattended (agents / CI); a bare `--fix`
+  with no terminal declines rather than acting blind. Everything else (a stopped
+  bus, the WSL limitation) is only reported. Both fixes are idempotent, and it
+  re-checks and reprints when it's done.
+
 ## [1.17.0] — 2026-07-25
 
 `loom doctor` learns about MCP and WSL.
