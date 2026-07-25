@@ -6,6 +6,26 @@ versioning.
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-07-25
+
+Agent awareness on Windows, and see what each agent is actually working on.
+
+- **Windows agent awareness.** ConPTY has no foreground process group, so
+  `busy`/`foreground` always came back empty on Windows — no agent badge, no
+  busy state. Loom now reconstructs the floor by walking the process tree from
+  the pane's shell and taking the deepest descendant, so a shell pane running
+  `claude` gets its badge and working state like on Linux. A short-TTL,
+  fleet-shared process snapshot keeps the cost flat across many panes.
+- **Current-work caption.** A Claude pane's overview caption now shows what the
+  agent is doing — the conversation's latest title and current tool, read from
+  Claude's own transcript (never pane output). A pushed Task still wins; this
+  fills in for a hookless agent, marked as transcript-derived.
+- **Multi-choice approvals as a select list.** A pushed multi-choice prompt now
+  renders as a real select list with the recommended option first, instead of a
+  binary y/n guess.
+- **Dismiss NEEDS YOU alerts.** Clear a "needs you" alert without answering it,
+  for the times you've handled it in the pane directly.
+
 ## [1.14.0] — 2026-07-19
 
 Answer your agents from your pocket, and stop guessing y/n at multi-choice prompts.
