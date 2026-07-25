@@ -1392,6 +1392,14 @@ fn run_hooks(args: &[String]) -> Result<String, String> {
     install_hooks(&path)
 }
 
+/// Install the hooks into the user's `~/.claude/settings.json` (used by `loom doctor --fix`).
+/// Idempotent; returns a human summary. `pub(crate)` so the doctor face can reuse the exact path
+/// `loom hooks --install --user` writes.
+pub(crate) fn install_user_hooks() -> Result<String, String> {
+    let home = home_dir().ok_or_else(|| "home directory not set".to_string())?;
+    install_hooks(&PathBuf::from(home).join(".claude/settings.json"))
+}
+
 /// Merge the profile into a Claude Code settings file, creating it if absent. Idempotent: a hook
 /// whose command is already present under its event is left alone, so re-running is safe.
 fn install_hooks(path: &Path) -> Result<String, String> {

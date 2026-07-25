@@ -126,7 +126,7 @@ loom hooks --install --project   # ...into ./.claude/settings.json instead
 Install is idempotent — re-running won't duplicate entries. See
 [agent-hooks.md](agent-hooks.md) for tuning and removal.
 
-### `loom doctor [--json]`
+### `loom doctor [--json] [--fix [--yes]]`
 Diagnose Loom's integration points in one command — they otherwise fail silently and,
 from the outside, identically (the fleet panel is just empty). Checks the binary/version,
 the platform process floor, control-bus reachability (with a round-trip time), whether
@@ -134,9 +134,16 @@ you're inside a pane, Claude hooks, MCP registration, the transcript store, and 
 Windows — whether WSL panes can reach the bus. Every non-ok check prints a one-line remedy.
 
 ```
-loom doctor          # human-readable report
-loom doctor --json   # machine-readable — an agent can check its own integration
+loom doctor              # human-readable report
+loom doctor --json       # machine-readable — an agent can check its own integration
+loom doctor --fix        # offer to repair the safe subset (hooks, MCP), asking first
+loom doctor --fix --yes  # apply those fixes without prompting (agents / CI)
 ```
+
+`--fix` repairs only the self-contained checks — it installs the Claude hooks into
+`~/.claude/settings.json` and adds the `loom` MCP server to a project `.mcp.json` — and
+names each change before making it. Everything else (a stopped bus, the WSL limitation) is
+only reported. Both fixes are idempotent.
 
 Exits `1` if any check *fails* (a *warn*, like "not inside a pane", doesn't fail the run),
 so it's usable in scripts and CI.
