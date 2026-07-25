@@ -122,6 +122,24 @@ fn command_runs_loom(cmd: &str) -> bool {
         })
 }
 
+/// Does a Claude config value register a `loom` MCP server anywhere? Pure + tested. Walks the value
+/// looking for any `mcpServers` object with a `loom` key — which covers both `~/.claude.json`'s
+/// top-level `mcpServers` and its per-project `projects.<path>.mcpServers`, plus a `.mcp.json`.
+fn config_has_loom_mcp(v: &Value) -> bool {
+    match v {
+        Value::Object(map) => {
+            if let Some(servers) = map.get("mcpServers").and_then(|s| s.as_object()) {
+                if servers.contains_key("loom") {
+                    return true;
+                }
+            }
+            map.values().any(config_has_loom_mcp)
+        }
+        Value::Array(arr) => arr.iter().any(config_has_loom_mcp),
+        _ => false,
+    }
+}
+
 /// The floor kind for the current platform (both work now — Unix pgrp, Windows process-tree walk).
 fn platform_floor() -> &'static str {
     #[cfg(windows)]
@@ -265,15 +283,71 @@ fn check_platform() -> Check {
     )
 }
 
+fn check_mcp() -> Check {
+    // Registered either in ~/.claude.json (`claude mcp add`, user or per-project scope) or a
+    // project-root .mcp.json. A hit in either means the model can call loom's tools.
+    let mut found = false;
+    if let Some(home) = home_dir() {
+        if let Ok(text) = std::fs::read_to_string(home.join(".claude.json")) {
+            if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                found = config_has_loom_mcp(&v);
+            }
+        }
+    }
+    if !found {
+        if let Ok(text) = std::fs::read_to_string(".mcp.json") {
+            if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                found = config_has_loom_mcp(&v);
+            }
+        }
+    }
+    if found {
+        Check::ok(
+            "mcp",
+            "loom MCP server registered (model-native tools available)",
+        )
+    } else {
+        Check::warn(
+            "mcp",
+            "loom MCP server not registered (the model can't call loom's tools)",
+            "run `claude mcp add --transport stdio loom -- loom mcp` in a pane, or add a .mcp.json",
+        )
+    }
+}
+
+/// WSL heads-up (Windows only; `wsl_distros` is empty elsewhere, so this returns `None`). A WSL2
+/// pane is a Linux process in a separate VM: it can't open the Windows named pipe `$LOOM_SOCK`
+/// points at, and Loom doesn't propagate its env across the boundary — so `loom` (the bus, hooks,
+/// MCP) doesn't work *inside* a WSL pane. Worth surfacing for a Windows user running agents there.
+fn check_wsl() -> Option<Check> {
+    let distros = crate::pty::wsl_distros();
+    if distros.is_empty() {
+        return None; // no WSL / not Windows — nothing to report
+    }
+    Some(Check::warn(
+        "wsl",
+        format!(
+            "{} WSL distro(s) — the loom bus doesn't reach inside a WSL pane",
+            distros.len()
+        ),
+        "an agent in a WSL pane can't drive the fleet; run agents in a native Windows pane for full loom integration",
+    ))
+}
+
 fn run_checks() -> Vec<Check> {
-    vec![
+    let mut checks = vec![
         check_binary(),
         check_platform(),
         check_bus(),
         check_pane(),
         check_claude_hooks(),
+        check_mcp(),
         check_transcripts(),
-    ]
+    ];
+    if let Some(wsl) = check_wsl() {
+        checks.push(wsl);
+    }
+    checks
 }
 
 fn print_human(checks: &[Check]) {
@@ -370,5 +444,31 @@ mod tests {
     fn json_and_word_render() {
         assert_eq!(Level::Ok.word(), "ok");
         assert_eq!(Level::Fail.glyph(), "✗");
+    }
+
+    #[test]
+    fn mcp_detected_at_top_level() {
+        let v = json!({ "mcpServers": { "loom": { "command": "loom", "args": ["mcp"] } } });
+        assert!(config_has_loom_mcp(&v));
+    }
+
+    #[test]
+    fn mcp_detected_nested_under_a_project() {
+        // ~/.claude.json stores per-project servers under projects.<path>.mcpServers.
+        let v = json!({
+            "projects": {
+                "/home/dev/proj": { "mcpServers": { "loom": { "command": "loom" } } }
+            }
+        });
+        assert!(config_has_loom_mcp(&v));
+    }
+
+    #[test]
+    fn mcp_false_when_absent_or_other_server() {
+        assert!(!config_has_loom_mcp(&json!({})));
+        assert!(!config_has_loom_mcp(&json!({ "mcpServers": {} })));
+        assert!(!config_has_loom_mcp(
+            &json!({ "mcpServers": { "other": { "command": "x" } } })
+        ));
     }
 }
