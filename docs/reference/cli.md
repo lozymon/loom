@@ -130,8 +130,8 @@ Install is idempotent — re-running won't duplicate entries. See
 Diagnose Loom's integration points in one command — they otherwise fail silently and,
 from the outside, identically (the fleet panel is just empty). Checks the binary/version,
 the platform process floor, control-bus reachability (with a round-trip time), whether
-you're inside a pane, Claude hooks, and the transcript store. Every non-ok check prints a
-one-line remedy.
+you're inside a pane, Claude hooks, MCP registration, the transcript store, and — on
+Windows — whether WSL panes can reach the bus. Every non-ok check prints a one-line remedy.
 
 ```
 loom doctor          # human-readable report
