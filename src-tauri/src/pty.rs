@@ -71,6 +71,19 @@ pub struct PtyManager {
     // Arc so the per-pane reaper thread can remove its own entry on child exit.
     panes: Arc<Mutex<HashMap<u32, Pane>>>,
     next_id: Mutex<u32>,
+    // Windows-only: a short-TTL full-process snapshot shared across per-pane `meta` polls. Windows
+    // has no foreground pgrp (ConPTY), so the floor reconstructs "what's running in this pane" by
+    // walking the process tree (see `compute_meta`) — which needs the whole process list, not the
+    // targeted read Unix uses. Caching it (refreshed at most ~every 750ms) keeps a 12-pane fleet
+    // from doing one full enumeration per pane per tick — the M13 cost-budget guardrail.
+    #[cfg(windows)]
+    proc_cache: Mutex<ProcCache>,
+}
+
+#[cfg(windows)]
+struct ProcCache {
+    taken: Option<Instant>,
+    sys: sysinfo::System,
 }
 
 struct Pane {
@@ -95,6 +108,11 @@ impl PtyManager {
         Self {
             panes: Arc::new(Mutex::new(HashMap::new())),
             next_id: Mutex::new(1),
+            #[cfg(windows)]
+            proc_cache: Mutex::new(ProcCache {
+                taken: None,
+                sys: sysinfo::System::new(),
+            }),
         }
     }
 }
@@ -751,58 +769,154 @@ pub fn cwd(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
     Ok(process_cwd(&snapshot(&[pid]), pid))
 }
 
-/// Whether a pane is "busy" — running a foreground command rather than sitting at the shell
-/// prompt. Compares the foreground process-group leader (`foreground_leader`) to the shell's own
-/// pid: at the prompt the shell *is* the leader, so a different leader means a child command holds
-/// the terminal. Process metadata, never pane output (ADR-0001 carve-out). `None` when unknown —
-/// the child just exited, or Windows, which has no pgrp and so never reports busy.
-pub fn busy(mgr: &PtyManager, id: u32) -> Result<Option<bool>, String> {
-    let panes = mgr.panes.lock().unwrap();
-    let Some(pane) = panes.get(&id) else {
-        return Ok(None);
-    };
-    let Some(pid) = pane.pid else {
-        return Ok(None);
-    };
-    Ok(foreground_leader(pane).map(|leader| leader != pid as i32))
+/// The deepest descendant pid of `root` in a parent→children process graph, tie-broken by newest
+/// start time then highest pid. Pure over its inputs so it is unit-testable without a live `System`.
+/// `None` when `root` has no descendants (a shell sitting at its prompt). "Deepest wins" is robust
+/// to any intermediate wrapper process ConPTY/portable-pty may interpose between the shell and the
+/// command; a transient grandchild (e.g. `claude` spawning `rg`) may briefly win, which self-corrects
+/// on the next poll and only ever flickers a badge — never a wrong ground-truth claim.
+#[cfg(windows)]
+fn deepest_descendant_of(
+    children: &HashMap<u32, Vec<u32>>,
+    start_of: impl Fn(u32) -> u64,
+    root: u32,
+) -> Option<u32> {
+    let mut stack = vec![(root, 0u32)];
+    let mut seen = std::collections::HashSet::new();
+    let mut best: Option<(u32, u64, u32)> = None; // (depth, start_time, pid)
+    while let Some((pid, depth)) = stack.pop() {
+        if !seen.insert(pid) {
+            continue; // guard against a parent-pid cycle (reused pids)
+        }
+        if pid != root {
+            let cand = (depth, start_of(pid), pid);
+            if best.is_none_or(|b| cand > b) {
+                best = Some(cand);
+            }
+        }
+        if let Some(kids) = children.get(&pid) {
+            for &k in kids {
+                stack.push((k, depth + 1));
+            }
+        }
+    }
+    best.map(|(_, _, pid)| pid)
 }
 
-/// The command line of the pane's foreground process-group leader — what's actually running in the
-/// terminal right now (e.g. `claude`), however it was launched. Lets the frontend badge a pane by
-/// its live agent. Same mechanism/opacity stance as `busy`: the pgrp leader (kernel state) + its
-/// argv (via `sysinfo`), never pane output. `None` when the shell itself is in the foreground
-/// (leader == shell pid → nothing running) or the leader/argv is unavailable (incl. Windows).
-pub fn foreground(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
-    // Take the panes lock (and the pgrp read) once, then release it before the sysinfo refresh.
-    let (pid, leader) = {
+/// Windows foreground pid: the command running under the pane's shell, found by walking the process
+/// tree (ConPTY has no foreground pgrp). Builds the parent→children graph from a full snapshot, then
+/// takes the deepest descendant of the shell pid. `None` at the shell prompt.
+#[cfg(windows)]
+fn windows_foreground_pid(sys: &sysinfo::System, shell_pid: u32) -> Option<u32> {
+    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (pid, proc_) in sys.processes() {
+        if let Some(parent) = proc_.parent() {
+            children
+                .entry(parent.as_u32())
+                .or_default()
+                .push(pid.as_u32());
+        }
+    }
+    let start_of = |p: u32| {
+        sys.process(sysinfo::Pid::from_u32(p))
+            .map(|proc_| proc_.start_time())
+            .unwrap_or(0)
+    };
+    deepest_descendant_of(&children, start_of, shell_pid)
+}
+
+/// Run `f` with a full-process snapshot, refreshed only when the cached one is older than the TTL.
+/// Serializes Windows `meta` polls on the cache lock, but the walk is fast and the poll cadence low.
+#[cfg(windows)]
+fn with_full_procs<R>(mgr: &PtyManager, f: impl FnOnce(&sysinfo::System) -> R) -> R {
+    let mut cache = mgr.proc_cache.lock().unwrap();
+    let stale = cache
+        .taken
+        .is_none_or(|t| t.elapsed() > Duration::from_millis(750));
+    if stale {
+        cache
+            .sys
+            .refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        cache.taken = Some(Instant::now());
+    }
+    f(&cache.sys)
+}
+
+/// The pane's floor metadata (busy / foreground command / cwd), computed per platform. Unix uses the
+/// foreground process-group leader; Windows walks the process tree (no pgrp on ConPTY). Shared by
+/// `meta`/`busy`/`foreground` so they can't drift. Process metadata only, never pane output
+/// (ADR-0001 carve-out / ADR-0008 kernel provenance).
+fn compute_meta(mgr: &PtyManager, id: u32) -> PaneMeta {
+    let none = PaneMeta {
+        busy: None,
+        foreground: None,
+        cwd: None,
+    };
+    let (pid, _leader) = {
         let panes = mgr.panes.lock().unwrap();
         let Some(pane) = panes.get(&id) else {
-            return Ok(None);
+            return none;
         };
         let Some(pid) = pane.pid else {
-            return Ok(None);
+            return none;
         };
         (pid, foreground_leader(pane))
     };
-    let Some(leader) = leader else {
-        return Ok(None);
-    };
-    // At the prompt the shell is its own foreground leader — nothing is "running".
-    if leader == pid as i32 {
-        return Ok(None);
+
+    #[cfg(windows)]
+    {
+        let _ = _leader; // no pgrp on Windows
+        with_full_procs(mgr, |sys| {
+            let fg = windows_foreground_pid(sys, pid);
+            PaneMeta {
+                busy: Some(fg.is_some()),
+                foreground: fg.and_then(|p| process_cmd(sys, p)),
+                cwd: process_cwd(sys, pid),
+            }
+        })
     }
-    let Ok(leader) = u32::try_from(leader) else {
-        return Ok(None);
-    };
-    Ok(process_cmd(&snapshot(&[leader]), leader))
+    #[cfg(not(windows))]
+    {
+        let busy = _leader.map(|l| l != pid as i32);
+        // The foreground leader's pid, only when it isn't the shell itself (else nothing is running).
+        let leader_pid = match _leader {
+            Some(l) if l != pid as i32 => u32::try_from(l).ok(),
+            _ => None,
+        };
+        let mut pids = vec![pid];
+        if let Some(l) = leader_pid {
+            pids.push(l);
+        }
+        let sys = snapshot(&pids);
+        PaneMeta {
+            busy,
+            foreground: leader_pid.and_then(|l| process_cmd(&sys, l)),
+            cwd: process_cwd(&sys, pid),
+        }
+    }
+}
+
+/// Whether a pane is "busy" — running a foreground command rather than sitting at the shell prompt.
+/// Unix compares the foreground pgrp leader to the shell pid; Windows checks for a live descendant of
+/// the shell (see `compute_meta`). Process metadata, never pane output. `None` when the pane is gone.
+pub fn busy(mgr: &PtyManager, id: u32) -> Result<Option<bool>, String> {
+    Ok(compute_meta(mgr, id).busy)
+}
+
+/// The command line of what's running in the pane right now (e.g. `claude`), however it was launched
+/// — the pgrp leader on Unix, the deepest shell descendant on Windows. Lets the frontend badge a pane
+/// by its live agent. `None` when the shell itself is in the foreground (nothing running).
+pub fn foreground(mgr: &PtyManager, id: u32) -> Result<Option<String>, String> {
+    Ok(compute_meta(mgr, id).foreground)
 }
 
 /// Batched title-bar metadata: busy-state + foreground command + cwd in one call. `Terminal.tsx`
 /// polls this per visible pane every ~2s; folding the three reads into one command cuts IPC
-/// round-trips 3→1 and takes the panes lock (and the foreground-pgrp read) once per tick. Each
-/// field carries the exact semantics of its standalone counterpart (`busy`/`foreground`/`cwd`) and
-/// is independently `None` when unknown, so a partial read still updates what it can. Same opacity
-/// stance: process metadata, never pane output (ADR-0001 carve-out). Cross-platform.
+/// round-trips 3→1. The floor is resolved per platform in `compute_meta` (foreground pgrp on Unix,
+/// process-tree walk on Windows). Each field carries the exact semantics of its standalone
+/// counterpart (`busy`/`foreground`/`cwd`) and is independently `None` when unknown, so a partial
+/// read still updates what it can. Same opacity stance: process metadata, never pane output
+/// (ADR-0001 carve-out). Cross-platform.
 #[derive(Serialize)]
 pub struct PaneMeta {
     pub busy: Option<bool>,
@@ -811,41 +925,7 @@ pub struct PaneMeta {
 }
 
 pub fn meta(mgr: &PtyManager, id: u32) -> Result<PaneMeta, String> {
-    let none = || PaneMeta {
-        busy: None,
-        foreground: None,
-        cwd: None,
-    };
-    // Hold the panes lock (and the pgrp read) once, then release it before the sysinfo refresh.
-    let (pid, leader) = {
-        let panes = mgr.panes.lock().unwrap();
-        let Some(pane) = panes.get(&id) else {
-            return Ok(none());
-        };
-        let Some(pid) = pane.pid else {
-            return Ok(none());
-        };
-        (pid, foreground_leader(pane))
-    };
-    let busy = leader.map(|l| l != pid as i32);
-    // The foreground leader's pid, only when it isn't the shell itself (else nothing is running).
-    let leader_pid = match leader {
-        Some(l) if l != pid as i32 => u32::try_from(l).ok(),
-        _ => None,
-    };
-    // Refresh the shell pid (for cwd) and the leader pid (for the command) together in one scan.
-    let mut pids = vec![pid];
-    if let Some(l) = leader_pid {
-        pids.push(l);
-    }
-    let sys = snapshot(&pids);
-    let cwd = process_cwd(&sys, pid);
-    let foreground = leader_pid.and_then(|l| process_cmd(&sys, l));
-    Ok(PaneMeta {
-        busy,
-        foreground,
-        cwd,
-    })
+    Ok(compute_meta(mgr, id))
 }
 
 /// Forward keystrokes (UTF-8) from the webview into the pane's PTY.
@@ -921,7 +1001,55 @@ mod tests {
 
 #[cfg(all(test, windows))]
 mod windows_tests {
-    use super::{launch_command, resolve_on_path, tokenize};
+    use super::{deepest_descendant_of, launch_command, resolve_on_path, tokenize};
+    use std::collections::HashMap;
+
+    // Build a parent→children map from (child, parent) edges for the descendant-walk tests.
+    fn tree(edges: &[(u32, u32)]) -> HashMap<u32, Vec<u32>> {
+        let mut m: HashMap<u32, Vec<u32>> = HashMap::new();
+        for &(child, parent) in edges {
+            m.entry(parent).or_default().push(child);
+        }
+        m
+    }
+
+    #[test]
+    fn descendant_none_at_shell_prompt() {
+        // Shell 100 has no children → nothing running.
+        let t = tree(&[]);
+        assert_eq!(deepest_descendant_of(&t, |_| 0, 100), None);
+    }
+
+    #[test]
+    fn descendant_finds_the_command_under_the_shell() {
+        // powershell(100) → claude(200)
+        let t = tree(&[(200, 100)]);
+        assert_eq!(deepest_descendant_of(&t, |_| 0, 100), Some(200));
+    }
+
+    #[test]
+    fn descendant_prefers_the_deepest() {
+        // powershell(100) → claude(200) → rg(300): the deepest wins (robust to wrappers).
+        let t = tree(&[(200, 100), (300, 200)]);
+        assert_eq!(deepest_descendant_of(&t, |_| 0, 100), Some(300));
+    }
+
+    #[test]
+    fn descendant_ties_broken_by_newest_start_then_pid() {
+        // Two children at the same depth; the one that started later wins.
+        let t = tree(&[(200, 100), (300, 100)]);
+        let starts = |p: u32| if p == 300 { 50 } else { 10 };
+        assert_eq!(deepest_descendant_of(&t, starts, 100), Some(300));
+        // Equal starts → higher pid breaks the tie deterministically.
+        assert_eq!(deepest_descendant_of(&t, |_| 5, 100), Some(300));
+    }
+
+    #[test]
+    fn descendant_survives_a_parent_pid_cycle() {
+        // Reused pids can form a cycle (100→200→100); the walk must terminate.
+        let t = tree(&[(200, 100), (100, 200)]);
+        assert_eq!(deepest_descendant_of(&t, |_| 0, 100), Some(200));
+    }
 
     fn argv(cmd: &portable_pty::CommandBuilder) -> Vec<String> {
         cmd.get_argv()
