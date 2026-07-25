@@ -126,6 +126,21 @@ loom hooks --install --project   # ...into ./.claude/settings.json instead
 Install is idempotent — re-running won't duplicate entries. See
 [agent-hooks.md](agent-hooks.md) for tuning and removal.
 
+### `loom doctor [--json]`
+Diagnose Loom's integration points in one command — they otherwise fail silently and,
+from the outside, identically (the fleet panel is just empty). Checks the binary/version,
+the platform process floor, control-bus reachability (with a round-trip time), whether
+you're inside a pane, Claude hooks, and the transcript store. Every non-ok check prints a
+one-line remedy.
+
+```
+loom doctor          # human-readable report
+loom doctor --json   # machine-readable — an agent can check its own integration
+```
+
+Exits `1` if any check *fails* (a *warn*, like "not inside a pane", doesn't fail the run),
+so it's usable in scripts and CI.
+
 ## Environment
 
 Loom injects these into every pane it launches:
