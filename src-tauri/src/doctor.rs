@@ -388,18 +388,118 @@ fn print_json(checks: &[Check]) {
     println!("{out}");
 }
 
-/// The `loom doctor` entry point, dispatched from `main.rs`. Prints the report (human or `--json`)
-/// and exits 1 if any check failed, 0 otherwise.
+/// Register the `loom` MCP server in a project-scoped `.mcp.json` (the committed-config option the
+/// docs describe) — the safe, self-contained fix, needing no `claude` CLI. Idempotent: merges into
+/// an existing file, leaves an already-present `loom` entry alone.
+fn fix_mcp() -> Result<String, String> {
+    merge_loom_mcp(std::path::Path::new(".mcp.json"))
+}
+
+/// Merge a `loom` MCP server entry into the `.mcp.json` at `path` (created if absent, existing file
+/// preserved, already-present `loom` left alone). Pure over its path arg, so it's unit-testable.
+fn merge_loom_mcp(path: &std::path::Path) -> Result<String, String> {
+    let mut root: Value = if path.exists() {
+        let s = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        if s.trim().is_empty() {
+            json!({})
+        } else {
+            serde_json::from_str(&s)
+                .map_err(|e| format!("{} is not valid JSON: {e}", path.display()))?
+        }
+    } else {
+        json!({})
+    };
+    let obj = root
+        .as_object_mut()
+        .ok_or_else(|| format!("{} is not a JSON object", path.display()))?;
+    let servers = obj
+        .entry("mcpServers")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .ok_or("\"mcpServers\" is not an object")?;
+    if servers.contains_key("loom") {
+        return Ok(format!("already registered in {}", path.display()));
+    }
+    servers.insert("loom".into(), json!({ "command": "loom", "args": ["mcp"] }));
+    let mut out = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
+    out.push('\n');
+    std::fs::write(path, out).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    Ok(format!("added loom to {}", path.display()))
+}
+
+/// Prompt on stdin for a `[y/N]` confirmation. EOF / non-tty (an agent piping) reads as "no", so a
+/// bare `--fix` never applies anything unattended — that needs `--yes`.
+fn confirm(action: &str) -> bool {
+    use std::io::Write;
+    print!("  fix? {action} [y/N] ");
+    let _ = std::io::stdout().flush();
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).is_err() {
+        return false;
+    }
+    matches!(line.trim(), "y" | "Y" | "yes")
+}
+
+/// The repairable subset (`loom doctor --fix`): install Claude hooks, register the MCP server. Each
+/// names its change and asks first (unless `--yes`). Everything else is only reported.
+fn apply_fixes(checks: &[Check], yes: bool) {
+    println!("\nfixes:");
+    let mut offered = 0;
+    for c in checks {
+        if c.level == Level::Ok {
+            continue;
+        }
+        let (desc, apply): (&str, fn() -> Result<String, String>) = match c.name {
+            "claude-hooks" => (
+                "install Loom's hooks into ~/.claude/settings.json",
+                crate::cli::install_user_hooks,
+            ),
+            "mcp" => ("add the loom MCP server to ./.mcp.json", fix_mcp),
+            _ => continue, // bus/wsl/pane/etc. aren't auto-fixable
+        };
+        offered += 1;
+        if yes {
+            println!("  {} — {desc}", c.name);
+        }
+        if yes || confirm(desc) {
+            match apply() {
+                Ok(msg) => println!("  ✓ {}: {msg}", c.name),
+                Err(e) => println!("  ✗ {}: {e}", c.name),
+            }
+        } else {
+            println!("  · {} skipped", c.name);
+        }
+    }
+    if offered == 0 {
+        println!("  nothing to fix.");
+    }
+}
+
+/// The `loom doctor` entry point, dispatched from `main.rs`. `--json` prints a machine-readable
+/// report; `--fix` repairs the safe subset (asking first, or `--yes` to apply unattended). Exits 1
+/// if any check failed, 0 otherwise.
 pub fn run() {
-    let json_mode = env::args().any(|a| a == "--json");
+    let args: Vec<String> = env::args().collect();
+    let json_mode = args.iter().any(|a| a == "--json");
+    let fix = args.iter().any(|a| a == "--fix");
+    let yes = args.iter().any(|a| a == "--yes" || a == "-y");
+
     let checks = run_checks();
     if json_mode {
+        // Read-only: --json reports state; it never fixes.
         print_json(&checks);
-    } else {
-        print_human(&checks);
+        exit(i32::from(checks.iter().any(|c| c.level == Level::Fail)));
     }
-    let failed = checks.iter().any(|c| c.level == Level::Fail);
-    exit(i32::from(failed));
+    print_human(&checks);
+
+    if fix {
+        apply_fixes(&checks, yes);
+        println!("\nre-checking…");
+        let after = run_checks();
+        print_human(&after);
+        exit(i32::from(after.iter().any(|c| c.level == Level::Fail)));
+    }
+    exit(i32::from(checks.iter().any(|c| c.level == Level::Fail)));
 }
 
 #[cfg(test)]
@@ -470,5 +570,33 @@ mod tests {
         assert!(!config_has_loom_mcp(
             &json!({ "mcpServers": { "other": { "command": "x" } } })
         ));
+    }
+
+    #[test]
+    fn merge_loom_mcp_creates_and_is_idempotent() {
+        let mut path = std::env::temp_dir();
+        path.push(format!("loom-doctor-mcp-{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+
+        let msg = merge_loom_mcp(&path).unwrap();
+        assert!(msg.starts_with("added loom"));
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(config_has_loom_mcp(&v));
+
+        let again = merge_loom_mcp(&path).unwrap();
+        assert!(again.starts_with("already registered"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn merge_loom_mcp_preserves_an_existing_other_server() {
+        let mut path = std::env::temp_dir();
+        path.push(format!("loom-doctor-mcp2-{}.json", std::process::id()));
+        std::fs::write(&path, r#"{"mcpServers":{"other":{"command":"x"}}}"#).unwrap();
+        merge_loom_mcp(&path).unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(config_has_loom_mcp(&v));
+        assert!(v["mcpServers"]["other"].is_object());
+        let _ = std::fs::remove_file(&path);
     }
 }
