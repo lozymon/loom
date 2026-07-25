@@ -9,7 +9,7 @@
 
 use std::env;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
@@ -127,6 +127,95 @@ fn find_session_file(session_id: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// The current-work label for a live Claude pane: the conversation's latest `aiTitle` and the most
+/// recent tool it invoked. Lets a pane show *what the agent is doing* — the piece `claude_usage`
+/// (tokens) doesn't cover, and which nothing surfaces for a hookless agent. Read from the agent's
+/// own transcript, never pane output (opacity-safe, ADR-0001).
+#[derive(Serialize, Default, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptLabel {
+    /// Claude's own `aiTitle` (latest wins), else the first user prompt; `None` if neither found.
+    title: Option<String>,
+    /// Name of the most recent assistant `tool_use` block — "what it's doing right now".
+    tool: Option<String>,
+}
+
+/// Read the last `max_bytes` of a file as lossy UTF-8 lines, dropping the first (partial) line when
+/// the window didn't start at byte 0. Bounded so a multi-gigabyte transcript costs the same as a
+/// small one — a documented hazard for these files.
+fn tail_lines(path: &PathBuf, max_bytes: u64) -> Vec<String> {
+    let Ok(mut file) = File::open(path) else {
+        return Vec::new();
+    };
+    let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let start = len.saturating_sub(max_bytes);
+    if file.seek(SeekFrom::Start(start)).is_err() {
+        return Vec::new();
+    }
+    let mut buf = Vec::new();
+    if file.read_to_end(&mut buf).is_err() {
+        return Vec::new();
+    }
+    let mut lines: Vec<String> = String::from_utf8_lossy(&buf)
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    if start > 0 && !lines.is_empty() {
+        lines.remove(0); // the window cut this line mid-record
+    }
+    lines
+}
+
+/// Fold a transcript's tail into a current-work label: the latest `aiTitle` and the most recent
+/// assistant `tool_use`. Pure over the lines, so it's unit-testable without a file.
+fn fold_label(lines: &[String]) -> TranscriptLabel {
+    let mut label = TranscriptLabel::default();
+    for line in lines {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if let Some(t) = v.get("aiTitle").and_then(|x| x.as_str()) {
+            if !t.is_empty() {
+                label.title = Some(t.chars().take(120).collect());
+            }
+        }
+        if v.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+            if let Some(blocks) = v
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_array())
+            {
+                for b in blocks {
+                    if b.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                        if let Some(name) = b.get("name").and_then(|n| n.as_str()) {
+                            label.tool = Some(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    label
+}
+
+/// The current-work label for a Claude pane by session id. Reads a bounded tail for the latest
+/// aiTitle + last tool, falling back to the head's first-prompt title (`extract`) when the tail
+/// carries no aiTitle yet. `None` when there's no transcript / nothing to show.
+#[tauri::command]
+pub fn claude_title(session_id: String) -> Result<Option<TranscriptLabel>, String> {
+    let Some(path) = find_session_file(&session_id) else {
+        return Ok(None);
+    };
+    let mut label = fold_label(&tail_lines(&path, 128 * 1024));
+    if label.title.is_none() {
+        label.title = extract(&path).1; // head fallback: the first user prompt
+    }
+    if label.title.is_none() && label.tool.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(label))
 }
 
 /// Sum token usage per model for each of `session_ids`, reading the on-disk transcripts. Missing
@@ -265,4 +354,59 @@ pub fn list_claude_sessions() -> Result<Vec<ClaudeSession>, String> {
     out.sort_by_key(|s| std::cmp::Reverse(s.modified));
     out.truncate(200);
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines(ls: &[&str]) -> Vec<String> {
+        ls.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn latest_ai_title_wins_and_last_tool_is_taken() {
+        let l = lines(&[
+            r#"{"type":"ai-title","aiTitle":"Investigating the auth bug"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"x"},{"type":"tool_use","name":"Grep"}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit"}]}}"#,
+            r#"{"type":"ai-title","aiTitle":"Refactoring auth middleware"}"#,
+        ]);
+        let label = fold_label(&l);
+        assert_eq!(label.title.as_deref(), Some("Refactoring auth middleware"));
+        assert_eq!(label.tool.as_deref(), Some("Edit"));
+    }
+
+    #[test]
+    fn no_ai_title_leaves_title_none_for_the_head_fallback() {
+        let l = lines(&[
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash"}]}}"#,
+        ]);
+        let label = fold_label(&l);
+        assert!(label.title.is_none());
+        assert_eq!(label.tool.as_deref(), Some("Bash"));
+    }
+
+    #[test]
+    fn garbage_and_non_assistant_lines_are_ignored() {
+        let l = lines(&[
+            "not json",
+            r#"{"type":"user","message":{"content":"hi"}}"#,
+            r#"{"type":"ai-title","aiTitle":"Working"}"#,
+        ]);
+        let label = fold_label(&l);
+        assert_eq!(label.title.as_deref(), Some("Working"));
+        assert!(label.tool.is_none());
+    }
+
+    #[test]
+    fn tail_lines_drops_the_partial_first_line_when_windowed() {
+        let mut path = std::env::temp_dir();
+        path.push(format!("loom-title-test-{}.jsonl", std::process::id()));
+        // Two whole lines; a tiny window forces start>0 so the first (partial) line is dropped.
+        std::fs::write(&path, "AAAAAAAAAA\nBBBBBBBBBB\n").unwrap();
+        let got = tail_lines(&path, 12);
+        assert_eq!(got, vec!["BBBBBBBBBB".to_string()]);
+        let _ = std::fs::remove_file(&path);
+    }
 }

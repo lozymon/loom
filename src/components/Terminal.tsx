@@ -43,6 +43,7 @@ import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, appChord, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
 import { detectAgent, resumeClaudeCommand } from "../lib/agents";
+import { claudeTitle, type TranscriptLabel } from "../lib/claudeTitle";
 import { paneActiveTask } from "../stores/sessions";
 import type { PaneId, PtyHandle, LogErrorEvent } from "../ipc/protocol";
 import { LOG_ERROR_EVENT } from "../ipc/protocol";
@@ -127,6 +128,7 @@ function basename(dir: string): string {
 // commands previously on the UI thread, froze the app for 1-2s every cycle).
 const POLL_INTERVAL_MS = 2000;
 const GIT_REFRESH_EVERY = 5; // ~10s at a stable cwd
+const TITLE_REFRESH_EVERY = 3; // ~6s — the Claude transcript current-work label (bounded tail read)
 // How long a hand-started agent must stay the foreground process before auto-adopt records it as
 // the pane's command — long enough that a one-off (`claude --help`) exits first, short enough to be
 // invisible (the live agent tint already appears within a poll).
@@ -184,6 +186,9 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const [branch, setBranch] = createSignal<string | null>(null);
   // The live foreground command in this pane (polled from /proc), or null at the prompt.
   const [foreground, setForeground] = createSignal<string | null>(null);
+  // The Claude pane's current-work label (transcript aiTitle + current tool), or null. Polled for a
+  // Claude pane with a known session id; fills the overview caption when no Task is pushed.
+  const [label, setLabel] = createSignal<TranscriptLabel | null>(null);
 
   const spec = () => props.ws.panes[props.paneId];
   // Which AI agent (if any) this pane is running — drives the title-bar badge. Prefer the live
@@ -225,6 +230,23 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   const act = () => activity[props.paneId];
   // The pane's live agent Task — drives the overview fleet caption (ADR-0008).
   const task = () => paneActiveTask(props.paneId);
+
+  // The overview fleet caption, resolved by provenance: a *pushed* Task (hooks/MCP) always wins;
+  // a hookless Claude pane falls back to its transcript's current-work label (M12), marked
+  // data-source so the derived one can render distinctly. The transcript never overrides a pushed
+  // Task — the fallback lives only at this read site.
+  const caption = (): { title: string; meta: string; source: "pushed" | "transcript" } | null => {
+    const t = task();
+    if (t) {
+      const n = t.files.length;
+      return { title: t.title, meta: n ? `${n} file${n === 1 ? "" : "s"}` : "", source: "pushed" };
+    }
+    const l = label();
+    if (l?.title) {
+      return { title: l.title, meta: l.tool ? `using ${l.tool}` : "", source: "transcript" };
+    }
+    return null;
+  };
 
   // ADR-0011 heuristic tier is live for this pane only when the kill-switch is on AND the pane runs
   // an opt-in (hookless) agent kind. Claude / plain shells never qualify, so their output content is
@@ -473,7 +495,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   // /proc for the live cwd and derive the branch from it. Cheap: one /proc readlink + one
   // `git rev-parse` per tick, only while this pane's workspace is visible.
   async function refreshLoc() {
-    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setBusy(props.paneId, null); setStuck(props.paneId, false); setHeuristicWaiting(props.paneId, false); lastGitCwd = null; return; }
+    if (handle === null) { setCwd(null); setBranch(null); setForeground(null); setLabel(null); setBusy(props.paneId, null); setStuck(props.paneId, false); setHeuristicWaiting(props.paneId, false); lastGitCwd = null; return; }
     pollTick++;
     // One batched read — busy-state + foreground command + cwd — instead of three IPC round-trips
     // (see metaPty / pty::meta). A whole-call failure leaves every last value untouched, matching
@@ -520,6 +542,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     );
     // The live foreground command, for the agent badge (e.g. `claude`); null at the prompt.
     setForeground(m.foreground);
+    // Claude current-work label (M12): for a Claude pane with a known session id, read its own
+    // transcript's latest aiTitle + current tool, throttled. Reads Claude's store, never pane output
+    // (opacity-safe). Fills the overview caption for a hookless agent (no pushed Task).
+    const labelSid = spec()?.sessionId;
+    if (agent()?.id === "claude" && labelSid) {
+      if (pollTick % TITLE_REFRESH_EVERY === 0) {
+        try { setLabel(await claudeTitle(labelSid)); } catch { /* keep last */ }
+      }
+    } else if (label()) {
+      setLabel(null);
+    }
     const dir = m.cwd;
     setCwd(dir);
     // Auto-adopt: once a hand-started agent has been the foreground process for AUTO_ADOPT_MS (so a
@@ -980,14 +1013,12 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
 
       {/* Fleet caption (overview only, ADR-0008): the live agent Task — its title + files touched,
           tinted for a "needs you" pane. CSS hides it outside overview. */}
-      <Show when={task()}>
-        {(t) => (
-          <div class="pane-fleet" data-state={paneState()}>
-            <span class="pf-task" title={t().title}>{t().title}</span>
+      <Show when={caption()}>
+        {(c) => (
+          <div class="pane-fleet" data-state={paneState()} data-source={c().source}>
+            <span class="pf-task" title={c().title}>{c().title}</span>
             <span class="pf-meta">
-              <Show when={t().files.length}>
-                <span>{t().files.length} file{t().files.length === 1 ? "" : "s"}</span>
-              </Show>
+              <Show when={c().meta}><span>{c().meta}</span></Show>
             </span>
           </div>
         )}

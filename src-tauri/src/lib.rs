@@ -188,6 +188,7 @@ pub fn run() {
             claude::list_claude_sessions,
             claude::claude_session_exists,
             claude::claude_usage,
+            claude::claude_title,
             workspace::state_save,
             workspace::state_load,
             workspace::project_state_save,

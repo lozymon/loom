@@ -5093,6 +5093,13 @@ body,
 .pane-fleet[data-state="needs"] .pf-task {
   color: var(--state-needs);
 }
+/* Transcript-derived caption (M12): a pushed Task is ground truth; a title read from the agent's own
+   transcript is near-exact but not pushed — so it reads with a dashed underline to keep provenance
+   legible (ADR-0011 ladder). */
+.pane-fleet[data-source="transcript"] .pf-task {
+  text-decoration: underline dashed rgba(255, 255, 255, 0.28);
+  text-underline-offset: 3px;
+}
 .pane-fleet .pf-meta {
   font: 10px var(--font-mono);
   color: var(--text-faint);
