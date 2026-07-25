@@ -6,6 +6,19 @@ versioning.
 
 ## [Unreleased]
 
+## [1.16.0] — 2026-07-25
+
+One command to tell you why an integration isn't working.
+
+- **`loom doctor`.** Loom's integration points — the control bus, Claude hooks,
+  the transcript store, the process floor — all fail silently and, from the
+  outside, identically (the fleet panel is just empty). `loom doctor` checks each
+  one and prints a one-line remedy under anything that isn't ok: the binary and
+  version, the platform floor, bus reachability with a round-trip time, whether
+  you're inside a pane, Claude hooks, and the transcript store. `--json` lets an
+  agent check its own integration from inside a pane; it exits non-zero on a real
+  failure so it's usable in scripts and CI.
+
 ## [1.15.0] — 2026-07-25
 
 Agent awareness on Windows, and see what each agent is actually working on.
