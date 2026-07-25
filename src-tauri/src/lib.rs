@@ -5,6 +5,7 @@ mod control;
 mod control_sock;
 mod control_transport;
 mod docs;
+pub mod doctor;
 mod editor;
 mod git;
 mod lanbridge;
