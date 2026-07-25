@@ -6,6 +6,19 @@ versioning.
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-07-25
+
+`loom doctor` learns about MCP and WSL.
+
+- **MCP check.** `loom doctor` now checks whether the `loom` MCP server is
+  registered (in `~/.claude.json` or a project `.mcp.json`) so the model can call
+  loom's tools — with the exact `claude mcp add …` line as the remedy when it
+  isn't.
+- **WSL check (Windows).** Surfaces installed WSL distros with a heads-up that
+  the loom bus doesn't reach inside a WSL pane — a WSL2 process can't open the
+  Windows named pipe `$LOOM_SOCK` points at, so `loom` (bus, hooks, MCP) doesn't
+  work there. Run agents in a native Windows pane for full integration.
+
 ## [1.16.0] — 2026-07-25
 
 One command to tell you why an integration isn't working.
