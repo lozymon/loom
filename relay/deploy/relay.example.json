@@ -1,0 +1,9 @@
+{
+  "domain": "relay.furevikstrand.cloud",
+  "cert": "/etc/loom-relay/relay.crt",
+  "key": "/etc/loom-relay/relay.key",
+  "dataDir": "/var/lib/loom-relay",
+  "host": "0.0.0.0",
+  "httpsPort": 443,
+  "httpPort": 80
+}

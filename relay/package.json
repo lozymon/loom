@@ -1,0 +1,19 @@
+{
+  "name": "@loom/relay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Loom relay: gives dial-out hubs a public https name by forwarding TLS it cannot open",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "node src/main.ts",
+    "bundle": "node scripts/bundle.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.21.3",
+    "zod": "^4.6.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}
