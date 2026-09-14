@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Loom",
+  "mainBinaryName": "loom",
+  "version": "2.0.0",
+  "identifier": "com.loom.app",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": false,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "shortDescription": "Run many AI coding sessions from one place",
+    "longDescription": "Loom runs Claude Code and other agents as sessions on a hub, answers their permission prompts with rules, a Steward, and you, and lets a Cockpit session steer the rest. Voice in English and Portuguese.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "resources": {
+      "bundle-resources/hub/": "hub/",
+      "bundle-resources/client/": "client/"
+    }
+  }
+}

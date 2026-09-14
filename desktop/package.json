@@ -1,0 +1,16 @@
+{
+  "name": "@loom/desktop",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Loom desktop app: starts the hub, keeps it in the tray, and shows the client",
+  "type": "module",
+  "scripts": {
+    "prepare-bundle": "node scripts/prepare.mjs",
+    "tauri": "tauri",
+    "dev": "node scripts/prepare.mjs && tauri dev",
+    "build": "node scripts/prepare.mjs && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}

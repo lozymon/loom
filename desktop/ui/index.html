@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loom</title>
+    <style>
+      html, body { height: 100%; margin: 0; background: #0e1014; color: #c9ced8; font: 14px/1.5 system-ui, sans-serif; }
+      main { height: 100%; display: grid; place-items: center; text-align: center; }
+      h1 { font-size: 20px; margin: 0 0 8px; color: #e8ebf1; font-weight: 600; }
+      p { margin: 4px 0; max-width: 560px; }
+      .error { color: #e06c75; white-space: pre-wrap; }
+      code { color: #9ecbff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1>Loom</h1>
+        <p id="status">Starting the hub…</p>
+        <p id="detail" class="error" hidden></p>
+      </div>
+    </main>
+    <script>
+      // Called by the desktop app while it attaches to or starts the hub.
+      window.loomSplash = {
+        status(text) { document.getElementById("status").textContent = text; },
+        error(text) {
+          document.getElementById("status").textContent = "The hub did not start.";
+          const d = document.getElementById("detail");
+          d.textContent = text;
+          d.hidden = false;
+        },
+      };
+    </script>
+  </body>
+</html>

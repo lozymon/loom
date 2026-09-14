@@ -1,0 +1,41 @@
+[package]
+name = "loom-desktop"
+version = "2.0.0"
+description = "Loom desktop app: starts the hub, keeps it in the tray, and shows the client"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# Standalone crate: not part of any Cargo workspace (ADR-0002).
+[workspace]
+
+[lib]
+name = "loom_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "loom"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+serde_json = "1"
+getrandom = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

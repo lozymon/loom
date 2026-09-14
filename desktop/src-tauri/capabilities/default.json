@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Nothing for web content: the window shows the hub's own page, which talks to the hub over WebSocket only.",
+  "windows": [],
+  "permissions": []
+}
