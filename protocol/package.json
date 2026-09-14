@@ -1,0 +1,16 @@
+{
+  "name": "@loom/protocol",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Wire contract between the Loom hub and its clients: frames, commands, events, and domain types",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.6.3"
+  }
+}
