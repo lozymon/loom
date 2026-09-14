@@ -4,13 +4,13 @@ The order that gets you using it soonest, with the checks nothing on the dev mac
 
 ## 1. Desktop app on this machine (replaces v1)
 
-1. **Keep a way back.** v1 1.14.0 is installed as package `loom`, but only v1 1.8.0 has a `.deb` on disk. Build the current v1 package first: `cd ../loom && npm run tauri build` (the `.deb` lands in `src-tauri/target/release/bundle/deb/`).
+1. **Keep a way back.** v1 is installed as package `loom`. The latest v1 `.deb` is on GitHub: `gh release download v1.18.0 --repo lozymon/loom --pattern '*_amd64.deb'`.
 2. **Stop the dev hub** (`npm run hub:dev`) if it runs: the app attaches to whatever answers on port 7420, and the dev hub keeps its data in `.loom-dev`, not in the app's folders.
 3. **Install:** `sudo apt install ./desktop/src-tauri/target/release/bundle/deb/Loom_2.0.0_amd64.deb`. This upgrades package `loom` from v1.
 4. **Start Loom** from the app menu. It creates `~/.config/loom/hub.json`, starts its hub, and signs in by itself. The hub log is `~/.local/share/loom/logs/hub.log`; the first run prints the access token there, which other browsers and phones need.
 5. **Check:** a Claude chat session in a real project, an approval, a Claude terminal session, Ctrl+Shift+Space from another window, closing to the tray, and **Quit Loom**.
 
-Undo: `sudo apt install ./<v1 1.14 .deb>`. v2's files in `~/.config/loom` and `~/.local/share/loom` can stay or go; v1 does not read them.
+Undo: `sudo apt install --allow-downgrades ./Loom_1.18.0_amd64.deb`. v2's files in `~/.config/loom` and `~/.local/share/loom` can stay or go; v1 does not read them.
 
 ## 2. Phone (M10)
 
