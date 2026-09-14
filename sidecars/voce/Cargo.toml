@@ -1,0 +1,26 @@
+[package]
+name = "loom-voce"
+version = "0.2.0"
+edition = "2021"
+description = "Loom speech sidecar: transcribes 16 kHz audio with whisper.cpp for the hub over a JSON-lines protocol"
+license = "MIT"
+publish = false
+
+# Standalone crate: not part of any Cargo workspace (ADR-0002). Optional: the hub works without it.
+[workspace]
+
+[features]
+# Build whisper.cpp with CUDA. Needs the CUDA toolkit (nvcc) at build time.
+cuda = ["whisper-rs/cuda"]
+
+[dependencies]
+whisper-rs = "0.16"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
