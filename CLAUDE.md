@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repository.
 
 ## Status
 
-**M12 first slice done (2026-09-13):** history search (FTS5 index, Ctrl+K, `search_history`), a Changes tab with hunk and file reverts and `files.changed` per turn (`hub/src/git/diff.ts`), and screen manifests for terminal CLIs without hooks (`hub/src/heuristics`, headless xterm). **Open:** deploying the relay, a real phone and push service, installing the `.deb`, any Windows run, the work-machine smoke test (M1), Groq and OpenAI with real keys, real manifests for CLIs you use. **Next:** more M12 polish as daily use shows what is missing; nothing is committed yet. Dev setup: [docs/dev.md](docs/dev.md).
+**M12 first slice done (2026-09-13):** history search (FTS5 index, Ctrl+K, `search_history`), a Changes tab with hunk and file reverts and `files.changed` per turn (`hub/src/git/diff.ts`), and screen manifests for terminal CLIs without hooks (`hub/src/heuristics`, headless xterm). **Open:** deploying the relay, a real phone and push service, installing the `.deb`, any Windows run, the work-machine smoke test (M1), Groq and OpenAI with real keys, real manifests for CLIs you use. **Next:** more M12 polish as daily use shows what is missing; Work lives on branch `feat/loom-v2` of github.com/lozymon/loom; v1 keeps `main` until v2 is ready to deploy. Dev setup: [docs/dev.md](docs/dev.md).
 
 Loom v2 is a rewrite of Loom v1 (`../loom`, Tauri + Rust + SolidJS terminal multiplexer for CLI agents). v1 stays the author's daily driver until v2 reaches M4.
 
