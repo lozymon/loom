@@ -1,0 +1,36 @@
+{
+  "name": "loom-v2",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Loom v2: a hub and thin clients for running many AI coding sessions",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "protocol",
+    "hub",
+    "client",
+    "desktop",
+    "relay"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "hub": "node hub/src/main.ts",
+    "hub:dev": "node --watch-path=hub/src --watch-path=protocol/src hub/src/main.ts --home .loom-dev",
+    "loom": "node hub/src/loom/cli.ts",
+    "client": "npm run dev -w @loom/client",
+    "build": "npm run build -w @loom/client",
+    "build:pty": "cargo build --release --manifest-path sidecars/pty/Cargo.toml",
+    "build:voce": "cargo build --release --manifest-path sidecars/voce/Cargo.toml",
+    "desktop:dev": "npm run dev -w @loom/desktop",
+    "desktop:build": "npm run build -w @loom/desktop"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

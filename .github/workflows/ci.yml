@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sidecars/pty
+
+      - name: Install
+        run: npm ci
+
+      - name: Sidecar lint
+        working-directory: sidecars/pty
+        run: |
+          cargo fmt --check
+          cargo clippy --release -- -D warnings
+
+      - name: Sidecar unit tests
+        working-directory: sidecars/pty
+        run: cargo test
+
+      - name: Build sidecar
+        run: npm run build:pty
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build client
+        run: npm run build
+
+  # The speech sidecar builds whisper.cpp, which is slow; Linux only, since Windows hubs default to
+  # cloud speech (ADR-0010) and local whisper there stays opt-in.
+  voce:
+    name: voce sidecar (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sidecars/voce
+
+      - name: Lint and test
+        working-directory: sidecars/voce
+        run: |
+          cargo fmt --check
+          cargo clippy --release -- -D warnings
+          cargo test --release
