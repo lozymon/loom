@@ -1,0 +1,34 @@
+# A screen manifest (ADR-0011): how a terminal CLI without hooks looks when it works, waits, or is done.
+# Copy to <config dir>/manifests/<id>.toml (Linux: ~/.config/loom/manifests/) and list the id in
+# hub.json: { "heuristics": { "enabled": ["example-cli"] } }. Restart the hub to load changes.
+#
+# The hub renders the terminal like a real screen and matches the last `tail_lines` non-empty lines,
+# trailing spaces removed. Rules are tried in order and the first match wins, so put the most specific
+# first (a question on screen usually sits under an older "working" line). Anchor patterns with $ where
+# the text ends the line, so an answered prompt stops matching. States set this way are shown as
+# heuristic, and a session whose program reports state itself (hooks) is never touched.
+
+id = "example-cli"
+name = "Example CLI"
+# The session's agent name, or the first word of its command, without folders or .exe.
+programs = ["example-cli"]
+tail_lines = 8
+
+[[rule]]
+state = "blocked"
+blocked_on = "approval"          # approval, question, or input
+any = ["Allow this command\\? \\(y/n\\)$", "Apply these changes\\?$"]
+
+[[rule]]
+state = "blocked"
+blocked_on = "question"
+any = ["^\\? .+"]
+
+[[rule]]
+state = "working"
+any = ["esc to interrupt", "^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] "]
+ignore_case = true
+
+[[rule]]
+state = "idle"
+any = ["^> ?$"]
