@@ -93,3 +93,28 @@ export function resumeClaudeCommand(
   const id = opts.newId();
   return { command: `${command} --session-id ${id}`, sessionId: id };
 }
+
+/**
+ * Pick the Claude conversation a hand-started `claude` just created in `cwd` — the id auto-adopt
+ * pins so a restart resumes *this* pane's thread (see Terminal.tsx `adopt`).
+ *
+ * "Newest session in this folder" is not good enough, and was the bug: the newest is just as likely
+ * to belong to a sibling pane, to the pane that was closed a second ago (closing is what bumps its
+ * transcript's mtime to the top), or to a `claude` run outside Loom. Adopting one of those makes two
+ * panes resume a single conversation while this pane's own is never recorded. So a candidate has to
+ * clear three filters: same folder; not already on disk when this agent started (`preExisting` — a
+ * conversation that predates the process cannot be its output); and not already owned by another
+ * pane or by the reopen history (`owned`).
+ *
+ * `sessions` is newest-first. `undefined` means nothing is *provably* ours yet — the caller keeps
+ * looking on a later poll, and never falls back to "take the newest".
+ */
+export function pickAdoptedSession(
+  sessions: readonly { id: string; cwd: string }[],
+  opts: { cwd?: string; preExisting: ReadonlySet<string>; owned: ReadonlySet<string> },
+): string | undefined {
+  if (!opts.cwd) return undefined;
+  return sessions.find(
+    (s) => s.cwd === opts.cwd && !opts.preExisting.has(s.id) && !opts.owned.has(s.id),
+  )?.id;
+}

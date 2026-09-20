@@ -278,6 +278,29 @@ export function setPaneSessionId(paneId: PaneId, sessionId: string) {
   if (i >= 0) setApp("workspaces", i, "panes", paneId, "sessionId", sessionId);
 }
 
+/**
+ * Every Claude session id that already belongs to something: pinned on a live pane in any
+ * workspace, or captured in the reopen history (a closed pane/workspace resumes its conversation
+ * when reopened, so its id is still spoken for). Auto-adopt subtracts this set — without it a pane
+ * that adopted a hand-started `claude` would happily claim the session of the pane you had just
+ * closed, hijacking that conversation and leaving its own unrecorded. `except` is the asking pane,
+ * so its own pinned id never rules itself out.
+ */
+export function pinnedSessionIds(except?: PaneId): ReadonlySet<string> {
+  const out = new Set<string>();
+  const add = (id?: string) => { if (id) out.add(id); };
+  for (const w of app.workspaces) {
+    for (const [key, spec] of Object.entries(w.panes)) {
+      if (Number(key) !== except) add(spec.sessionId);
+    }
+  }
+  for (const c of app.closed) {
+    add(c.spec?.sessionId);
+    if (c.panes) for (const spec of Object.values(c.panes)) add(spec.sessionId);
+  }
+  return out;
+}
+
 /** Adopt an agent started *by hand* in a pane as that pane's launch command, so it persists and
  *  respawns on restart instead of coming back as a plain shell. `command` is the live foreground
  *  command line; `sessionId`, when given, is the captured Claude session so a restart resumes that

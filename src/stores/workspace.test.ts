@@ -21,6 +21,7 @@ import {
   activeRolePanes,
   renamePane,
   setPaneSessionId,
+  pinnedSessionIds,
   movePaneToWorkspace,
   movePaneToNewWorkspace,
   movePaneBeside,
@@ -375,6 +376,48 @@ describe("workspace store: savePreset captures the launcher config for relaunch"
       expect(matches).toHaveLength(1);
       expect(matches[0].cwd).toBe("/b");
       expect(matches[0].paneCount).toBe(4);
+    });
+  });
+});
+
+// The bug: auto-adopt captured "the newest Claude conversation in this folder", so closing a Claude
+// pane (which bumps its transcript to the top of that list) handed its session to whichever
+// surviving pane next adopted a hand-started `claude` — two panes on one conversation, and the
+// adopting pane's own thread never recorded. `pinnedSessionIds` is the ownership set that makes
+// that impossible; see lib/agents `pickAdoptedSession` for the rest of the guard.
+describe("pinnedSessionIds (no pane may claim another's conversation)", () => {
+  it("covers live panes in every workspace, and excludes the asking pane's own id", () => {
+    createRoot(() => {
+      const a = createWorkspace({ name: "A", cwd: "/a", paneCount: 2 });
+      const [p1, p2] = leavesOf(a);
+      const b = createWorkspace({ name: "B", cwd: "/b", paneCount: 1 });
+      const [p3] = leavesOf(b);
+      setPaneSessionId(p1, "sess-1");
+      setPaneSessionId(p2, "sess-2");
+      setPaneSessionId(p3, "sess-3");
+
+      const all = pinnedSessionIds();
+      expect(all.has("sess-1")).toBe(true);
+      expect(all.has("sess-2")).toBe(true);
+      expect(all.has("sess-3")).toBe(true); // another workspace's pane still owns its thread
+
+      const asP1 = pinnedSessionIds(p1);
+      expect(asP1.has("sess-1")).toBe(false); // a pane never blocks itself
+      expect(asP1.has("sess-2")).toBe(true);
+    });
+  });
+
+  it("keeps a closed pane's session spoken for, so a survivor can't inherit it", () => {
+    createRoot(() => {
+      const ws = createWorkspace({ name: "C", cwd: "/c", paneCount: 2 });
+      const [p1, p2] = leavesOf(ws);
+      setPaneSessionId(p1, "keep-me");
+      setPaneSessionId(p2, "closed-pane-session");
+
+      closePane(p2, { skipConfirm: true });
+      expect(leavesOf(ws)).not.toContain(p2);
+      // Still owned: the reopen history holds it, and reopening resumes that conversation.
+      expect(pinnedSessionIds(p1).has("closed-pane-session")).toBe(true);
     });
   });
 });
