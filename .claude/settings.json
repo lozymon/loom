@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "loom attention"
+            "command": "[ -n \"$LOOM_PANE\" ] && loom attention || true"
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "loom status"
+            "command": "[ -n \"$LOOM_PANE\" ] && loom status || true"
           }
         ]
       }
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "loom status working"
+            "command": "[ -n \"$LOOM_PANE\" ] && loom status working || true"
           }
         ]
       }

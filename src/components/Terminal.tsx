@@ -42,7 +42,7 @@ import { looksWaiting, HEURISTIC_DWELL_MS } from "../lib/outputObserver";
 import { currentTheme } from "../stores/theme";
 import { settings, adjustFontSize } from "../stores/settings";
 import { actionForKey, appChord, formatBinding, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "../lib/keybindings";
-import { detectAgent, resumeClaudeCommand } from "../lib/agents";
+import { detectAgent, pickAdoptedSession, resumeClaudeCommand } from "../lib/agents";
 import { claudeTitle, type TranscriptLabel } from "../lib/claudeTitle";
 import { paneActiveTask } from "../stores/sessions";
 import type { PaneId, PtyHandle, LogErrorEvent } from "../ipc/protocol";
@@ -56,6 +56,7 @@ import {
   clearPaneCommand,
   setPaneSessionId,
   adoptPaneCommand,
+  pinnedSessionIds,
   reopenLastClosed,
   toggleZoom,
   toggleOverview,
@@ -133,6 +134,13 @@ const TITLE_REFRESH_EVERY = 3; // ~6s — the Claude transcript current-work lab
 // the pane's command — long enough that a one-off (`claude --help`) exits first, short enough to be
 // invisible (the live agent tint already appears within a poll).
 const AUTO_ADOPT_MS = 4000;
+// Late session capture (see `sessionPending`): how often to re-check Claude's session store, and how
+// long to keep checking. `list_claude_sessions` walks every project dir, so this is deliberately far
+// slower than the metadata poll — and it gives up once an agent has sat that long without writing a
+// transcript, since by then the user plainly isn't conversing in it. Giving up is safe: the next
+// launch just pins a fresh session id, which is a new conversation rather than someone else's.
+const ADOPT_SESSION_EVERY = 15; // ~30s at POLL_INTERVAL_MS
+const ADOPT_SESSION_WINDOW_MS = 10 * 60_000;
 const POLL_STAGGER_SLOTS = 8;
 
 export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI }) {
@@ -158,6 +166,16 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
   let adoptAgentId: string | null = null;
   let adoptSince = 0;
   let adopting = false;
+  // The folder the hand-started agent was launched in, and the Claude conversations already on disk
+  // for it at that moment. A transcript that predates the process can't be that process's own, so
+  // this set is what lets adoption tell *our* new conversation from a sibling pane's, a just-closed
+  // pane's, or one from a `claude` outside Loom. Null until the first snapshot lands.
+  let adoptCwd: string | undefined;
+  let preAgentSessions: ReadonlySet<string> | null = null;
+  // True once the command was adopted but the agent's own conversation wasn't identifiable yet —
+  // Claude writes its transcript on the first message, which is normally well after the dwell. The
+  // poll keeps looking, so the pane still resumes *its* thread rather than pinning someone else's.
+  let sessionPending = false;
   // git-branch poll throttle: the last cwd we ran `git` for, and a tick counter so the subprocess
   // only fires on a cwd change or a slow refresh (the branch is rarely what changes).
   let lastGitCwd: string | null = null;
@@ -207,22 +225,47 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     if (/(^|\s)(-p|--print)\b/.test(fg!)) return null; // a one-shot print run, not a session to keep
     return { agent: fgAgent, command: fg! };
   };
+  /** Note which Claude conversations already exist in `dir`, before this pane's hand-started agent
+   *  can have written one. Taken once per detection; failures degrade to "everything is foreign",
+   *  which only ever makes adoption more conservative. */
+  async function snapshotPreAgentSessions(dir: string | undefined) {
+    if (!dir) { preAgentSessions = new Set(); return; }
+    try {
+      preAgentSessions = new Set((await listClaudeSessions()).filter((s) => s.cwd === dir).map((s) => s.id));
+    } catch {
+      preAgentSessions = new Set(); // best-effort — an unknown baseline blocks adoption, never steals
+    }
+  }
+
+  /** This pane's own Claude conversation, or undefined if it hasn't written one yet. See
+   *  `pickAdoptedSession` for why "newest in this folder" is not a safe answer. Reads Claude's
+   *  on-disk store, never pane output (opacity-safe). */
+  async function findOwnSession(): Promise<string | undefined> {
+    if (!preAgentSessions) return undefined; // baseline not taken yet — nothing is provably ours
+    try {
+      return pickAdoptedSession(await listClaudeSessions(), {
+        cwd: adoptCwd,
+        preExisting: preAgentSessions,
+        owned: pinnedSessionIds(props.paneId),
+      });
+    } catch {
+      return undefined; // best-effort — adopt the command even if the session lookup fails
+    }
+  }
+
   /** Record the hand-started agent as this pane's launch command. For a bare Claude invocation we
-   *  also capture the newest session in the pane's folder, so a restart resumes *that* conversation
-   *  (Claude stores it on disk; we read the store, never pane output — opacity-safe). */
+   *  also capture the conversation *this* run created, so a restart resumes it — never one that
+   *  already belonged to another pane (Claude stores it on disk; we read the store, never pane
+   *  output — opacity-safe). */
   async function adopt() {
     const a = adoptable();
     if (!a) return;
-    let sessionId: string | undefined;
-    if (a.agent.id === "claude" && !/--(resume|session-id|continue)\b|\s-[rc]\b/.test(a.command)) {
-      const dir = cwd() || spec()?.cwd || props.ws.cwd;
-      try {
-        // listClaudeSessions is newest-first, so the first match in this folder is the live one.
-        const s = (await listClaudeSessions()).find((s) => s.cwd === dir);
-        sessionId = s?.id;
-      } catch { /* best-effort — adopt the command even if the session lookup fails */ }
-    }
+    const bare = a.agent.id === "claude" && !/--(resume|session-id|continue)\b|\s-[rc]\b/.test(a.command);
+    const sessionId = bare ? await findOwnSession() : undefined;
     adoptPaneCommand(props.paneId, a.command, sessionId);
+    // Adopted at the splash screen, before Claude wrote a transcript: keep watching on the poll
+    // instead of settling for whatever id happened to be newest.
+    sessionPending = bare && !sessionId;
   }
   const isFocused = () => props.ws.focused === props.paneId;
   /** Is the user actually looking at this pane right now? (active workspace + focused) */
@@ -558,16 +601,34 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
     // Auto-adopt: once a hand-started agent has been the foreground process for AUTO_ADOPT_MS (so a
     // one-off like `claude --help` exits first), record it as the pane's command so it persists and
     // resumes on restart — the same thing the "keep" button does, without the click.
-    if (settings.autoAdoptAgents) {
-      const a = adoptable();
-      if (!a) {
-        adoptAgentId = null;
-      } else if (adoptAgentId !== a.agent.id) {
-        adoptAgentId = a.agent.id; // newly seen — start the dwell clock
-        adoptSince = Date.now();
-      } else if (!adopting && Date.now() - adoptSince >= AUTO_ADOPT_MS) {
-        adopting = true;
-        void adopt().finally(() => { adopting = false; });
+    // Tracked whether or not auto-adopt is on: the manual "keep" button adopts through the same
+    // path and needs the same folder baseline, and the baseline is only meaningful if it's taken
+    // early — while the agent is still booting, before it can have written its own transcript.
+    const candidate = adoptable();
+    if (!candidate) {
+      adoptAgentId = null;
+    } else if (adoptAgentId !== candidate.agent.id) {
+      adoptAgentId = candidate.agent.id; // newly seen — start the dwell clock
+      adoptSince = Date.now();
+      adoptCwd = dir || spec()?.cwd || props.ws.cwd;
+      preAgentSessions = null;
+      sessionPending = false; // a new detection supersedes any pending capture
+      void snapshotPreAgentSessions(adoptCwd);
+    } else if (settings.autoAdoptAgents && !adopting && Date.now() - adoptSince >= AUTO_ADOPT_MS) {
+      adopting = true;
+      void adopt().finally(() => { adopting = false; });
+    }
+    // Late session capture for an adopted pane whose agent hadn't written its transcript yet.
+    // Gives up once the pane has an id, stops running Claude, or the window closes.
+    if (sessionPending && pollTick % ADOPT_SESSION_EVERY === 0) {
+      if (agent()?.id !== "claude" || spec()?.sessionId || Date.now() - adoptSince > ADOPT_SESSION_WINDOW_MS) {
+        sessionPending = false;
+      } else {
+        const sid = await findOwnSession();
+        if (sid) {
+          setPaneSessionId(props.paneId, sid);
+          sessionPending = false;
+        }
       }
     }
     if (!dir) { setBranch(null); lastGitCwd = null; return; }

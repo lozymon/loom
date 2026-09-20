@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectAgent, resumeClaudeCommand, agentUsesHeuristics } from "./agents";
+import { detectAgent, resumeClaudeCommand, agentUsesHeuristics, pickAdoptedSession } from "./agents";
 
 describe("detectAgent", () => {
   it("returns null for a plain shell or no command", () => {
@@ -111,5 +111,50 @@ describe("agentUsesHeuristics (ADR-0011 per-kind opt-in)", () => {
     expect(agentUsesHeuristics("npm run dev")).toBe(false);
     expect(agentUsesHeuristics("")).toBe(false);
     expect(agentUsesHeuristics(undefined)).toBe(false);
+  });
+});
+
+describe("pickAdoptedSession (auto-adopt session capture)", () => {
+  // newest-first, as listClaudeSessions returns them
+  const list = [
+    { id: "just-closed", cwd: "/repo" },
+    { id: "sibling-live", cwd: "/repo" },
+    { id: "mine", cwd: "/repo" },
+    { id: "other-folder", cwd: "/elsewhere" },
+  ];
+  const none: ReadonlySet<string> = new Set();
+
+  it("takes the newest conversation this run actually created", () => {
+    expect(
+      pickAdoptedSession(list, {
+        cwd: "/repo",
+        preExisting: new Set(["just-closed", "sibling-live"]),
+        owned: none,
+      }),
+    ).toBe("mine");
+  });
+
+  // The regression: closing a Claude pane bumps its transcript to the top of the newest-first
+  // list, so a plain "newest in this folder" lookup handed the survivor the dead pane's session.
+  it("never claims a session that predates the agent (the just-closed pane's)", () => {
+    expect(
+      pickAdoptedSession(list, { cwd: "/repo", preExisting: new Set(list.map((s) => s.id)), owned: none }),
+    ).toBeUndefined();
+  });
+
+  it("never claims a session another pane already owns", () => {
+    expect(
+      pickAdoptedSession(list, {
+        cwd: "/repo",
+        preExisting: none,
+        owned: new Set(["just-closed", "sibling-live", "mine"]),
+      }),
+    ).toBeUndefined();
+  });
+
+  it("ignores conversations from other folders, and an unknown folder adopts nothing", () => {
+    expect(pickAdoptedSession(list, { cwd: "/elsewhere", preExisting: none, owned: none })).toBe("other-folder");
+    expect(pickAdoptedSession(list, { cwd: undefined, preExisting: none, owned: none })).toBeUndefined();
+    expect(pickAdoptedSession([], { cwd: "/repo", preExisting: none, owned: none })).toBeUndefined();
   });
 });
