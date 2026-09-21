@@ -8,7 +8,7 @@
 //! check; every other check is a cheap env/filesystem read.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::time::Instant;
 
@@ -334,6 +334,46 @@ fn check_wsl() -> Option<Check> {
     ))
 }
 
+/// Is read-aloud usable? It needs two third-party pieces Loom deliberately doesn't bundle: the
+/// `piper` binary, and an audio player to push the synthesised WAV through. A `warn` (not `fail`):
+/// read-aloud is opt-in, so an absent piper is a feature you haven't set up, not a broken install.
+fn check_read_aloud() -> Check {
+    let piper = env::var("LOOM_PIPER_BIN")
+        .ok()
+        .filter(|p| !p.is_empty() && Path::new(p).is_file())
+        .is_some()
+        || on_path(if cfg!(windows) { "piper.exe" } else { "piper" });
+    if !piper {
+        return Check::warn(
+            "read-aloud",
+            "piper not found — the read-aloud key won't speak",
+            "install piper (github.com/rhasspy/piper/releases), then put it on PATH or set $LOOM_PIPER_BIN",
+        );
+    }
+    // A voice is downloaded on first use, so only the player is worth checking beyond piper itself.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if !["pw-play", "paplay", "aplay", "ffplay"]
+            .iter()
+            .any(|p| on_path(p))
+        {
+            return Check::warn(
+                "read-aloud",
+                "piper found, but no audio player",
+                "install pipewire-utils, pulseaudio-utils or alsa-utils",
+            );
+        }
+    }
+    Check::ok("read-aloud", "piper found")
+}
+
+/// Is `name` present on `PATH`? (A bare-name lookup — callers handle absolute paths themselves.)
+fn on_path(name: &str) -> bool {
+    env::var_os("PATH")
+        .map(|path| env::split_paths(&path).any(|dir| dir.join(name).is_file()))
+        .unwrap_or(false)
+}
+
 fn run_checks() -> Vec<Check> {
     let mut checks = vec![
         check_binary(),
@@ -343,6 +383,7 @@ fn run_checks() -> Vec<Check> {
         check_claude_hooks(),
         check_mcp(),
         check_transcripts(),
+        check_read_aloud(),
     ];
     if let Some(wsl) = check_wsl() {
         checks.push(wsl);

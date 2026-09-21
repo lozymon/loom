@@ -6,6 +6,22 @@ versioning.
 
 ## [Unreleased]
 
+### Added
+
+- **Read aloud (Ctrl+Shift+A).** Speaks the focused pane's latest agent reply out
+  loud, so a long answer can be listened to instead of read. Press the key again,
+  or click the 🔊 in the pane's title bar, to cut it off mid-sentence. The text is
+  taken from the agent's own transcript — never the terminal — and stripped to
+  prose first: fenced code becomes a spoken "code block", links lose their URLs,
+  and headings/bullets/emphasis are flattened with pauses where the lines were.
+  Voice and speaking rate are in **Settings → Read aloud**, and it's in the
+  command palette both ways.
+
+  Speech is [Piper](https://github.com/rhasspy/piper), which you install yourself
+  (resolved via `$LOOM_PIPER_BIN`, then beside `loom`, then `PATH`); the voice
+  model downloads on first use into `~/.cache/loom-speech/`. `loom doctor` gained a
+  **read-aloud** check that reports a missing piper or audio player with the fix.
+
 ## [1.18.0] — 2026-07-25
 
 `loom doctor` can now fix what it finds.

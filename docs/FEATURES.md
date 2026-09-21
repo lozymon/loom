@@ -44,6 +44,7 @@ design decision; `roadmap/…§` for the backlog entry it came from). This is th
 - ✅ **Broadcast (fan-out)** — one prompt to every pane / a saved group. `paneControl.ts`
 - ✅ **Saved broadcast groups**. `src/stores/settings.ts` · roadmap/IDEAS §2
 - ✅ **Voice dictation** — Ctrl+Shift+M → `loom-voce` (speech→text→`loom send`). `src-tauri/src/voce.rs`, `src/lib/voceClient.ts`, `ListeningOverlay.tsx`, `loom-voce/`
+- ✅ **Read aloud** — Ctrl+Shift+A → speaks the focused pane's latest agent reply via Piper TTS (transcript→prose→`piper`→audio player). Press again, or click the pane's 🔊, to stop. `src-tauri/src/speech.rs`, `claude.rs::claude_last_reply`, `src/lib/speech.ts` (markdown→speakable prose), `src/lib/speechClient.ts`
 
 ## Agent awareness (first-class, self-reported)
 - ✅ **Agents first-class** — `Agent` / `Session` / `Task` entities from pushed signals. `src/stores/sessions.ts` · [ADR-0008](adr/0008-agents-first-class-via-self-report.md)

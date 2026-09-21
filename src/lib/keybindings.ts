@@ -17,6 +17,7 @@ export type ActionId =
   | "open-editor"
   | "launch-claude"
   | "dictate"
+  | "read-aloud"
   | "detach-pane"
   | "session-log"
   | "new-workspace"
@@ -72,6 +73,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "open-editor", label: "Open folder in editor", group: "Panes", defaultKey: "i" },
   { id: "launch-claude", label: "Launch Claude in pane", group: "Panes", defaultKey: "l" },
   { id: "dictate", label: "Dictate into pane (voice)", group: "Panes", defaultKey: "m" },
+  { id: "read-aloud", label: "Read agent's reply aloud", group: "Panes", defaultKey: "a" },
   { id: "detach-pane", label: "Tear pane off into a window", group: "Panes", defaultKey: "n" },
   { id: "session-log", label: "View pane session log", group: "Panes", defaultKey: "j" },
   { id: "new-workspace", label: "New workspace", group: "Workspaces", defaultKey: "t" },

@@ -218,6 +218,94 @@ pub fn claude_title(session_id: String) -> Result<Option<TranscriptLabel>, Strin
     Ok(Some(label))
 }
 
+/// Fold a transcript's tail into "everything the agent has said since your last message" — the
+/// text you'd want read back to you. Assistant turns arrive as several records (text, a `tool_use`,
+/// more text), so we accumulate their `text` blocks and reset the buffer at each real user message,
+/// leaving the whole latest reply rather than its final fragment. Sidechain records (subagent
+/// chatter) and meta records are skipped — you asked the main agent, not its helpers.
+///
+/// Pure over the lines, so it's unit-testable without a file (sibling of `fold_label`).
+fn fold_last_reply(lines: &[String]) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for line in lines {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if v.get("isSidechain")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(false)
+        {
+            continue; // a subagent's turn, not the reply to you
+        }
+        match v.get("type").and_then(|t| t.as_str()) {
+            Some("user") => {
+                // A real user message starts a new turn; tool *results* also arrive typed "user",
+                // so only reset on one that carries actual prose.
+                if v.get("isMeta").and_then(|m| m.as_bool()).unwrap_or(false) {
+                    continue;
+                }
+                if user_has_prose(&v) {
+                    parts.clear();
+                }
+            }
+            Some("assistant") => {
+                if let Some(blocks) = v
+                    .get("message")
+                    .and_then(|m| m.get("content"))
+                    .and_then(|c| c.as_array())
+                {
+                    for b in blocks {
+                        if b.get("type").and_then(|t| t.as_str()) != Some("text") {
+                            continue; // skip `thinking` and `tool_use` — not part of the spoken reply
+                        }
+                        if let Some(t) = b.get("text").and_then(|t| t.as_str()) {
+                            let t = t.trim();
+                            if !t.is_empty() {
+                                parts.push(t.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let joined = parts.join("\n\n");
+    let joined = joined.trim();
+    (!joined.is_empty()).then(|| joined.to_string())
+}
+
+/// Does this `user` record carry a typed prompt (rather than a tool result / `<…>` system noise)?
+fn user_has_prose(v: &serde_json::Value) -> bool {
+    let content = v.get("message").and_then(|m| m.get("content"));
+    let text = match content {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Array(blocks)) => blocks
+            .iter()
+            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => String::new(),
+    };
+    let text = text.trim();
+    !text.is_empty() && !text.starts_with('<')
+}
+
+/// The agent's latest reply in `session_id`, as plain text — what the read-aloud action speaks.
+/// Reads a bounded tail of Claude's own transcript, never pane output (ADR-0001 carve-out, same as
+/// `claude_title`). `None` when there's no transcript or the agent hasn't said anything yet.
+///
+/// The tail window is larger than `claude_title`'s: a label only needs the last few records, but a
+/// full reply can be long and we'd rather re-read a little than speak half a sentence.
+#[tauri::command]
+pub fn claude_last_reply(session_id: String) -> Result<Option<String>, String> {
+    let Some(path) = find_session_file(&session_id) else {
+        return Ok(None);
+    };
+    Ok(fold_last_reply(&tail_lines(&path, 512 * 1024)))
+}
+
 /// Sum token usage per model for each of `session_ids`, reading the on-disk transcripts. Missing
 /// sessions are skipped (a pane whose Claude never conversed just has no entry). Used by the Fleet
 /// panel's usage HUD. Opacity-safe: reads Claude's own session store, not pane output (ADR-0001).
@@ -362,6 +450,53 @@ mod tests {
 
     fn lines(ls: &[&str]) -> Vec<String> {
         ls.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn last_reply_is_the_whole_turn_since_your_message() {
+        let l = lines(&[
+            r#"{"type":"user","message":{"content":"first question"}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"old answer"}]}}"#,
+            r#"{"type":"user","message":{"content":"second question"}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Let me look."}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Grep"}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Found it."}]}}"#,
+        ]);
+        // Both halves of the latest turn, and nothing from the previous one.
+        assert_eq!(
+            fold_last_reply(&l).as_deref(),
+            Some("Let me look.\n\nFound it.")
+        );
+    }
+
+    #[test]
+    fn last_reply_skips_thinking_tool_results_meta_and_subagents() {
+        let l = lines(&[
+            r#"{"type":"user","message":{"content":"go"}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"Working on it."}]}}"#,
+            // A tool *result* is typed "user" but carries no prose — it must not reset the turn.
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}"#,
+            r#"{"type":"user","isMeta":true,"message":{"content":"system note"}}"#,
+            r#"{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"subagent chatter"}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"All done."}]}}"#,
+        ]);
+        assert_eq!(
+            fold_last_reply(&l).as_deref(),
+            Some("Working on it.\n\nAll done.")
+        );
+    }
+
+    #[test]
+    fn last_reply_is_none_when_the_agent_has_not_spoken() {
+        assert!(fold_last_reply(&lines(&[])).is_none());
+        assert!(
+            fold_last_reply(&lines(&[r#"{"type":"user","message":{"content":"hi"}}"#])).is_none()
+        );
+        // Tool-only turns have nothing speakable in them.
+        assert!(fold_last_reply(&lines(&[
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read"}]}}"#
+        ]))
+        .is_none());
     }
 
     #[test]

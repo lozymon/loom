@@ -14,6 +14,7 @@ mod logs;
 pub mod mcp;
 mod pty;
 mod sessionlog;
+mod speech;
 mod tray;
 mod voce;
 mod winproc;
@@ -190,6 +191,10 @@ pub fn run() {
             claude::claude_session_exists,
             claude::claude_usage,
             claude::claude_title,
+            claude::claude_last_reply,
+            speech::speech_speak,
+            speech::speech_stop,
+            speech::speech_available,
             workspace::state_save,
             workspace::state_load,
             workspace::project_state_save,

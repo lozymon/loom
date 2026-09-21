@@ -53,7 +53,7 @@ struct VoceDownload {
 /// loom-voce's model cache root, mirroring `stt.rs::cache_dir`: `$XDG_CACHE_HOME`, then
 /// `$HOME/.cache` (Linux/macOS), then `%LOCALAPPDATA%`/`%USERPROFILE%\.cache` (Windows). `None` if
 /// none resolve — we then skip the download indicator (loom-voce would fail the same way anyway).
-fn cache_root() -> Option<PathBuf> {
+pub(crate) fn cache_root() -> Option<PathBuf> {
     if let Some(x) = std::env::var_os("XDG_CACHE_HOME").filter(|s| !s.is_empty()) {
         return Some(PathBuf::from(x));
     }

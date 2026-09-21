@@ -31,6 +31,7 @@ import { sessionLogPath } from "../lib/sessionLog";
 import { claudeSessionExists, listClaudeSessions } from "../lib/claudeSessions";
 import { openEditorAt } from "../lib/editor";
 import { dictateIntoPane } from "../lib/voceClient";
+import { readPaneAloud, speakingPane, stopSpeaking } from "../lib/speechClient";
 import { registerPane, unregisterPane } from "../lib/paneRegistry";
 import { stashScrollback, takeScrollback } from "../lib/scrollback";
 import { notifyAttention } from "../lib/notify";
@@ -818,6 +819,7 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
       "open-editor": () => void openEditorAt(cwd() || spec()?.cwd || props.ws.cwd || settings.defaultCwd || ""),
       "launch-claude": () => launchClaude(),
       "dictate": () => void dictateIntoPane(props.paneId, spec()?.title ?? ""),
+      "read-aloud": () => void readPaneAloud(props.paneId, spec()?.sessionId),
       "detach-pane": () => void detachPane(),
       "session-log": () => void openSessionLog(),
       "new-workspace": () => window.dispatchEvent(new CustomEvent("loom:new-workspace")),
@@ -1055,6 +1057,17 @@ export default function TerminalPane(props: { paneId: PaneId; ws: WorkspaceUI })
         </Show>
         <Show when={act()?.listening}>
           <span class="pane-listening" title="Listening… (voice dictation)">🎙</span>
+        </Show>
+        {/* Speaking: this pane's reply is being read aloud. Click (or the read-aloud key again)
+            stops it — the indicator is the affordance for barging in. */}
+        <Show when={speakingPane() === props.paneId}>
+          <button
+            class="pane-speaking"
+            title="Reading this reply aloud — click to stop"
+            onClick={(e) => { e.stopPropagation(); void stopSpeaking(); }}
+          >
+            🔊
+          </button>
         </Show>
       </div>
 

@@ -27,6 +27,7 @@ import { fuzzyScore } from "../lib/matching";
 import { ago } from "../lib/time";
 import { formatBinding, type ActionId } from "../lib/keybindings";
 import { settings, setSetting, VOICE_LANGUAGES } from "../stores/settings";
+import { readActivePaneAloud, speakingPane, stopSpeaking } from "../lib/speechClient";
 import { activity } from "../stores/activity";
 
 type PaneState = "working" | "idle" | "needs" | "dead";
@@ -81,10 +82,24 @@ export default function CommandPalette(props: {
       { label: "Search agent history", icon: "⏱", kind: "action", key: kb("history"), run: props.onHistory },
       { label: "Reopen closed / resume a Claude session", icon: "↺", kind: "action", key: kb("reopen"), run: props.onReopen },
       { label: "Toggle overview (fleet glance)", icon: "▦", kind: "action", key: kb("overview"), run: () => toggleOverview() },
+      // Read-aloud, both directions: speak the focused pane's latest agent reply, or cut off
+      // whatever is currently talking. The stop entry is listed only while something is speaking,
+      // so the palette doesn't offer a no-op.
+      {
+        label: "Read agent's reply aloud",
+        icon: "🔊",
+        kind: "action",
+        key: kb("read-aloud"),
+        hint: "Focused pane",
+        run: () => void readActivePaneAloud(),
+      },
       { label: "Save workspace as preset", icon: "★", kind: "action", run: () => saveCurrentAsPreset() },
       { label: "Next workspace", icon: "→", kind: "action", key: kb("next-workspace"), run: () => switchWorkspaceRelative(1) },
       { label: "Previous workspace", icon: "←", kind: "action", key: kb("prev-workspace"), run: () => switchWorkspaceRelative(-1) },
     ];
+    if (speakingPane() !== null) {
+      list.push({ label: "Stop reading aloud", icon: "⏹", kind: "action", run: () => void stopSpeaking() });
+    }
     // Dictation language togglers: pin the forced language (or Auto-detect) without opening
     // Settings. The active one is checked; searchable by "dictation"/"language"/the language name.
     for (const l of VOICE_LANGUAGES) {
