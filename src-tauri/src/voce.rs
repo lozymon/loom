@@ -149,6 +149,18 @@ fn voce_bin() -> PathBuf {
     PathBuf::from(voce_name())
 }
 
+/// Kill every in-flight dictation capture because the app is going away. Same reasoning as
+/// `speech::shutdown` — a spawned child outlives its parent on Unix, and here that would leave a
+/// `loom-voce` holding the microphone open after Loom is gone.
+pub fn shutdown() {
+    let mut sessions = active().lock().unwrap();
+    for (_, session) in sessions.drain() {
+        if let Ok(mut child) = session.child.lock() {
+            let _ = child.kill();
+        }
+    }
+}
+
 /// Spawn `loom-voce --once --hold --pane <pane>` detached: start a monologue capture that records
 /// through pauses (no auto-stop on silence) until `voce_finish` signals it via stdin, then it
 /// transcribes and delivers. Returns as soon as the child is launched; a background thread relays

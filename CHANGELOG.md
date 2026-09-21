@@ -23,6 +23,10 @@ versioning.
   exceed ~1.9× at any setting), so a slider driving it would have lied about the number.
   Without ffmpeg the old approximation is used and Settings says so.
 
+  Quitting Loom stops the speech (and any in-flight dictation capture): a spawned
+  child is reparented rather than killed when its parent exits on Unix, so without an
+  explicit shutdown the audio would have carried on talking to an empty desktop.
+
   Speech is [Piper](https://github.com/rhasspy/piper), which you install yourself
   (resolved via `$LOOM_PIPER_BIN`, then beside `loom`, then `PATH`); the voice
   model downloads on first use into `~/.cache/loom-speech/`. `loom doctor` gained a

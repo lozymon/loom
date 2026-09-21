@@ -485,6 +485,20 @@ pub fn speech_stop(app: AppHandle) {
     let _ = app.emit(SPEECH_DONE_EVENT, SpeechDone { error: None });
 }
 
+/// Kill any in-flight utterance because the app is going away.
+///
+/// A spawned child is NOT killed when its parent exits on Unix — it is reparented to init and
+/// carries on — so without this, quitting Loom mid-sentence leaves the audio player talking to an
+/// empty desktop with no way to stop it short of `pkill`. Called from the `RunEvent::Exit` hook,
+/// which covers every shutdown path (window close, tray Quit, the frontend's `quitApp`).
+pub fn shutdown() {
+    GENERATION.fetch_add(1, Ordering::SeqCst); // the worker thread stops owning the floor
+    if active().lock().unwrap().is_some() {
+        eprintln!("loom: stopping read-aloud on exit");
+    }
+    kill_active();
+}
+
 /// Whether ffmpeg is available for the exact pitch-preserving rate change. Settings surfaces this
 /// so "2x sounds slower than 2x" has a visible cause (see `rate_plan`).
 #[tauri::command]
