@@ -2092,6 +2092,26 @@ body,
   .pane-chip .pane-listening { animation: none; opacity: 0.9; }
 }
 
+/* Read-aloud "speaking" indicator — the mirror of .pane-listening, but a button: clicking it
+   stops the utterance, so barging in is one click rather than hunting for the shortcut. */
+.pane-chip .pane-speaking {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 0 0 8px;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--text-faint) 55%, transparent);
+  background: none;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  animation: pane-listening-pulse 1.15s ease-in-out infinite;
+}
+.pane-chip .pane-speaking:hover { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .pane-chip .pane-speaking { animation: none; opacity: 0.9; }
+}
+
 /* Voice-dictation "you're talking" popup — a floating card shown while a pane is capturing (the
    dictation hotkey). Centre-bottom so it never covers the pane you're dictating into. */
 .voce-overlay {
@@ -2908,6 +2928,35 @@ body,
 
 .settings-hint {
   margin: 8px 0 0;
+}
+
+/* One-click speaking rates in Settings → Read aloud (1×…2×). A segmented row rather than a
+   dropdown: the whole point is that 2× is one click away while listening. */
+.settings-presets {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.settings-preset {
+  flex: 0 0 auto;
+  font: 12px var(--font-mono);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.settings-preset:hover {
+  color: var(--fg);
+}
+
+.settings-preset.active {
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--accent-strong);
 }
 
 .settings-btn {

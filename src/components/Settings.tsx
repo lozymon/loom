@@ -18,9 +18,11 @@ import {
   resetKeybinding,
   resetKeybindings,
   VOICE_LANGUAGES,
+  PIPER_VOICES,
   type CursorStyle,
   type NavItemId,
 } from "../stores/settings";
+import { speechAvailable, stretchAvailable } from "../lib/speechClient";
 import { ACTIONS, appChord, formatBinding, isModifierKey, MOD_NAMESPACE, type ActionId } from "../lib/keybindings";
 
 const CURSORS: CursorStyle[] = ["block", "bar", "underline"];
@@ -75,6 +77,14 @@ export default function Settings(props: { onClose: () => void }) {
   // App version, read live from Tauri so it always reflects the running build.
   const [version, setVersion] = createSignal("");
   onMount(() => { getVersion().then(setVersion).catch(() => {}); });
+  // Whether piper resolved — probed once when Settings opens so the Read-aloud section can say
+  // "not found" instead of leaving a silent key to be discovered the hard way. null = still asking.
+  const [piperFound, setPiperFound] = createSignal<boolean | null>(null);
+  onMount(() => { speechAvailable().then(setPiperFound).catch(() => setPiperFound(false)); });
+  // ffmpeg is what makes a requested rate exact (see speech.rs `rate_plan`) — flagged separately
+  // so "2× is really 1.4×" is a visible cause, not a mystery.
+  const [ffmpegFound, setFfmpegFound] = createSignal<boolean | null>(null);
+  onMount(() => { stretchAvailable().then(setFfmpegFound).catch(() => setFfmpegFound(false)); });
 
   // Esc closes the modal from anywhere (the panel itself isn't focus-trapped) — but not
   // while capturing a shortcut, where the capture handler swallows Esc to cancel instead.
@@ -384,6 +394,83 @@ export default function Settings(props: { onClose: () => void }) {
               faster on CPU, with only a small accuracy cost. <b>small (q5_1)</b> is the best
               speed/quality balance for dictation. Bigger models are slower per phrase; if that's the
               bottleneck, a GPU build is the real fix.
+            </p>
+          </section>
+
+          {/* ---- Read aloud ---- */}
+          <section class="settings-section">
+            <h3>Read aloud</h3>
+            <div class="settings-card">
+              <label class="settings-row">
+                <span class="settings-label">Voice</span>
+                <select
+                  class="settings-select"
+                  value={settings.readAloudVoice}
+                  onChange={(e) => setSetting("readAloudVoice", e.currentTarget.value)}
+                >
+                  <For each={PIPER_VOICES}>
+                    {(v) => <option value={v.id}>{v.label}</option>}
+                  </For>
+                </select>
+              </label>
+              <label class="settings-row">
+                <span class="settings-label">Speed</span>
+                <span class="settings-range">
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.05"
+                    value={settings.readAloudSpeed}
+                    onInput={(e) => setSetting("readAloudSpeed", e.currentTarget.valueAsNumber)}
+                  />
+                  <span class="settings-val">{settings.readAloudSpeed.toFixed(2)}×</span>
+                </span>
+              </label>
+              {/* One-click rates, podcast-style — 2× is the reason the range goes there. */}
+              <div class="settings-row">
+                <span class="settings-label">&nbsp;</span>
+                <span class="settings-presets">
+                  <For each={[1, 1.25, 1.5, 1.75, 2]}>
+                    {(r) => (
+                      <button
+                        type="button"
+                        class="settings-preset"
+                        classList={{ active: Math.abs(settings.readAloudSpeed - r) < 0.025 }}
+                        onClick={() => setSetting("readAloudSpeed", r)}
+                      >
+                        {r}×
+                      </button>
+                    )}
+                  </For>
+                </span>
+              </div>
+            </div>
+            <p class="settings-hint muted">
+              <code>{formatBinding(settings.keybindings["read-aloud"])}</code> reads the focused
+              pane's latest agent reply out loud; press it again (or click the 🔊 in the pane's
+              title bar) to stop. The text comes from the agent's own transcript, not the terminal —
+              so code blocks, URLs and markdown markup are stripped before it's spoken.
+            </p>
+            <p class="settings-hint muted">
+              Needs <b>piper</b> installed (Loom looks at <code>$LOOM_PIPER_BIN</code>, then beside
+              the <code>loom</code> binary, then <code>PATH</code>) —{" "}
+              <Show when={piperFound() === false}>
+                <b>not found right now.</b>{" "}
+              </Show>
+              <Show when={piperFound() === true}>
+                <b>found.</b>{" "}
+              </Show>
+              The chosen voice downloads on first use into <code>~/.cache/loom-speech/</code>.
+            </p>
+            <p class="settings-hint muted">
+              Anything other than <b>1×</b> is applied with <b>ffmpeg</b>'s pitch-preserving
+              time-stretch, because piper's own rate control is non-linear and tops out around
+              1.9× — so without ffmpeg{" "}
+              <Show when={ffmpegFound() === false}>
+                (<b>not found right now</b>){" "}
+              </Show>
+              a high setting is approximated and will run slower than the number says.
             </p>
           </section>
 

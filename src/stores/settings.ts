@@ -25,6 +25,24 @@ export const VOICE_LANGUAGES: { code: string; label: string }[] = [
   { code: "no", label: "Norwegian" },
 ];
 
+/** Piper voices offered in Settings — a small curated set rather than the full upstream catalogue
+ *  (which is hundreds of voices across dozens of locales). Ids are upstream
+ *  `<locale>-<name>-<quality>` ids, resolved to a download URL in src-tauri/src/speech.rs; any
+ *  other valid id works too if you set it by hand. `medium` is the quality sweet spot — `low` is
+ *  noticeably flatter, `high` is several times the download for a small gain. */
+export const PIPER_VOICES: { id: string; label: string }[] = [
+  { id: "en_US-lessac-medium", label: "English (US) — Lessac, neutral" },
+  { id: "en_US-amy-medium", label: "English (US) — Amy" },
+  { id: "en_US-ryan-high", label: "English (US) — Ryan, higher quality" },
+  { id: "en_GB-alba-medium", label: "English (GB) — Alba" },
+  { id: "en_GB-northern_english_male-medium", label: "English (GB) — Northern male" },
+  { id: "no_NO-talesyntese-medium", label: "Norwegian — Talesyntese" },
+  { id: "pt_PT-tugão-medium", label: "Portuguese (PT) — Tugão" },
+  { id: "de_DE-thorsten-medium", label: "German — Thorsten" },
+  { id: "es_ES-davefx-medium", label: "Spanish (ES) — DaveFX" },
+  { id: "fr_FR-siwis-medium", label: "French — Siwis" },
+];
+
 /** Top-bar nav items that can be shown/hidden from Settings (Settings itself is always shown
  *  so this config stays reachable). */
 export type NavItemId = "overview" | "palette" | "git" | "docs" | "fleet" | "board" | "history" | "reopen";
@@ -107,6 +125,17 @@ export interface Settings {
    *  phrase. A pinned language helps when auto-detect keeps misreading short clips, but it applies
    *  to every utterance — leave empty if you actually mix languages in a session. */
   voiceLanguage: string;
+  // ---- Read-aloud (Piper TTS) ----
+  /** Piper voice the read-aloud key speaks with, as an upstream voice id
+   *  (`<locale>-<name>-<quality>`, e.g. `en_US-lessac-medium`). Downloaded on first use into
+   *  `<cache>/loom-speech/`. Piper itself is a third-party binary you install — Loom resolves it
+   *  via `$LOOM_PIPER_BIN`, a sibling of `loom`, then `PATH`. */
+  readAloudVoice: string;
+  /** Speaking rate, 1 = the voice's natural pace; 2 is the podcast-skim ceiling. Applied as a
+   *  pitch-preserving ffmpeg time-stretch over the rendered audio — piper's own `--length_scale`
+   *  is non-linear and saturates near 1.9x, so it's only the fallback when ffmpeg is missing
+   *  (see src-tauri/src/speech.rs `rate_plan`). Clamped to 0.5–2 there. */
+  readAloudSpeed: number;
   // ---- Keyboard ----
   /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */
   keybindings: Keybindings;
@@ -165,6 +194,8 @@ export const DEFAULT_SETTINGS: Settings = {
   resumeAgentSessions: true,
   voiceModel: "small-q5_1",
   voiceLanguage: "",
+  readAloudVoice: "en_US-lessac-medium",
+  readAloudSpeed: 1.15,
   keybindings: { ...DEFAULT_KEYBINDINGS },
   navVisible: { overview: true, palette: true, git: true, docs: true, fleet: true, board: true, history: true, reopen: true },
   railWidth: 212,

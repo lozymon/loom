@@ -39,6 +39,7 @@ import { applyGlobalHotkey } from "./lib/globalHotkey";
 import { redock } from "./lib/detach";
 import { openEditorForActivePane } from "./lib/editor";
 import { dictateIntoActivePane, initVoceExitListener } from "./lib/voceClient";
+import { initSpeechListener, readActivePaneAloud } from "./lib/speechClient";
 import { actionForKey, appChord, isModifierKey, SWITCH_WORKSPACE_ACTIONS, type ActionId } from "./lib/keybindings";
 import { initPaneControl } from "./lib/paneControl";
 import { setSessionSink } from "./stores/sessions";
@@ -185,6 +186,9 @@ export default function App() {
   // Clear a pane's "listening" chip when its voice-dictation helper (loom-voce) exits.
   onCleanup(initVoceExitListener());
 
+  // Clear the "speaking" indicator when a read-aloud utterance ends (Piper TTS).
+  onCleanup(initSpeechListener());
+
   // Global fallback for the app-level Ctrl+Shift shortcuts. Terminal.tsx intercepts these via
   // xterm's key handler, but that only fires while a *terminal* owns focus — so when focus is on
   // the rail, a dialog, a button, or nothing, the shortcuts would otherwise be dead. This window
@@ -207,6 +211,7 @@ export default function App() {
     "next-workspace": () => switchWorkspaceRelative(1),
     "open-editor": () => void openEditorForActivePane(),
     "dictate": () => void dictateIntoActivePane(),
+    "read-aloud": () => void readActivePaneAloud(),
   };
   // Ctrl+Shift+1…9 jump straight to workspace N (works rail/dialog/nothing-focused too).
   SWITCH_WORKSPACE_ACTIONS.forEach((id, i) => {

@@ -14,6 +14,7 @@ mod logs;
 pub mod mcp;
 mod pty;
 mod sessionlog;
+mod speech;
 mod tray;
 mod voce;
 mod winproc;
@@ -190,6 +191,11 @@ pub fn run() {
             claude::claude_session_exists,
             claude::claude_usage,
             claude::claude_title,
+            claude::claude_last_reply,
+            speech::speech_speak,
+            speech::speech_stop,
+            speech::speech_available,
+            speech::speech_stretch_available,
             workspace::state_save,
             workspace::state_load,
             workspace::project_state_save,
@@ -236,6 +242,20 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // Children we spawned (the read-aloud audio, a dictation capture) are reparented to init
+        // rather than killed when this process exits, so they have to be shot down explicitly —
+        // otherwise quitting mid-sentence leaves Loom talking, or holding the mic, after it's gone.
+        // This hook catches every shutdown path: window close, tray Quit, and the frontend's
+        // `quitApp`, which all end in the event loop exiting.
+        .run(|_app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                speech::shutdown();
+                voce::shutdown();
+            }
+        });
 }

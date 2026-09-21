@@ -6,6 +6,44 @@ versioning.
 
 ## [Unreleased]
 
+### Added
+
+- **Read aloud (Ctrl+Shift+A).** Speaks the focused pane's latest agent reply out
+  loud, so a long answer can be listened to instead of read. Press the key again,
+  or click the 🔊 in the pane's title bar, to cut it off mid-sentence. The text is
+  taken from the agent's own transcript — never the terminal — and stripped to
+  prose first: fenced code becomes a spoken "code block", links lose their URLs,
+  and headings/bullets/emphasis are flattened with pauses where the lines were.
+  Voice and speaking rate are in **Settings → Read aloud**, and it's in the
+  command palette both ways.
+
+  **Speaking rate goes to 2×**, with one-click 1/1.25/1.5/1.75/2× buttons. The rate is a
+  pitch-preserving ffmpeg time-stretch rather than piper's own rate control — measured,
+  the latter is non-linear *and* saturating (its "2×" is really ~1.43×, and it can't
+  exceed ~1.9× at any setting), so a slider driving it would have lied about the number.
+  Without ffmpeg the old approximation is used and Settings says so.
+
+  Quitting Loom stops the speech (and any in-flight dictation capture): a spawned
+  child is reparented rather than killed when its parent exits on Unix, so without an
+  explicit shutdown the audio would have carried on talking to an empty desktop.
+
+  Speech is [Piper](https://github.com/rhasspy/piper), which you install yourself
+  (resolved via `$LOOM_PIPER_BIN`, then beside `loom`, then `PATH`); the voice
+  model downloads on first use into `~/.cache/loom-speech/`. `loom doctor` gained a
+  **read-aloud** check that reports a missing piper or audio player with the fix.
+
+### Fixed
+
+- **Auto-adopt no longer claims another pane's Claude session** (#82 — the code
+  landed, this entry was lost in the squash). Adopting a hand-started `claude`
+  captured "the newest conversation in this folder" — and closing a Claude pane is
+  exactly what bumps its transcript to the top of that list, so the next pane to
+  adopt inherited the *closed* pane's session and resumed it forever after, while
+  its own conversation went unrecorded. A candidate must now predate nothing (it
+  can't already have existed when the agent started) and be unowned (not pinned to
+  another live pane, nor held in the reopen history); when nothing qualifies, Loom
+  keeps looking rather than taking the newest.
+
 ## [1.18.0] — 2026-07-25
 
 `loom doctor` can now fix what it finds.
