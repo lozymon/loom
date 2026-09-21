@@ -6,6 +6,18 @@ versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Auto-adopt no longer claims another pane's Claude session.** Adopting a
+  hand-started `claude` captured "the newest conversation in this folder" — and
+  closing a Claude pane is exactly what bumps its transcript to the top of that
+  list, so the next pane to adopt inherited the *closed* pane's session and
+  resumed it forever after, while its own conversation went unrecorded. A
+  candidate must now predate nothing (it can't already have existed when the agent
+  started) and be unowned (not pinned to another live pane, nor held in the reopen
+  history); when nothing qualifies, Loom keeps looking rather than taking the
+  newest.
+
 ## [1.18.0] — 2026-07-25
 
 `loom doctor` can now fix what it finds.
