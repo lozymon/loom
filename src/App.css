@@ -2930,6 +2930,35 @@ body,
   margin: 8px 0 0;
 }
 
+/* One-click speaking rates in Settings → Read aloud (1×…2×). A segmented row rather than a
+   dropdown: the whole point is that 2× is one click away while listening. */
+.settings-presets {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.settings-preset {
+  flex: 0 0 auto;
+  font: 12px var(--font-mono);
+  color: var(--text-mid);
+  background: var(--well);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.settings-preset:hover {
+  color: var(--fg);
+}
+
+.settings-preset.active {
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--accent-strong);
+}
+
 .settings-btn {
   font: inherit;
   color: var(--fg);

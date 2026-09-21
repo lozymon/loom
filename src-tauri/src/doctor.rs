@@ -364,7 +364,18 @@ fn check_read_aloud() -> Check {
             );
         }
     }
-    Check::ok("read-aloud", "piper found")
+    if !on_path(if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    }) {
+        return Check::warn(
+            "read-aloud",
+            "piper found, but no ffmpeg — speeds above 1x are approximate",
+            "install ffmpeg for an exact, pitch-preserving speaking rate",
+        );
+    }
+    Check::ok("read-aloud", "piper + ffmpeg found")
 }
 
 /// Is `name` present on `PATH`? (A bare-name lookup — callers handle absolute paths themselves.)

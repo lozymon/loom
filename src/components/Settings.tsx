@@ -22,7 +22,7 @@ import {
   type CursorStyle,
   type NavItemId,
 } from "../stores/settings";
-import { speechAvailable } from "../lib/speechClient";
+import { speechAvailable, stretchAvailable } from "../lib/speechClient";
 import { ACTIONS, appChord, formatBinding, isModifierKey, MOD_NAMESPACE, type ActionId } from "../lib/keybindings";
 
 const CURSORS: CursorStyle[] = ["block", "bar", "underline"];
@@ -81,6 +81,10 @@ export default function Settings(props: { onClose: () => void }) {
   // "not found" instead of leaving a silent key to be discovered the hard way. null = still asking.
   const [piperFound, setPiperFound] = createSignal<boolean | null>(null);
   onMount(() => { speechAvailable().then(setPiperFound).catch(() => setPiperFound(false)); });
+  // ffmpeg is what makes a requested rate exact (see speech.rs `rate_plan`) — flagged separately
+  // so "2× is really 1.4×" is a visible cause, not a mystery.
+  const [ffmpegFound, setFfmpegFound] = createSignal<boolean | null>(null);
+  onMount(() => { stretchAvailable().then(setFfmpegFound).catch(() => setFfmpegFound(false)); });
 
   // Esc closes the modal from anywhere (the panel itself isn't focus-trapped) — but not
   // while capturing a shortcut, where the capture handler swallows Esc to cancel instead.
@@ -414,8 +418,8 @@ export default function Settings(props: { onClose: () => void }) {
                 <span class="settings-range">
                   <input
                     type="range"
-                    min="0.7"
-                    max="1.8"
+                    min="0.5"
+                    max="2"
                     step="0.05"
                     value={settings.readAloudSpeed}
                     onInput={(e) => setSetting("readAloudSpeed", e.currentTarget.valueAsNumber)}
@@ -423,6 +427,24 @@ export default function Settings(props: { onClose: () => void }) {
                   <span class="settings-val">{settings.readAloudSpeed.toFixed(2)}×</span>
                 </span>
               </label>
+              {/* One-click rates, podcast-style — 2× is the reason the range goes there. */}
+              <div class="settings-row">
+                <span class="settings-label">&nbsp;</span>
+                <span class="settings-presets">
+                  <For each={[1, 1.25, 1.5, 1.75, 2]}>
+                    {(r) => (
+                      <button
+                        type="button"
+                        class="settings-preset"
+                        classList={{ active: Math.abs(settings.readAloudSpeed - r) < 0.025 }}
+                        onClick={() => setSetting("readAloudSpeed", r)}
+                      >
+                        {r}×
+                      </button>
+                    )}
+                  </For>
+                </span>
+              </div>
             </div>
             <p class="settings-hint muted">
               <code>{formatBinding(settings.keybindings["read-aloud"])}</code> reads the focused
@@ -440,6 +462,15 @@ export default function Settings(props: { onClose: () => void }) {
                 <b>found.</b>{" "}
               </Show>
               The chosen voice downloads on first use into <code>~/.cache/loom-speech/</code>.
+            </p>
+            <p class="settings-hint muted">
+              Anything other than <b>1×</b> is applied with <b>ffmpeg</b>'s pitch-preserving
+              time-stretch, because piper's own rate control is non-linear and tops out around
+              1.9× — so without ffmpeg{" "}
+              <Show when={ffmpegFound() === false}>
+                (<b>not found right now</b>){" "}
+              </Show>
+              a high setting is approximated and will run slower than the number says.
             </p>
           </section>
 

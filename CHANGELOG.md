@@ -17,6 +17,12 @@ versioning.
   Voice and speaking rate are in **Settings → Read aloud**, and it's in the
   command palette both ways.
 
+  **Speaking rate goes to 2×**, with one-click 1/1.25/1.5/1.75/2× buttons. The rate is a
+  pitch-preserving ffmpeg time-stretch rather than piper's own rate control — measured,
+  the latter is non-linear *and* saturating (its "2×" is really ~1.43×, and it can't
+  exceed ~1.9× at any setting), so a slider driving it would have lied about the number.
+  Without ffmpeg the old approximation is used and Settings says so.
+
   Speech is [Piper](https://github.com/rhasspy/piper), which you install yourself
   (resolved via `$LOOM_PIPER_BIN`, then beside `loom`, then `PATH`); the voice
   model downloads on first use into `~/.cache/loom-speech/`. `loom doctor` gained a

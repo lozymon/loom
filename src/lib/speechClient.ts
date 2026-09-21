@@ -67,6 +67,16 @@ export async function stopSpeaking(): Promise<void> {
   setSpeakingPane(null);
 }
 
+/** Is ffmpeg available for the exact pitch-preserving rate change? Without it a requested speed is
+ *  approximated by piper's own non-linear rate knob, which saturates near 1.9x. */
+export async function stretchAvailable(): Promise<boolean> {
+  try {
+    return await invoke<boolean>("speech_stretch_available");
+  } catch {
+    return false;
+  }
+}
+
 /** Is piper installed and resolvable? Settings and `loom doctor` surface this so a missing install
  *  is a visible, fixable state rather than a key that does nothing. */
 export async function speechAvailable(): Promise<boolean> {

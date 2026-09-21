@@ -131,8 +131,10 @@ export interface Settings {
    *  `<cache>/loom-speech/`. Piper itself is a third-party binary you install — Loom resolves it
    *  via `$LOOM_PIPER_BIN`, a sibling of `loom`, then `PATH`. */
   readAloudVoice: string;
-  /** Speaking rate, 1 = the voice's natural pace; 1.3 is a comfortable skim. Passed to piper as
-   *  `--length-scale` (its inverse — length scales with duration, not speed). */
+  /** Speaking rate, 1 = the voice's natural pace; 2 is the podcast-skim ceiling. Applied as a
+   *  pitch-preserving ffmpeg time-stretch over the rendered audio — piper's own `--length_scale`
+   *  is non-linear and saturates near 1.9x, so it's only the fallback when ffmpeg is missing
+   *  (see src-tauri/src/speech.rs `rate_plan`). Clamped to 0.5–2 there. */
   readAloudSpeed: number;
   // ---- Keyboard ----
   /** Final key for each app shortcut; the Ctrl+Shift prefix is fixed (ADR-0005). */

@@ -195,6 +195,7 @@ pub fn run() {
             speech::speech_speak,
             speech::speech_stop,
             speech::speech_available,
+            speech::speech_stretch_available,
             workspace::state_save,
             workspace::state_load,
             workspace::project_state_save,

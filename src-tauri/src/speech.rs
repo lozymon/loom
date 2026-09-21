@@ -80,6 +80,61 @@ fn wait_active() -> Option<std::process::ExitStatus> {
     }
 }
 
+/// Speed bounds. The floor is piper's own comfortable slow end; the ceiling is one `atempo`
+/// instance's limit (above 2.0 ffmpeg wants a chained filter, which isn't worth the complexity for
+/// a read-aloud key).
+const SPEED_MIN: f32 = 0.5;
+const SPEED_MAX: f32 = 2.0;
+
+/// How to reach a requested speaking rate.
+///
+/// The obvious lever, piper's `--length_scale`, turns out to be both non-linear and saturating:
+/// measured on a medium voice, 0.5 ("2x") yields only ~1.43x and even 0.20 tops out near 1.88x —
+/// it compresses phonemes rather than time, so a slider labelled 2x would simply lie. A
+/// pitch-preserving time-stretch over the rendered WAV is exact (ffmpeg `atempo=2.0` measured
+/// 2.016x) and is what podcast players do, so when ffmpeg is present we let piper speak naturally
+/// and stretch afterwards.
+///
+/// Without ffmpeg we fall back to `--length_scale` and accept the approximation — a slower-than-
+/// asked-for 2x still beats refusing to speed up at all — which is why the doctor check mentions
+/// ffmpeg and Settings flags it.
+struct RatePlan {
+    /// Passed to piper when we have to do it the approximate way; `None` = speak naturally.
+    length_scale: Option<f32>,
+    /// Passed to ffmpeg's `atempo` afterwards for an exact rate; `None` = no post-processing.
+    atempo: Option<f32>,
+}
+
+fn rate_plan(speed: f32, has_ffmpeg: bool) -> RatePlan {
+    if (speed - 1.0).abs() < 0.01 {
+        return RatePlan {
+            length_scale: None,
+            atempo: None,
+        };
+    }
+    if has_ffmpeg {
+        RatePlan {
+            length_scale: None,
+            atempo: Some(speed),
+        }
+    } else {
+        RatePlan {
+            length_scale: Some(1.0 / speed),
+            atempo: None,
+        }
+    }
+}
+
+/// Is ffmpeg available for the exact time-stretch? Looked up per utterance — cheap next to
+/// synthesis, and it means installing ffmpeg takes effect without restarting Loom.
+fn have_ffmpeg() -> bool {
+    on_path(if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    })
+}
+
 /// Longest utterance we'll synthesise. The frontend already trims to speakable prose; this is the
 /// backstop against someone asking us to read a 200 KB transcript dump aloud.
 const MAX_CHARS: usize = 20_000;
@@ -148,7 +203,7 @@ fn download(url: &str, dest: &Path) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {parent:?}: {e}"))?;
     }
     let part = dest.with_extension("part");
-    let ok = if which(if cfg!(windows) { "curl.exe" } else { "curl" }) {
+    let ok = if on_path(if cfg!(windows) { "curl.exe" } else { "curl" }) {
         Command::new("curl")
             .args(["-fsSL", "--retry", "2", "-o"])
             .arg(&part)
@@ -174,9 +229,9 @@ fn download(url: &str, dest: &Path) -> Result<(), String> {
     std::fs::rename(&part, dest).map_err(|e| format!("cannot finalize download: {e}"))
 }
 
-/// Is `name` runnable (on PATH or as a path)? Cheap `--version` probe would spawn a process, so we
-/// just walk PATH like `voce`'s `which`.
-fn which(name: &str) -> bool {
+/// Is `name` runnable (on PATH, or given as a path that exists)? A `--version` probe would spawn a
+/// process per call, so we just walk PATH.
+fn on_path(name: &str) -> bool {
     if Path::new(name).is_file() {
         return true;
     }
@@ -226,6 +281,30 @@ fn ensure_voice(app: &AppHandle, voice: &str) -> Result<PathBuf, String> {
     result
 }
 
+/// Time-stretch `src` into `dst` by `tempo` using ffmpeg's `atempo`, which changes duration
+/// without changing pitch. Runs to completion (a few hundred ms next to synthesis) rather than
+/// being registered as cancellable — `stop` still kills the playback that follows.
+fn stretch(src: &Path, dst: &Path, tempo: f32) -> Result<(), String> {
+    let status = Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-i"])
+        .arg(src)
+        .arg("-filter:a")
+        .arg(format!("atempo={tempo:.3}"))
+        .arg("-f")
+        .arg("wav")
+        .arg(dst)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .no_console_window()
+        .status()
+        .map_err(|e| format!("ffmpeg failed to start: {e}"))?;
+    if !status.success() {
+        return Err(format!("ffmpeg exited with {status}"));
+    }
+    Ok(())
+}
+
 /// Build the platform's "play this WAV file" command. Linux has no single answer, so we take the
 /// first sink that's actually installed (PipeWire → PulseAudio → ALSA → ffmpeg's player).
 fn player_for(path: &Path) -> Result<Command, String> {
@@ -255,7 +334,7 @@ fn player_for(path: &Path) -> Result<Command, String> {
                 &["-nodisp", "-autoexit", "-loglevel", "quiet"][..],
             ),
         ] {
-            if which(bin) {
+            if on_path(bin) {
                 let mut c = Command::new(bin);
                 c.args(args).arg(path);
                 return Ok(c);
@@ -286,14 +365,13 @@ pub fn speech_speak(
         .filter(|v| !v.is_empty())
         .unwrap_or("en_US-lessac-medium")
         .to_string();
-    // Piper's `--length-scale` is duration, i.e. the inverse of speed: 0.8 = 25% faster.
-    let length_scale = speed.filter(|s| *s > 0.1 && *s < 5.0).map(|s| 1.0 / s);
+    let speed = speed.unwrap_or(1.0).clamp(SPEED_MIN, SPEED_MAX);
 
     kill_active();
     let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
 
     std::thread::spawn(move || {
-        let outcome = synthesize_and_play(&app, generation, &text, &voice, length_scale);
+        let outcome = synthesize_and_play(&app, generation, &text, &voice, speed);
         // Only the utterance that still owns the floor reports done — a superseded one stays quiet
         // so it can't clear the indicator belonging to the utterance that replaced it.
         if GENERATION.load(Ordering::SeqCst) == generation {
@@ -316,7 +394,7 @@ fn synthesize_and_play(
     generation: u64,
     text: &str,
     voice: &str,
-    length_scale: Option<f32>,
+    speed: f32,
 ) -> Result<(), String> {
     let model = ensure_voice(app, voice)?;
     if GENERATION.load(Ordering::SeqCst) != generation {
@@ -324,14 +402,20 @@ fn synthesize_and_play(
     }
 
     let wav = std::env::temp_dir().join(format!("loom-speech-{generation}.wav"));
+    // How we reach `speed` depends on what's installed — see `rate_plan`.
+    let plan = rate_plan(speed, have_ffmpeg());
     let bin = piper_bin();
     let mut cmd = Command::new(&bin);
     cmd.arg("--model")
         .arg(&model)
         .arg("--output_file")
         .arg(&wav);
-    if let Some(ls) = length_scale {
+    if let Some(ls) = plan.length_scale {
         cmd.arg("--length_scale").arg(format!("{ls:.3}"));
+        // The pause piper leaves between sentences is a flat 0.2s that `--length_scale` does NOT
+        // touch, so at speed it becomes a bigger and bigger share of the runtime. Shrink it to match.
+        cmd.arg("--sentence_silence")
+            .arg(format!("{:.3}", 0.2 / speed));
     }
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -362,13 +446,32 @@ fn synthesize_and_play(
         return Err(format!("piper exited with {status}"));
     }
 
-    let player = player_for(&wav)?
+    // Exact rate, pitch preserved. A failure here is not fatal: we simply play the natural-rate
+    // audio rather than dropping the utterance over a speed preference.
+    let mut playing = wav.clone();
+    if let Some(tempo) = plan.atempo {
+        let stretched = std::env::temp_dir().join(format!("loom-speech-{generation}-x.wav"));
+        match stretch(&wav, &stretched, tempo) {
+            Ok(()) => playing = stretched,
+            Err(e) => eprintln!("loom: speed change failed, playing at natural rate: {e}"),
+        }
+        if GENERATION.load(Ordering::SeqCst) != generation {
+            let _ = std::fs::remove_file(&wav);
+            let _ = std::fs::remove_file(&playing);
+            return Ok(());
+        }
+    }
+
+    let player = player_for(&playing)?
         .no_console_window()
         .spawn()
         .map_err(|e| format!("failed to play audio: {e}"))?;
     *active().lock().unwrap() = Some(player);
     wait_active(); // None = cancelled mid-sentence, which is a clean stop, not an error
     let _ = std::fs::remove_file(&wav);
+    if playing != wav {
+        let _ = std::fs::remove_file(&playing);
+    }
     Ok(())
 }
 
@@ -382,12 +485,19 @@ pub fn speech_stop(app: AppHandle) {
     let _ = app.emit(SPEECH_DONE_EVENT, SpeechDone { error: None });
 }
 
+/// Whether ffmpeg is available for the exact pitch-preserving rate change. Settings surfaces this
+/// so "2x sounds slower than 2x" has a visible cause (see `rate_plan`).
+#[tauri::command]
+pub fn speech_stretch_available() -> bool {
+    have_ffmpeg()
+}
+
 /// Whether Piper resolved to a real binary — `loom doctor` and Settings show this so a missing
 /// install is a visible, fixable state rather than a key that silently does nothing.
 #[tauri::command]
 pub fn speech_available() -> bool {
     let bin = piper_bin();
-    bin.is_file() || which(piper_name())
+    bin.is_file() || on_path(piper_name())
 }
 
 #[cfg(test)]
@@ -409,6 +519,29 @@ mod tests {
             voice_url("en_GB-northern_english_male-medium", "").unwrap(),
             "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx"
         );
+    }
+
+    #[test]
+    fn rate_plan_prefers_an_exact_stretch_and_falls_back_to_piper() {
+        // With ffmpeg: piper speaks naturally and the rate is hit exactly afterwards.
+        let p = rate_plan(2.0, true);
+        assert_eq!(p.length_scale, None);
+        assert_eq!(p.atempo, Some(2.0));
+
+        // Without it, approximate with piper's own (non-linear, saturating) knob rather than
+        // refusing to speed up at all.
+        let p = rate_plan(2.0, false);
+        assert_eq!(p.length_scale, Some(0.5));
+        assert_eq!(p.atempo, None);
+    }
+
+    #[test]
+    fn rate_plan_does_nothing_at_natural_speed() {
+        for has_ffmpeg in [true, false] {
+            let p = rate_plan(1.0, has_ffmpeg);
+            assert_eq!(p.length_scale, None, "no resynthesis at 1x");
+            assert_eq!(p.atempo, None, "no stretch at 1x");
+        }
     }
 
     #[test]
